@@ -169,6 +169,24 @@ version; the committed report is in [docs/coverage.md](./docs/coverage.md).
   `KYOTO_STREET_ADDRESS` rather than silently dropping the street phrase.
 - **Building-name translation or romanization.** Building names and room numbers are isolated as
   `unparsed` and passed through untouched. The type has no `romaji` field for them, by design.
+- **`fromRomaji` reads western order only.** It expects the prefecture last. Output produced with
+  `order: 'japanese'` is for display, not for feeding back in — `fromRomaji` will reject it with
+  `PREFECTURE_NOT_FOUND`. Round-tripping works with the default western order.
+
+### Known dataset defects you will hit
+
+These are properties of the upstream data, not of the conversion logic. The library detects them
+and refuses rather than emitting a wrong address, so they surface as failures:
+
+- **Some real addresses are unreachable in both directions.** Where a dataset row carries a
+  reading belonging to a neighbouring entry, we cannot trust it. `円山` in Sapporo's Chuo ward is
+  the clearest case: its kana and romaji are both `円山西町`'s. `toRomaji` returns
+  `CORRUPT_ROMAJI_DATA` and `fromRomaji` will not offer it as a candidate.
+- **Short forms of a town name are frequently ambiguous.** Nationally, about 880 towns have a
+  suffix-less form that is also another town's full name in the same municipality — Hakodate has
+  both `昭和町` and `昭和一丁目`, so `"Showa"` matches both. Writing the full name (`"Showa-cho"`)
+  resolves it, and this library's own output always does. Typed short forms return `AMBIGUOUS`
+  with the candidates.
 
 ## Data source and licensing
 

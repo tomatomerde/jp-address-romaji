@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Build
+        run: pnpm -r build
+
+      # The test suite includes a check that replaces `fetch` with a stub that
+      # throws, so a conversion that reaches the network fails the build. That
+      # is the privacy claim this library is sold on; it is enforced here, not
+      # just asserted in the README.
+      - name: Test (offline guarantee enforced)
+        run: pnpm test

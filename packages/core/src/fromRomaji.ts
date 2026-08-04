@@ -12,7 +12,7 @@
  */
 
 import type { AddressComponent, Failure, ParsedAddress, Result } from './types.js';
-import { findPrefectureByRomaji, normalizeRomajiKey, PREFECTURES } from './data/prefectures.js';
+import { findPrefectureByRomaji, normalizeRomajiKey } from './data/prefectures.js';
 import { isDataConfigured } from './normalizer.js';
 import {
   cityPathName,
@@ -46,8 +46,14 @@ function stemKey(token: string): string {
   return normalizeRomajiKey(token.replace(SUFFIX_PATTERN, ''));
 }
 
-/** All romaji spellings a dataset record can reasonably be written as. */
-function candidateKeys(jaName: string, kana?: string, romajiField?: string): Set<string> {
+/**
+ * All romaji spellings a dataset record can reasonably be written as.
+ *
+ * Keys come only from the record's kana and romaji fields — the Japanese name
+ * is never transliterated, since inferring a reading from kanji is exactly the
+ * guess this library refuses to make.
+ */
+function candidateKeys(kana?: string, romajiField?: string): Set<string> {
   const keys = new Set<string>();
   const add = (v: string | undefined) => {
     if (!v) return;
@@ -151,23 +157,12 @@ export async function fromRomaji(romajiAddress: string): Promise<Result<Japanese
   }
 
   // --- town + numbers: whatever is left ---
-  const rest = remaining.join(', ').trim();
-  if (!rest) {
+  if (remaining.length === 0) {
     return fail(
       'TOWN_NOT_FOUND',
       `Resolved only as far as ${cityPathName(record)}; no town component was present.`,
       { ...partial, level: 2 },
     );
-  }
-
-  // `extraText` is anything left over in the SAME segment as the town after
-  // pulling out the leading/trailing numbers (e.g. a building name with no
-  // comma before it). It is combined with `buildingName` — the segments
-  // already isolated above — into the final unparsed text.
-  const { numbers, name, unparsed: extraText } = splitNumbersAndName(rest);
-  const unparsed = [buildingName, extraText].filter(Boolean).join(' ') || undefined;
-  if (!name) {
-    return fail('TOWN_NOT_FOUND', `No town name was found in "${rest}".`, { ...partial, level: 2 });
   }
 
   const towns = await loadMachiAza(prefRecord.pref, cityPathName(record));
@@ -179,14 +174,38 @@ export async function fromRomaji(romajiAddress: string): Promise<Result<Japanese
     );
   }
 
-  const matches = matchTowns(towns, name);
-  if (matches.length === 0) {
+  // Which of the leftover segments is the town? Everything else is a building
+  // name, suite or floor, which we carry through untouched.
+  //
+  // We cannot assume the town is in any fixed position: a western-order
+  // address may write the building before the street ("Sunshine Bldg 5F,
+  // 3-5-12 Nishishinjuku, ...") or after it, with or without a comma. So each
+  // segment is tested against the dataset, and the one that actually names a
+  // town wins. Segments are tried in order, so the earliest real match is
+  // taken.
+  let located: LocatedTown | undefined;
+  let townIndex = -1;
+  for (let i = 0; i < remaining.length; i++) {
+    const candidate = findTownInText(towns, remaining[i]!);
+    if (candidate) {
+      located = candidate;
+      townIndex = i;
+      break;
+    }
+  }
+
+  if (!located) {
     return fail(
       'TOWN_NOT_FOUND',
-      `"${name}" does not match any town in ${prefRecord.pref}${cityPathName(record)}.`,
+      `No town in ${prefRecord.pref}${cityPathName(record)} matches "${remaining.join(', ')}".`,
       { ...partial, level: 2 },
     );
   }
+
+  const { numbers, name, matches } = located;
+  const otherSegments = remaining.filter((_, i) => i !== townIndex);
+  const unparsed =
+    [buildingName, ...otherSegments, located.extra].filter(Boolean).join(', ') || undefined;
 
   // Ambiguity must be resolved BEFORE interpreting the leading number.
   //
@@ -316,12 +335,12 @@ function matchMunicipality(
 }
 
 function matchesMunicipality(record: CityRecord, tail: string[]): boolean {
-  const cityKeys = candidateKeys(record.city, record.city_k, record.city_r);
+  const cityKeys = candidateKeys(record.city_k, record.city_r);
   const wardKeys = record.ward
-    ? candidateKeys(record.ward, record.ward_k, record.ward_r)
+    ? candidateKeys(record.ward_k, record.ward_r)
     : undefined;
   const countyKeys = record.county
-    ? candidateKeys(record.county, record.county_k, record.county_r)
+    ? candidateKeys(record.county_k, record.county_r)
     : undefined;
 
   const keyOf = (s: string) => [normalizeRomajiKey(s), stemKey(s)];
@@ -348,6 +367,54 @@ function matchesMunicipality(record: CityRecord, tail: string[]): boolean {
   return false;
 }
 
+/** A town located inside one address segment. */
+interface LocatedTown {
+  /** Block numbers found alongside the town name. */
+  numbers: number[];
+  /** The town name as written in the input. */
+  name: string;
+  /** Dataset entries matching that name. */
+  matches: MachiAzaRecord[];
+  /** Text in the same segment that is not part of the town name. */
+  extra?: string;
+}
+
+/**
+ * Try to find a town name inside a single address segment.
+ *
+ * Beyond stripping leading/trailing block numbers, this walks back from the
+ * longest word sequence to the shortest, so a building name that was written
+ * without a separating comma still resolves:
+ *
+ *   "3-5-12 Nishishinjuku Sunshine Bldg 5F"
+ *     -> numbers [3,5,12], town "Nishishinjuku", extra "Sunshine Bldg 5F"
+ *
+ * Longest-first matters: town names can legitimately contain spaces
+ * ("Miyanomori 1-Jo"), so the most specific match has to win over a shorter
+ * prefix of the same text.
+ */
+function findTownInText(towns: MachiAzaRecord[], text: string): LocatedTown | undefined {
+  const { numbers, name, unparsed: extra } = splitNumbersAndName(text);
+  if (!name) return undefined;
+
+  const words = name.split(/\s+/).filter(Boolean);
+  for (let take = words.length; take >= 1; take--) {
+    const candidate = words.slice(0, take).join(' ');
+    const matches = matchTowns(towns, candidate);
+    if (matches.length > 0) {
+      const trailing = words.slice(take).join(' ');
+      const leftover = [extra, trailing].filter(Boolean).join(' ');
+      return {
+        numbers,
+        name: candidate,
+        matches,
+        ...(leftover ? { extra: leftover } : {}),
+      };
+    }
+  }
+  return undefined;
+}
+
 /** Find towns whose romanization matches `name`. */
 function matchTowns(towns: MachiAzaRecord[], name: string): MachiAzaRecord[] {
   // Deliberately NOT using stemKey() on the query here. stemKey() strips a
@@ -372,7 +439,7 @@ function matchTowns(towns: MachiAzaRecord[], name: string): MachiAzaRecord[] {
     // into the candidate set and manufactures ambiguity for an address that
     // genuinely has only one match.
     if (t.oaza_cho_k && !isPlausibleReading(t.oaza_cho, t.oaza_cho_k)) return false;
-    const keys = candidateKeys(t.oaza_cho, t.oaza_cho_k, t.oaza_cho_r);
+    const keys = candidateKeys(t.oaza_cho_k, t.oaza_cho_r);
     return keys.has(target);
   });
 }

@@ -1,0 +1,108 @@
+name: Refresh address data and coverage
+
+# Builds the offline dataset from the upstream Geolonia v2 API, then measures
+# what it actually contains and checks the assumptions the library's heuristics
+# depend on.
+#
+# This exists because the dataset host is not reachable from every environment
+# (Claude Code cloud sessions, for instance, allow only an allowlist of domains
+# by default). GitHub Actions runners have unrestricted egress, so this job can
+# do the fetch from anywhere — including a phone, via "Run workflow".
+#
+# The dataset itself is NOT committed: it is uploaded as an artifact. Only the
+# generated coverage report is committed, and only when asked.
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_report:
+        description: 'Commit the regenerated docs/coverage.md to this branch'
+        type: boolean
+        default: true
+      concurrency:
+        description: 'Parallel downloads (raise to go faster, lower if throttled)'
+        type: string
+        default: '8'
+  schedule:
+    # Monthly, so a dataset change that breaks an assumption surfaces on its own.
+    - cron: '0 3 1 * *'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the offline dataset
+        run: |
+          npx tsx packages/data/src/build-data.ts \
+            --out ./address-data \
+            --concurrency "${{ github.event.inputs.concurrency || '8' }}"
+
+      - name: Report dataset size
+        run: du -sh ./address-data && find ./address-data -name '*.json' | wc -l
+
+      # Non-blocking: this is a report, and a violated assumption should be read
+      # and judged rather than silently failing the run that produced the data.
+      - name: Check dataset assumptions
+        id: assumptions
+        continue-on-error: true
+        run: npx tsx scripts/verify-data-assumptions.ts --data ./address-data | tee assumptions.txt
+
+      - name: Measure coverage
+        run: npx tsx scripts/measure-coverage.ts --data ./address-data > docs/coverage.md
+
+      - name: Run the test suite against the real dataset
+        continue-on-error: true
+        run: pnpm test
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: address-data
+          path: address-data/
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            docs/coverage.md
+            assumptions.txt
+          retention-days: 30
+
+      - name: Summarize into the run page
+        run: |
+          echo '## Dataset assumptions' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat assumptions.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo '## Coverage' >> "$GITHUB_STEP_SUMMARY"
+          head -40 docs/coverage.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit the coverage report
+        if: github.event.inputs.commit_report != 'false'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          if git diff --quiet docs/coverage.md; then
+            echo 'Coverage report unchanged.'
+          else
+            git add docs/coverage.md
+            git commit -m 'Regenerate coverage report from the v2 dataset'
+            git push
+          fi

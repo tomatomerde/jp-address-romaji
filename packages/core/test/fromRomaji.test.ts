@@ -72,6 +72,42 @@ describe('fromRomaji: reconstructs Japanese', () => {
   });
 });
 
+describe('fromRomaji: building names', () => {
+  // Regression: only Japanese-script building names were separated out, so a
+  // romaji one — the common case for a western-order address typed by hand —
+  // was fed into the town lookup and produced TOWN_NOT_FOUND.
+  const expected = { town: '西新宿', chome: 3, blocks: [5, 12] };
+
+  it.each([
+    ['building after the street', '3-5-12 Nishishinjuku, Sunshine Building 5F, Shinjuku-ku, Tokyo', 'Sunshine Building 5F'],
+    ['building before the street', 'Sunshine Building 5F, 3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo', 'Sunshine Building 5F'],
+    ['building with no separating comma', '3-5-12 Nishishinjuku Sunshine Bldg 5F, Shinjuku-ku, Tokyo', 'Sunshine Bldg 5F'],
+    ['Japanese building name', '3-5-12 Nishishinjuku, サンプルビル301, Shinjuku-ku, Tokyo', 'サンプルビル301'],
+  ])('separates a %s', async (_label, input, building) => {
+    const result = await fromRomaji(input);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.parsed.town?.ja).toBe(expected.town);
+    expect(result.value.parsed.chome).toBe(expected.chome);
+    expect(result.value.parsed.blockNumbers).toEqual(expected.blocks);
+    expect(result.value.parsed.unparsed).toBe(building);
+  });
+
+  it('still fails when the town itself is unknown, building name or not', async () => {
+    const result = await fromRomaji('1-1 Nonexistentplace, Some Building, Shibuya-ku, Tokyo');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('TOWN_NOT_FOUND');
+  });
+
+  it('leaves unparsed undefined when there is no building name', async () => {
+    const result = await fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.parsed.unparsed).toBeUndefined();
+  });
+});
+
 describe('fromRomaji: town matching does not accept an arbitrary suffix', () => {
   it('rejects a town name with a nonsensical administrative suffix', async () => {
     // Regression: matchTowns() used to strip a municipality-style suffix
