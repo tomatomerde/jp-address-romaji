@@ -6,6 +6,9 @@ export default defineConfig({
     environment: 'node',
     // Data loading is cached per process; keep suites isolated.
     pool: 'forks',
-    testTimeout: 20_000,
+    // The round-trip property test converts several thousand addresses twice
+    // over and has measured anywhere from 13s to 20s depending on machine load.
+    // A 20s limit made it flake; this is headroom, not an expectation.
+    testTimeout: 60_000,
   },
 });
