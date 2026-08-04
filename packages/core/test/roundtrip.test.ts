@@ -3,9 +3,11 @@
  *
  * For every town in the fixture dataset we build a Japanese address, romanize
  * it, and convert it back. The invariant under test is not "everything
- * converts" — roughly 15% of rural town names genuinely lack readings and
- * must fail. The invariant is that a conversion never comes back as a
- * *different* address:
+ * converts" — the fixtures deliberately include entries with no reading at
+ * all, which must fail. (They are drawn from the older v1 data, where such
+ * gaps were common; the shipped v2 dataset covers 99.55% of entries. Keeping
+ * the sparse fixtures means the refusal paths stay exercised.) The invariant
+ * is that a conversion never comes back as a *different* address:
  *
  *   ja -> romaji -> ja   must be identity, or an explicit failure.
  *

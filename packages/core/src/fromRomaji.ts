@@ -2,9 +2,9 @@
  * Romanized, western-order address -> structured address + Japanese text.
  *
  * Ambiguity is the central problem here. Measured over the national dataset,
- * a town's romanized name is unique within a known municipality 99.74% of the
- * time, but only 88.6% of the time nationwide, and 13 municipality names
- * collide across prefectures ("Date-shi" is both 北海道伊達市 and 福島県伊達市).
+ * a town's romanized name is unique within a known municipality 98.77% of the
+ * time, far less often than that nationwide, and 13 municipality names collide
+ * across prefectures ("Date-shi" is both 北海道伊達市 and 福島県伊達市).
  *
  * So resolution is strictly outside-in: prefecture, then municipality, then
  * town. When more than one reading survives, we return AMBIGUOUS with the
@@ -22,7 +22,7 @@ import {
   type MachiAzaRecord,
 } from './dataAccess.js';
 import { kanaToRomaji } from './romaji/hepburn.js';
-import { stripTrailingChomeNumber, isPlausibleReading } from './romaji/validate.js';
+import { isPlausibleReading } from './romaji/validate.js';
 import { numberToKanji } from './kanjiNumbers.js';
 import { containsJapanese } from './script.js';
 
@@ -60,7 +60,7 @@ function candidateKeys(kana?: string, romajiField?: string): Set<string> {
     keys.add(normalizeRomajiKey(v));
     keys.add(stemKey(v));
   };
-  if (romajiField) add(stripTrailingChomeNumber(romajiField));
+  if (romajiField) add(romajiField);
   if (kana) {
     // Accept every long-vowel convention the forward direction can emit.
     add(kanaToRomaji(kana, 'none'));

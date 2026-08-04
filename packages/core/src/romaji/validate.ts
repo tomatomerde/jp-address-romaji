@@ -1,35 +1,28 @@
 /**
  * Validation of romaji values coming from the address dataset.
  *
- * The dataset is not uniformly trustworthy. Measured against the national
- * town-level data, 2.51% of populated romaji fields (4,164 entries) are
- * corrupt: the name collapsed to a bare chome number. Examples, all real:
- *
- *   一条通十丁目  -> "10"
- *   大字中野一丁目 -> "1"
- *
- * These cluster in a few municipalities (Asahikawa 2,045, Nakashibetsu 773,
- * Hirosaki 301). Emitting them would produce an address like "10, Asahikawa-shi"
- * that looks plausible and is useless, so we detect and reject them.
+ * Measured against the shipped v2 dataset (638,567 town entries), no populated
+ * romaji field is corrupt in the "collapsed to a bare number" sense that the
+ * older v1 data suffered from — there, 2.51% of values had degraded to a plain
+ * chome number (`一条通十丁目` -> `"10"`). The check below is kept as a cheap
+ * guard against that class of defect returning.
  */
-
-/** Strip the trailing chome number the dataset appends (`ASAHIGAOKA 1`). */
-export function stripTrailingChomeNumber(value: string): string {
-  return value.replace(/[\s-]*\d+$/, '').trim();
-}
 
 /**
  * Is this dataset romaji value usable as a place name?
  *
- * Rejects values that carry no alphabetic content once the trailing chome
- * number is removed — which is exactly the corruption described above.
+ * A value with no Latin letters at all is a corrupt row, not a name.
+ *
+ * Note that a trailing digit is NOT a corruption signal: in v2 the chome lives
+ * in its own field and never appears in the town romaji, so a trailing digit
+ * belongs to the name itself (`政和第一` -> `"Seiwadai1"`, `四重麦四` ->
+ * `"Yoemugi4"`). An earlier version stripped trailing digits before this test
+ * and silently truncated exactly those names.
  */
 export function isUsableRomajiField(value: string | undefined | null): value is string {
   if (!value) return false;
-  const stem = stripTrailingChomeNumber(value);
+  const stem = value.trim();
   if (stem.length === 0) return false;
-  // Must contain at least one Latin letter; a name made only of digits,
-  // spaces or punctuation is corrupt data, not a name.
   return /[A-Za-z]/.test(stem);
 }
 
@@ -75,11 +68,32 @@ const COMBINING_KANA = /[ァィゥェォャュョヮ]/g;
  */
 export function isPlausibleReading(ja: string, kana: string | undefined): boolean {
   if (!kana) return true; // Nothing to check; absence is handled elsewhere.
-  const stem = ja.replace(/^大字/, '');
+  const { ja: stem, kana: reading } = stripAzaPrefix(ja, kana);
   const kanjiCount = (stem.match(/[一-鿿]/g) ?? []).length;
   if (kanjiCount < 2) return true;
   // Hiragana/katakana that are part of the place name, not the reading.
   const nameKanaCount = (stem.match(/[ぁ-ゟ゠-ヿ]/g) ?? []).length;
-  const moraCount = kana.replace(COMBINING_KANA, '').length;
+  const moraCount = reading.replace(COMBINING_KANA, '').length;
   return moraCount <= kanjiCount * 3.5 + nameKanaCount * 1.5;
+}
+
+/**
+ * Remove a leading `大字` / `字` from a name and its reading together.
+ *
+ * The v2 dataset spells the prefix out in the kana too — `大字三泊村` reads
+ * `オオアザサンドマリムラ` — so stripping it from only one side skews any
+ * comparison between them. Doing exactly that made {@link isPlausibleReading}
+ * flag 23,193 entries (3.65% of everything with a reading) as corrupt: the
+ * kanji count dropped by two while four mora of `オオアザ` stayed in the
+ * reading. Those were all ordinary rural addresses, and the library refused
+ * every one of them.
+ */
+function stripAzaPrefix(ja: string, kana: string): { ja: string; kana: string } {
+  if (ja.startsWith('大字')) {
+    return { ja: ja.slice(2), kana: kana.replace(/^オオアザ/, '') };
+  }
+  if (ja.startsWith('字')) {
+    return { ja: ja.slice(1), kana: kana.replace(/^アザ/, '') };
+  }
+  return { ja, kana };
 }

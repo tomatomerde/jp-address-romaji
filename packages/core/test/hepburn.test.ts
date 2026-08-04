@@ -3,7 +3,6 @@ import { kanaToRomaji, toKatakana } from '../src/romaji/hepburn.js';
 import {
   isUsableRomajiField,
   isPlausibleReading,
-  stripTrailingChomeNumber,
 } from '../src/romaji/validate.js';
 import { numberToKanji, kanjiToNumber } from '../src/kanjiNumbers.js';
 
@@ -67,9 +66,12 @@ describe('dataset romaji validation', () => {
     expect(isUsableRomajiField(undefined)).toBe(false);
   });
 
-  it('strips the trailing chome number', () => {
-    expect(stripTrailingChomeNumber('ASAHIGAOKA 1')).toBe('ASAHIGAOKA');
-    expect(stripTrailingChomeNumber('UEHARA')).toBe('UEHARA');
+  it('keeps a trailing digit that belongs to the name', () => {
+    // Real v2 entries: the digit is part of the name (政和第一, 四重麦四), not
+    // a chome. An earlier version stripped trailing digits before validating
+    // and truncated these to "Seiwadai" / "Yoemugi".
+    expect(isUsableRomajiField('Seiwadai1')).toBe(true);
+    expect(isUsableRomajiField('Yoemugi4')).toBe(true);
   });
 
   it('flags a reading whose length is implausible for its kanji', () => {
@@ -98,6 +100,22 @@ describe('dataset romaji validation', () => {
     // A real corrupt row found by re-measuring nationally after the fix:
     // 荒田 (2 kanji) paired with a reading that belongs to a much longer name.
     expect(isPlausibleReading('荒田', 'アラタカミコマタ')).toBe(false);
+  });
+
+  it('strips the 大字/字 prefix from the reading as well as the name', () => {
+    // Regression, measured on the real v2 dataset: the prefix is spelled out
+    // in the kana too, so stripping it from only the kanji side inflated the
+    // ratio and flagged 23,193 entries (3.65% of everything with a reading).
+    // All four of these are real v2 records that were being refused.
+    expect(isPlausibleReading('大字三泊村', 'オオアザサンドマリムラ')).toBe(true);
+    expect(isPlausibleReading('大字稚内村', 'オオアザワッカナイムラ')).toBe(true);
+    expect(isPlausibleReading('大字盃村', 'オオアザサカズキムラ')).toBe(true);
+    expect(isPlausibleReading('大字泊村', 'オオアザトマリムラ')).toBe(true);
+    // The 字 (aza) prefix behaves the same way.
+    expect(isPlausibleReading('字政和第一', 'アザセイワダイイチ')).toBe(true);
+    // A v1-style row, where the prefix appears in the name but not the
+    // reading, must still pass.
+    expect(isPlausibleReading('大字三内', 'サンナイ')).toBe(true);
   });
 });
 

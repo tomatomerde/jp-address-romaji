@@ -70,8 +70,14 @@ jobs:
       - name: Measure coverage
         run: npx tsx scripts/measure-coverage.ts --data ./address-data > docs/coverage.md
 
+      # JP_ADDRESS_ROMAJI_DATA_DIR switches on realdata.test.ts, which is
+      # skipped everywhere else. Without it this step would re-run the same
+      # fixture-based suite CI already ran and prove nothing about the data
+      # just downloaded.
       - name: Run the test suite against the real dataset
         continue-on-error: true
+        env:
+          JP_ADDRESS_ROMAJI_DATA_DIR: ./address-data
         run: pnpm test
 
       - uses: actions/upload-artifact@v4

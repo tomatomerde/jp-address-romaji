@@ -1,11 +1,14 @@
 /**
  * Check the assumptions this library makes about the address dataset.
  *
- * The initial analysis was done against the Geolonia **v1** national CSV,
- * because the environment used for it could not reach the v2 API host. Every
- * number the library's heuristics are tuned to therefore needs re-confirming
- * against the v2 data actually shipped. This script does all of that in one
- * pass so it can be run once, from anywhere with network access.
+ * The library's heuristics are tuned to measured properties of the data, so
+ * those properties need re-checking whenever the dataset is rebuilt. This
+ * script does all of it in one pass, from anywhere with network access.
+ *
+ * It has already caught two real defects: a plausibility check that flagged
+ * 3.65% of entries because the `大字` prefix is spelled out in the kana, and a
+ * chome-stripping step that truncated town names whose trailing digit is part
+ * of the name (`政和第一` -> `"Seiwadai1"`).
  *
  *   npx tsx packages/data/src/build-data.ts --out ./address-data
  *   npx tsx scripts/verify-data-assumptions.ts --data ./address-data
@@ -89,9 +92,9 @@ function main(): void {
           }
         }
 
-        // Does v2 append the chome number to the town romaji the way v1 did?
-        // If it does not, stripTrailingChomeNumber() is deleting meaningful
-        // digits (e.g. the 条 in "HIGASHI 1").
+        // Confirmed on v2: a trailing digit belongs to the NAME (政和第一 ->
+        // "Seiwadai1"), never to a chome, which lives in its own field. Kept
+        // as a watch: if this count ever climbs, the assumption has changed.
         if (town.oaza_cho_r && /\d$/.test(town.oaza_cho_r.trim())) {
           romajiEndsInDigit++;
           if (digitSamples.length < 25) {
@@ -104,7 +107,9 @@ function main(): void {
         }
 
         if (town.oaza_cho_r) {
-          const key = town.oaza_cho_r.replace(/[\s-]*\d+$/, '').toLowerCase().replace(/[^a-z]/g, '');
+          // Same normalization the library uses: digits are kept, because a
+          // trailing digit is part of the name (see assumption 4).
+          const key = town.oaza_cho_r.toLowerCase().replace(/[^a-z0-9]/g, '');
           if (key) {
             if (!byKey.has(key)) byKey.set(key, new Set());
             byKey.get(key)!.add(town.oaza_cho);
@@ -130,11 +135,12 @@ function main(): void {
   console.log(`  with kana              : ${withKana} (${pct(withKana, towns)})`);
   console.log(`  usable (excl. corrupt) : ${usable} (${pct(usable, towns)})`);
   console.log('');
-  console.log('-- assumption 1: kana and romaji go missing together --');
+  console.log('-- assumption 1: the kana-derived romanization path is load-bearing --');
   console.log(`  kana but no romaji : ${kanaOnly} (${pct(kanaOnly, towns)})`);
   console.log(`  romaji but no kana : ${romajiOnly} (${pct(romajiOnly, towns)})`);
   console.log(`  neither            : ${neither} (${pct(neither, towns)})`);
-  console.log(`  -> if "kana but no romaji" is large, a kana fallback WOULD rescue coverage`);
+  console.log('  -> "kana but no romaji" is the share that ONLY transliteration can convert.');
+  console.log('     Measured ~10% on v2, which is why romanizeStem() falls back to kana.');
   console.log('');
   console.log('-- assumption 2: some romaji values are corrupt (collapsed to a number) --');
   console.log(`  rejected by isUsableRomajiField: ${corruptRomaji} (${pct(corruptRomaji, withRomaji)} of populated)`);
@@ -146,9 +152,7 @@ function main(): void {
   console.log('');
   console.log('-- assumption 4: town romaji does NOT carry a trailing chome number --');
   console.log(`  oaza_cho_r ending in a digit: ${romajiEndsInDigit} (${pct(romajiEndsInDigit, withRomaji)})`);
-  console.log('  If this is ~0, stripTrailingChomeNumber() is dead weight and should go.');
-  console.log('  If it is large, check whether those digits are the chome (safe to strip)');
-  console.log('  or part of the name such as 条 (stripping them corrupts the address):');
+  console.log('  These digits are part of the name, not a chome. Nothing may strip them:');
   digitSamples.forEach((s) => console.log(`    ${s}`));
   console.log('');
   console.log('-- assumption 5: romanization is near-unique within a municipality --');
@@ -160,11 +164,17 @@ function main(): void {
   const problems: string[] = [];
   if (missingFiles > 0) problems.push(`${missingFiles} municipality files are missing; the dataset is incomplete.`);
   if (towns === 0) problems.push('No town entries were read.');
-  if (kanaOnly / Math.max(towns, 1) > 0.02) {
-    problems.push('Over 2% of entries have kana but no romaji: a kana fallback would meaningfully improve coverage, so the "no fallback exists" claim in the README is wrong.');
-  }
   if (flaggedReading / Math.max(withKana, 1) > 0.01) {
     problems.push('The reading-plausibility check flags over 1% of entries; review the samples above for false positives before shipping.');
+  }
+  // Coverage is 99.55% on the current national dataset. A sharp drop means the
+  // upstream data changed shape, not that a few towns were renamed.
+  //
+  // Only applied to a full dataset: the test fixtures are a deliberately sparse
+  // subset (they exist to exercise the refusal paths) and would always trip it.
+  const isFullDataset = towns > 100_000;
+  if (isFullDataset && usable / towns < 0.95) {
+    problems.push(`Usable coverage fell to ${pct(usable, towns)}; it is normally >99%. The dataset shape may have changed.`);
   }
   if (problems.length > 0) {
     console.error('ASSUMPTIONS VIOLATED:');

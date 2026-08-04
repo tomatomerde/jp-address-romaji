@@ -135,29 +135,26 @@ the compiler makes you handle the failure case.
 | `DATA_NOT_CONFIGURED` | No dataset installed or configured. |
 | `EMPTY_INPUT` | No recognizable address in the input. |
 
-## Coverage: read this before relying on it
+## Coverage
 
-Coverage is not uniform, and the average hides the shape. Measured over 277,656 town-level records
-of the national dataset:
+Measured over all 638,567 town-level records of the shipped dataset:
 
-| Segment | Entries | Romaji coverage |
+| Segment | Entries | Usable |
 | --- | ---: | ---: |
-| **Chome-bearing (urban, 住居表示)** | 90,972 | **99.83%** |
-| Non-chome (rural `大字`) | 99,451 | 75.46% |
-| `大字`-prefixed specifically | 10,701 | **3.62%** |
-| National, distinct entries | 190,423 | 87.11% |
+| **Chome-bearing (urban, 住居表示)** | 92,971 | **99.99%** |
+| **`大字`-prefixed (rural)** | 61,330 | **99.96%** |
+| National | 638,567 | **99.55%** |
 
-Prefectures with the lowest overall coverage — Aomori 46%, Okinawa 50%, Nagano 61%, Fukushima 64% —
-are **all ~100% on chome entries**. Their gaps are rural `大字` names.
+Coverage is effectively uniform: the lowest-scoring prefectures are Yamanashi (84.95%) and Nagano
+(85.02%), and every prefecture is at 100% on chome entries. Expect conversion to succeed for
+ordinary addresses, urban or rural.
 
-Two consequences:
+Where a name has no usable reading — 0.45% of entries — you get `NO_ROMAJI_DATA` rather than a
+guess.
 
-- For international shipping, which overwhelmingly targets urban chome-style addresses, effective
-  coverage is very high.
-- For rural addresses, expect `NO_ROMAJI_DATA`. That is the library working as intended.
-
-Also note that kana and romaji go missing *together*: of 277,656 records, only 50 have kana without
-romaji. There is no kana fallback that rescues the gap.
+**Romaji and kana do not go missing together.** 89.51% of entries carry a romaji field but 99.55%
+carry a kana reading, so roughly one entry in ten is romanized by transliterating its kana. That
+path is not a fallback for rare cases; it is load-bearing.
 
 Run `pnpm coverage:measure --data ./address-data` to regenerate these figures for your dataset
 version; the committed report is in [docs/coverage.md](./docs/coverage.md).
@@ -178,15 +175,14 @@ version; the committed report is in [docs/coverage.md](./docs/coverage.md).
 These are properties of the upstream data, not of the conversion logic. The library detects them
 and refuses rather than emitting a wrong address, so they surface as failures:
 
-- **Some real addresses are unreachable in both directions.** Where a dataset row carries a
-  reading belonging to a neighbouring entry, we cannot trust it. `円山` in Sapporo's Chuo ward is
-  the clearest case: its kana and romaji are both `円山西町`'s. `toRomaji` returns
-  `CORRUPT_ROMAJI_DATA` and `fromRomaji` will not offer it as a candidate.
-- **Short forms of a town name are frequently ambiguous.** Nationally, about 880 towns have a
-  suffix-less form that is also another town's full name in the same municipality — Hakodate has
-  both `昭和町` and `昭和一丁目`, so `"Showa"` matches both. Writing the full name (`"Showa-cho"`)
-  resolves it, and this library's own output always does. Typed short forms return `AMBIGUOUS`
-  with the candidates.
+- **A few rows carry a reading that belongs to a neighbouring entry.** Where the kana is
+  implausibly long for the name it reads, we cannot trust it, and the address becomes unreachable
+  in both directions: `toRomaji` returns `CORRUPT_ROMAJI_DATA` and `fromRomaji` will not offer it
+  as a candidate. This is rare in the current dataset.
+- **Short forms of a town name can be ambiguous.** 1.23% of town romanizations match more than one
+  distinct town within the same municipality — Hakodate has both `昭和町` and `昭和一丁目`, so
+  `"Showa"` matches both. Writing the full name (`"Showa-cho"`) resolves it, and this library's own
+  output always does. Typed short forms return `AMBIGUOUS` with the candidates.
 
 ## Data source and licensing
 

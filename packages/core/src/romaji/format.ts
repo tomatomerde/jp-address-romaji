@@ -11,7 +11,7 @@
 
 import type { LongVowelStyle } from '../types.js';
 import { analyzeKana, renderSyllables, kanaToRomaji } from './hepburn.js';
-import { isUsableRomajiField, stripTrailingChomeNumber } from './validate.js';
+import { isUsableRomajiField } from './validate.js';
 
 /** Administrative suffixes, with their possible readings. */
 const SUFFIXES: Record<string, { kana: string[]; romaji: string[] }> = {
@@ -67,7 +67,7 @@ export function splitAdministrativeSuffix(
 ): SplitResult {
   const suffixKanji = ja.slice(-1);
   const spec = SUFFIXES[suffixKanji];
-  const cleanRomaji = romajiField ? stripTrailingChomeNumber(romajiField) : undefined;
+  const cleanRomaji = romajiField?.trim() || undefined;
 
   if (!spec) {
     return { stemKana: kana, stemRomaji: cleanRomaji };
@@ -162,7 +162,7 @@ export function formatTown(
   romajiField: string | undefined,
   style: LongVowelStyle,
 ): string | undefined {
-  const cleanRomaji = romajiField ? stripTrailingChomeNumber(romajiField) : undefined;
+  const cleanRomaji = romajiField?.trim() || undefined;
   const stem = romanizeStem(kana, cleanRomaji, style);
   return stem ? titleCase(stem) : undefined;
 }
