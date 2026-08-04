@@ -38,8 +38,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
@@ -62,7 +60,12 @@ jobs:
       - name: Check dataset assumptions
         id: assumptions
         continue-on-error: true
-        run: npx tsx scripts/verify-data-assumptions.ts --data ./address-data | tee assumptions.txt
+        # pipefail matters: without it the exit status is tee's, so a violated
+        # assumption would be reported as a passing step.
+        shell: bash
+        run: |
+          set -o pipefail
+          npx tsx scripts/verify-data-assumptions.ts --data ./address-data | tee assumptions.txt
 
       - name: Measure coverage
         run: npx tsx scripts/measure-coverage.ts --data ./address-data > docs/coverage.md
