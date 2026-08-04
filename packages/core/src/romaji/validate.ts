@@ -50,36 +50,36 @@ const COMBINING_KANA = /[ァィゥェォャュョヮ]/g;
  * are wrong in the same way. Length can: two kanji reading as eight mora is
  * far outside the normal range for place names.
  *
- * Measured over the fixture corpus this flags 1 entry in 2,071 — the corrupt
- * one — with no false positives. Single-kanji names are exempt because short
- * names legitimately carry long readings (`幸` -> サイワイ).
+ * The budget counts hiragana/katakana that are part of the NAME ITSELF, not
+ * just kanji. An earlier version counted kanji only, and flagged legitimate
+ * mixed-script urban names as corrupt — for example:
  *
- * A false positive costs an explicit NO_ROMAJI_DATA failure; a false negative
- * costs a confidently wrong address. The threshold is set to prefer the former.
+ *   南あいの里 (3 kanji + 3 kana) -> ミナミアイノサト (8 mora)
+ *   柏インター東 (3 kanji + 4 katakana) -> カシワインターヒガシ (10 mora)
+ *
+ * counting only the 2-3 kanji made those look as implausible as the genuine
+ * corruption. Measured on the national dataset (162,320 entries with 2+
+ * kanji), the kanji-only version flagged 368, of which 268 (73%) were false
+ * positives of exactly this shape — nearly all of them ordinary chome
+ * addresses, the segment this library serves best. Counting kana in the name
+ * toward the budget drops that to 102 flagged, of which manual review found
+ * roughly 69 to be genuine shifted or corrupted readings (concentrated in
+ * 青森県平川市, suggesting that municipality's data has a systematic issue)
+ * and the remainder kana readings containing stray digits — also corrupt,
+ * just a different kind.
+ *
+ * Single-kanji, no-kana names are exempt because short names legitimately
+ * carry long readings (`幸` -> サイワイ). A false positive costs an explicit
+ * NO_ROMAJI_DATA failure; a false negative costs a confidently wrong address.
+ * The threshold is set to prefer the former.
  */
 export function isPlausibleReading(ja: string, kana: string | undefined): boolean {
   if (!kana) return true; // Nothing to check; absence is handled elsewhere.
-  const kanjiCount = (ja.replace(/^大字/, '').match(/[一-鿿]/g) ?? []).length;
+  const stem = ja.replace(/^大字/, '');
+  const kanjiCount = (stem.match(/[一-鿿]/g) ?? []).length;
   if (kanjiCount < 2) return true;
+  // Hiragana/katakana that are part of the place name, not the reading.
+  const nameKanaCount = (stem.match(/[ぁ-ゟ゠-ヿ]/g) ?? []).length;
   const moraCount = kana.replace(COMBINING_KANA, '').length;
-  return moraCount / kanjiCount <= 3.5;
-}
-
-/**
- * Cross-check a dataset romaji value against the kana reading we would have
- * produced ourselves. A gross mismatch means the dataset row is unreliable.
- *
- * This is intentionally lenient: the dataset's own conventions differ from
- * ours (it is ALL-CAPS, drops long vowels, and hyphenates inconsistently), so
- * we only flag values whose length is wildly inconsistent with the reading.
- * The goal is catching truncation and field-shift bugs, not style differences.
- */
-export function isConsistentWithKana(romaji: string, kanaRomaji: string): boolean {
-  const a = romaji.toLowerCase().replace(/[^a-z]/g, '');
-  const b = kanaRomaji.toLowerCase().replace(/[^a-z]/g, '');
-  if (a.length === 0 || b.length === 0) return false;
-  // A dataset value shorter than half the transliterated reading indicates
-  // truncation rather than a spelling convention difference.
-  const ratio = a.length / b.length;
-  return ratio >= 0.5 && ratio <= 2;
+  return moraCount <= kanjiCount * 3.5 + nameKanaCount * 1.5;
 }

@@ -88,11 +88,20 @@ if (result.ok) {
 複数該当する場合は、**候補付きで** `AMBIGUOUS` を返し、選択は呼び出し側に委ねます:
 
 ```ts
-const result = await fromRomaji('1-1 Harabetsu, Aomori-shi, Aomori');
-// { ok: false, reason: 'AMBIGUOUS', candidates: [ …大字原別…, …原別一丁目… ] }
+const result = await fromRomaji('1-1 Ebisucho, Nakagyo-ku, Kyoto-shi, Kyoto');
+// { ok: false, reason: 'AMBIGUOUS',
+//   candidates: [ …町: 夷町…, …町: 恵比須町… ] }
+// 夷町 と 恵比須町 は京都市中京区に実在する別の町字で、
+// どちらもローマ字は "Ebisu-cho" になります。
 ```
 
-入力に郵便番号があれば、絞り込みのヒントとして利用します。
+#### 郵便番号
+
+入力中の郵便番号は解析され `parsed.postalCode` に格納されますが、**現時点では `AMBIGUOUS` の
+候補を絞り込むためには使用していません**。同梱データセットには郵便番号→町字のマッピングが無く
+（それには日本郵政の `KEN_ALL` の同梱が必要で、今後のバージョンに先送りしています）。今すぐ
+`AMBIGUOUS` を解決したい場合は、`candidates` をユーザーに提示するか、`partial` の町名候補に対して
+独自の郵便番号照合を適用してください。
 
 ### `parse(address)`
 

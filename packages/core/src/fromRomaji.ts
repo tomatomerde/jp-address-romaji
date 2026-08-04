@@ -22,8 +22,9 @@ import {
   type MachiAzaRecord,
 } from './dataAccess.js';
 import { kanaToRomaji } from './romaji/hepburn.js';
-import { stripTrailingChomeNumber } from './romaji/validate.js';
+import { stripTrailingChomeNumber, isPlausibleReading } from './romaji/validate.js';
 import { numberToKanji } from './kanjiNumbers.js';
+import { containsJapanese } from './script.js';
 
 /** A Japanese address reconstructed from romaji. */
 export interface JapaneseAddress {
@@ -81,7 +82,20 @@ export async function fromRomaji(romajiAddress: string): Promise<Result<Japanese
     );
   }
 
-  const { postalCode, segments } = tokenize(romajiAddress);
+  const { postalCode, segments: rawSegments } = tokenize(romajiAddress);
+
+  // A segment containing Japanese script cannot be a prefecture, municipality
+  // or town in THIS direction — those are always written in romaji here. It
+  // can only be a building name / room number that toRomaji carried through
+  // verbatim. Pulling it out before matching means it no longer corrupts the
+  // town lookup, regardless of whether it was placed first or last.
+  const buildingSegments: string[] = [];
+  const segments: string[] = [];
+  for (const segment of rawSegments) {
+    (containsJapanese(segment) ? buildingSegments : segments).push(segment);
+  }
+  const buildingName = buildingSegments.length > 0 ? buildingSegments.join(', ') : undefined;
+
   if (segments.length === 0) {
     return fail('EMPTY_INPUT', 'No address components were found in the input.');
   }
@@ -146,7 +160,12 @@ export async function fromRomaji(romajiAddress: string): Promise<Result<Japanese
     );
   }
 
-  const { numbers, name, unparsed } = splitNumbersAndName(rest);
+  // `extraText` is anything left over in the SAME segment as the town after
+  // pulling out the leading/trailing numbers (e.g. a building name with no
+  // comma before it). It is combined with `buildingName` — the segments
+  // already isolated above — into the final unparsed text.
+  const { numbers, name, unparsed: extraText } = splitNumbersAndName(rest);
+  const unparsed = [buildingName, extraText].filter(Boolean).join(' ') || undefined;
   if (!name) {
     return fail('TOWN_NOT_FOUND', `No town name was found in "${rest}".`, { ...partial, level: 2 });
   }
@@ -191,7 +210,8 @@ export async function fromRomaji(romajiAddress: string): Promise<Result<Japanese
       message:
         `"${name}" matches ${distinct.length} distinct towns in ` +
         `${prefRecord.pref}${cityPathName(record)}: ${distinct.join(', ')}. ` +
-        `Provide a postal code, or choose one of the returned candidates.`,
+        `Choose one of the returned candidates; this version does not use the ` +
+        `postal code to narrow them (see the "Postal code" section of the README).`,
       partial,
       candidates,
     };
@@ -330,12 +350,30 @@ function matchesMunicipality(record: CityRecord, tail: string[]): boolean {
 
 /** Find towns whose romanization matches `name`. */
 function matchTowns(towns: MachiAzaRecord[], name: string): MachiAzaRecord[] {
+  // Deliberately NOT using stemKey() on the query here. stemKey() strips a
+  // municipality-style suffix (shi/ku/gun/machi/mura/...), which is correct
+  // for matchesMunicipality — a municipality's suffix reading is genuinely
+  // ambiguous (a 町 can be "-cho" or "-machi") and stripping it lets either
+  // spelling match. Applying the same stripping to a QUERY town name doesn't
+  // resolve an ambiguity; it deletes whatever the user typed and lets it
+  // match anything with the same stem, suffix and all. Concretely, that
+  // let "Uguisudanimura" and "Uguisudanigun" both match 鶯谷町 — a nonsense
+  // suffix, silently accepted as if the real one had been typed.
+  //
+  // candidateKeys() still includes the DATASET's own stemmed key (so a query
+  // that legitimately omits the suffix, e.g. "Uguisudani" for 鶯谷町, still
+  // matches); what's removed is stemming the QUERY itself.
   const target = normalizeRomajiKey(name);
-  const targetStem = stemKey(name);
   return towns.filter((t) => {
     if (!t.oaza_cho) return false;
+    // Exclude entries whose reading is implausible for their kanji — the same
+    // check toRomaji uses to reject corrupt dataset rows (see 円山, which
+    // carries 円山西町's kana and romaji). Without this, a corrupt row leaks
+    // into the candidate set and manufactures ambiguity for an address that
+    // genuinely has only one match.
+    if (t.oaza_cho_k && !isPlausibleReading(t.oaza_cho, t.oaza_cho_k)) return false;
     const keys = candidateKeys(t.oaza_cho, t.oaza_cho_k, t.oaza_cho_r);
-    return keys.has(target) || (targetStem !== '' && keys.has(targetStem));
+    return keys.has(target);
   });
 }
 

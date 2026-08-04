@@ -89,11 +89,20 @@ When more than one Japanese address matches, it returns `AMBIGUOUS` **with the c
 lets you choose:
 
 ```ts
-const result = await fromRomaji('1-1 Harabetsu, Aomori-shi, Aomori');
-// { ok: false, reason: 'AMBIGUOUS', candidates: [ …大字原別…, …原別一丁目… ] }
+const result = await fromRomaji('1-1 Ebisucho, Nakagyo-ku, Kyoto-shi, Kyoto');
+// { ok: false, reason: 'AMBIGUOUS',
+//   candidates: [ …町: 夷町…, …町: 恵比須町… ] }
+// 夷町 and 恵比須町 are two distinct real towns in Kyoto's Nakagyo ward
+// that both romanize to "Ebisu-cho".
 ```
 
-A postal code in the input is used as a disambiguation hint.
+#### Postal code
+
+A postal code in the input is parsed and returned in `parsed.postalCode`. **It is not currently
+used to narrow `AMBIGUOUS` candidates** — the bundled dataset has no postal-code-to-town mapping
+(that would mean also bundling Japan Post's `KEN_ALL`, deferred to a future version). If you need to
+resolve an `AMBIGUOUS` result today, either present `candidates` to the user or apply your own
+postal-code lookup against the `partial` town names.
 
 ### `parse(address)`
 

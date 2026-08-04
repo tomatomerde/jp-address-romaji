@@ -80,6 +80,25 @@ describe('dataset romaji validation', () => {
     // Single-kanji names legitimately carry long readings.
     expect(isPlausibleReading('幸', 'サイワイ')).toBe(true);
   });
+
+  it('does not flag ordinary mixed-script urban names', () => {
+    // Regression: an earlier version counted only kanji toward the length
+    // budget, so any hiragana/katakana that is part of the NAME ITSELF (not
+    // the reading) was invisible to the check. Real chome-address names like
+    // these were flagged as corrupt even though their readings are exactly
+    // right — measured nationally, that version flagged 368 entries, 268 of
+    // which (73%) were exactly this false-positive shape.
+    expect(isPlausibleReading('南あいの里三丁目', 'ミナミアイノサト')).toBe(true);
+    expect(isPlausibleReading('流通センター一丁目', 'リュウツウセンター')).toBe(true);
+    expect(isPlausibleReading('柏インター東', 'カシワインターヒガシ')).toBe(true);
+    expect(isPlausibleReading('おおたかの森東一丁目', 'オオタカノモリヒガシ')).toBe(true);
+  });
+
+  it('still flags genuine corruption once mixed scripts are accounted for', () => {
+    // A real corrupt row found by re-measuring nationally after the fix:
+    // 荒田 (2 kanji) paired with a reading that belongs to a much longer name.
+    expect(isPlausibleReading('荒田', 'アラタカミコマタ')).toBe(false);
+  });
 });
 
 describe('kanji numerals', () => {

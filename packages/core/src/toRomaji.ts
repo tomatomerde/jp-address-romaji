@@ -269,8 +269,11 @@ function render(parsed: ParsedAddress, opts: Required<ToRomajiOptions>): string 
   }
 
   if (opts.includeUnparsed && parsed.unparsed) {
-    // Building names are passed through verbatim, never romanized.
-    line = `${parsed.unparsed}, ${line}`;
+    // Building names are passed through verbatim, never romanized. Placement
+    // follows the convention of each order: western addresses commonly list
+    // the suite/building as a leading item, while Japanese order writes it
+    // immediately after the block numbers — at the very end of the line.
+    line = opts.order === 'japanese' ? `${line}, ${parsed.unparsed}` : `${parsed.unparsed}, ${line}`;
   }
 
   if (opts.includeCountry) line = `${line}, Japan`;

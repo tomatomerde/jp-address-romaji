@@ -5,12 +5,9 @@
 import type { ParsedAddress, Result } from './types.js';
 import { toRomaji } from './toRomaji.js';
 import { fromRomaji } from './fromRomaji.js';
+import { containsJapanese } from './script.js';
 
-/** Does this string contain Japanese script? */
-export function containsJapanese(input: string): boolean {
-  // Hiragana, katakana, CJK ideographs, and the halfwidth katakana block.
-  return /[぀-ゟ゠-ヿ㐀-䶿一-鿿ｦ-ﾝ]/.test(input);
-}
+export { containsJapanese };
 
 /** Which form the input is written in. */
 export type AddressScript = 'japanese' | 'romaji';

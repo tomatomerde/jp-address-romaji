@@ -49,6 +49,52 @@ describe('fromRomaji: reconstructs Japanese', () => {
     expect(result.partial?.county?.ja).toBe('三島郡');
     expect(result.partial?.city?.ja).toBe('出雲崎町');
   });
+
+  it('excludes a corrupt dataset entry from candidates instead of manufacturing ambiguity', async () => {
+    // 円山's own kana/romaji are corrupt copies of 円山西町's (see
+    // isPlausibleReading). Before that check was applied here too, this
+    // input matched BOTH entries and returned AMBIGUOUS for an address that
+    // genuinely has only one real match.
+    const result = await fromRomaji('1-1 Maruyamanishimachi, Chuo-ku, Sapporo-shi, Hokkaido');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.parsed.town?.ja).toBe('円山西町');
+  });
+
+  it('reports a genuine ambiguity between two distinct real towns', async () => {
+    // 夷町 and 恵比須町, both in Kyoto's Nakagyo ward, both romanize to
+    // "Ebisu-cho" — unlike 円山 above, both readings are legitimate.
+    const result = await fromRomaji('1-1 Ebisucho, Nakagyo-ku, Kyoto-shi, Kyoto');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('AMBIGUOUS');
+    expect(result.candidates?.map((c) => c.town?.ja).sort()).toEqual(['恵比須町', '夷町'].sort());
+  });
+});
+
+describe('fromRomaji: town matching does not accept an arbitrary suffix', () => {
+  it('rejects a town name with a nonsensical administrative suffix', async () => {
+    // Regression: matchTowns() used to strip a municipality-style suffix
+    // (shi/ku/gun/machi/mura/...) from the QUERY town name before matching,
+    // which let "Uguisudanimura" and "Uguisudanigun" both match 鶯谷町 as if
+    // "mura"/"gun" were valid alternate readings of its actual "-cho" suffix.
+    for (const suffix of ['mura', 'gun']) {
+      const result = await fromRomaji(`2-1 Uguisudani${suffix}, Shibuya-ku, Tokyo`);
+      expect(result.ok).toBe(false);
+      if (result.ok) continue;
+      expect(result.reason).toBe('TOWN_NOT_FOUND');
+    }
+  });
+
+  it('still accepts the real suffix, and the suffix-less stem', async () => {
+    const withSuffix = await fromRomaji('2-1 Uguisudanicho, Shibuya-ku, Tokyo');
+    expect(withSuffix.ok).toBe(true);
+    if (withSuffix.ok) expect(withSuffix.value.parsed.town?.ja).toBe('鶯谷町');
+
+    const stemOnly = await fromRomaji('2-1 Uguisudani, Shibuya-ku, Tokyo');
+    expect(stemOnly.ok).toBe(true);
+    if (stemOnly.ok) expect(stemOnly.value.parsed.town?.ja).toBe('鶯谷町');
+  });
 });
 
 describe('fromRomaji: refuses rather than guesses', () => {

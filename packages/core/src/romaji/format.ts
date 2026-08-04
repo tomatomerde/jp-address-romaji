@@ -27,8 +27,14 @@ const SUFFIXES: Record<string, { kana: string[]; romaji: string[] }> = {
 };
 
 /** Capitalize each word and each hyphen-separated part: `nishi-shinjuku`. */
+// Latin letters, including accented ones: Latin-1 Supplement letters
+// (excluding the non-letter × U+00D7 and ÷ U+00F7) plus Latin Extended-A,
+// which together cover both circumflex (â, ô, ...) and macron (ā, ō, ...)
+// long-vowel spellings.
+const WORD_CHARS = /[A-Za-zÀ-ÖØ-öø-ſ'ʼ]+/g;
+
 export function titleCase(input: string): string {
-  return input.replace(/[A-Za-zĀ-ſ'ʼ]+/g, (word, offset: number) => {
+  return input.replace(WORD_CHARS, (word, offset: number) => {
     // Keep an apostrophe-separated continuation lowercase: `Shin'ichi`.
     if (offset > 0 && /['ʼ]/.test(input[offset - 1] ?? '')) return word.toLowerCase();
     return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();

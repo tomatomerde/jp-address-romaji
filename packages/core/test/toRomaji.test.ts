@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { toRomaji } from '../src/toRomaji.js';
+import { fromRomaji } from '../src/fromRomaji.js';
 import { useFixtureData, withNetworkBlocked } from './helpers.js';
 
 beforeAll(() => useFixtureData());
@@ -74,6 +75,35 @@ describe('toRomaji: building names are never romanized', () => {
     // Still preserved in the structure, just not rendered.
     expect(result.value.parsed.unparsed).toBe('サンプルビル301');
   });
+
+  it('round-trips through fromRomaji instead of corrupting the town match', async () => {
+    // Regression: the building name used to be prepended in front of the
+    // street segment with no way for fromRomaji to tell it apart, so
+    // "サンプルビル301, 1-2-3 Uehara, ..." was parsed as if "サンプルビル301"
+    // were part of the town name and failed with TOWN_NOT_FOUND.
+    const forward = await toRomaji('〒151-0064 東京都渋谷区上原1-2-3 サンプルビル301');
+    expect(forward.ok).toBe(true);
+    if (!forward.ok) return;
+
+    const back = await fromRomaji(forward.value.formatted);
+    expect(back.ok).toBe(true);
+    if (!back.ok) return;
+    expect(back.value.parsed.town?.ja).toBe('上原');
+    expect(back.value.parsed.chome).toBe(1);
+    expect(back.value.parsed.blockNumbers).toEqual([2, 3]);
+    expect(back.value.parsed.unparsed).toBe('サンプルビル301');
+  });
+
+  it('places the building name after the street for Japanese order, not before', async () => {
+    const western = await toRomaji('東京都渋谷区上原1-2-3 サンプルビル301');
+    expect(western.ok).toBe(true);
+    if (western.ok) expect(western.value.formatted.startsWith('サンプルビル301,')).toBe(true);
+
+    const japanese = await toRomaji('東京都渋谷区上原1-2-3 サンプルビル301', { order: 'japanese' });
+    expect(japanese.ok).toBe(true);
+    if (!japanese.ok) return;
+    expect(japanese.value.formatted).toBe('Tokyo, Shibuya-ku, Uehara 1-2-3, サンプルビル301, Japan');
+  });
 });
 
 describe('toRomaji: refuses rather than fabricates', () => {
@@ -142,6 +172,19 @@ describe('toRomaji: options', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.formatted).toContain('Tohkyoh');
+  });
+
+  it('supports circumflex without breaking title-casing mid-word', async () => {
+    // Regression: titleCase()'s word-character class did not include Latin-1
+    // Supplement letters (â, ô, ...), so a circumflexed word like "tôkyô" was
+    // split into two "words" at the accented vowel and title-cased as
+    // "TôKyô" instead of "Tôkyô".
+    const result = await toRomaji('東京都渋谷区鶯谷町2-1', { longVowel: 'circumflex' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.formatted).toContain('Tôkyô');
+    expect(result.value.formatted).not.toContain('TôKyô');
+    expect(result.value.formatted).toContain('Uguisudanichô');
   });
 
   it('supports Japanese order', async () => {
