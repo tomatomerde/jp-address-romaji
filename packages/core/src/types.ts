@@ -75,6 +75,15 @@ export interface ParsedAddress {
   ward?: AddressComponent;
   /** Town (machi-aza) without the chome suffix. */
   town?: AddressComponent;
+  /**
+   * Kyoto street phrase (`烏丸通四条上ル`), when the address uses one.
+   *
+   * Navigational rather than administrative: the official address is the town
+   * plus its number, so this is preserved verbatim but not rendered into the
+   * romanized string. It has no romaji form because the dataset carries no
+   * readings for street names.
+   */
+  kyotoStreet?: string;
   /** Chome number, when the town carries one. `西新宿三丁目` -> 3. */
   chome?: number;
   /**

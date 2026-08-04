@@ -16,7 +16,7 @@
  */
 
 export { toRomaji, extractPostalCode } from './toRomaji.js';
-export { fromRomaji, renderJapanese, type JapaneseAddress } from './fromRomaji.js';
+export { fromRomaji, renderJapanese, type JapaneseAddress, type FromRomajiOptions } from './fromRomaji.js';
 export { parse, detectScript, containsJapanese, type AddressScript } from './parse.js';
 export {
   toFormat,
@@ -37,7 +37,7 @@ export { clearDataCache } from './dataAccess.js';
 
 export { kanaToRomaji, toKatakana } from './romaji/hepburn.js';
 export { numberToKanji, kanjiToNumber } from './kanjiNumbers.js';
-export { isKyotoStreetAddress } from './kyoto.js';
+export { isKyotoStreetAddress, splitKyotoStreet, type KyotoSplit } from './kyoto.js';
 export { PREFECTURES, findPrefectureByJa, findPrefectureByRomaji } from './data/prefectures.js';
 
 export type {

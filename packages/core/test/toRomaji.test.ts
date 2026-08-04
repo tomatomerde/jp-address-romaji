@@ -129,11 +129,14 @@ describe('toRomaji: refuses rather than fabricates', () => {
     }
   });
 
-  it('refuses Kyoto street-name addresses explicitly', async () => {
+  it('reports a Kyoto street address whose town is not in the dataset', async () => {
+    // 函谷鉾町 is absent from the fixtures, so this exercises the diagnosis
+    // path: the street phrase was understood, the town was not.
     const result = await toRomaji('京都府京都市中京区四条通烏丸東入ル函谷鉾町');
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('KYOTO_STREET_ADDRESS');
+    expect(result.partial?.kyotoStreet).toBe('四条通烏丸東入ル');
   });
 
   it('reports an unknown town rather than inventing one', async () => {
@@ -148,6 +151,42 @@ describe('toRomaji: refuses rather than fabricates', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('EMPTY_INPUT');
+  });
+});
+
+describe('toRomaji: Kyoto street-name addresses', () => {
+  // The danger these guard against: street names carry the same kanji numerals
+  // as chome, so passing `烏丸通四条上ル笋町` to the normalizer unchanged makes
+  // it read the 四 of 四条 as chome 4 and resolve to an unrelated place.
+  it.each([
+    ['京都府京都市中京区烏丸通四条上ル笋町123', '烏丸通四条上ル', '笋町', 123],
+    ['京都府京都市中京区寺町通御池上る上本能寺前町488', '寺町通御池上る', '上本能寺前町', 488],
+  ])('resolves %s', async (input, street, town, number) => {
+    const result = await toRomaji(input);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.parsed.town?.ja).toBe(town);
+    expect(result.value.parsed.blockNumbers).toEqual([number]);
+    // Never misread as a chome.
+    expect(result.value.parsed.chome).toBeUndefined();
+    // The street phrase is preserved, but not romanized or rendered.
+    expect(result.value.parsed.kyotoStreet).toBe(street);
+    expect(result.value.formatted).not.toContain(street);
+  });
+
+  it('leaves a plain Kyoto address without a street phrase alone', async () => {
+    const result = await toRomaji('京都府京都市中京区笋町123');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.parsed.town?.ja).toBe('笋町');
+    expect(result.value.parsed.kyotoStreet).toBeUndefined();
+  });
+
+  it('does not treat non-Kyoto addresses as street addresses', async () => {
+    const result = await toRomaji('東京都渋谷区上原1-2-3');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.parsed.kyotoStreet).toBeUndefined();
   });
 });
 

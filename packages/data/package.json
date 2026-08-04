@@ -20,7 +20,8 @@
     "dist",
     "data",
     "README.md",
-    "ATTRIBUTION.md"
+    "ATTRIBUTION.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18"
@@ -28,7 +29,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build:data": "tsx src/build-data.ts"
+    "build:data": "tsx src/build-data.ts",
+    "check:publishable": "node scripts/check-publishable.mjs",
+    "prepublishOnly": "pnpm run build && pnpm run check:publishable"
   },
   "devDependencies": {
     "@types/node": "^22.10.0"
@@ -37,5 +40,8 @@
     "type": "git",
     "url": "git+https://github.com/tomatomerde/jp-address-romaji.git",
     "directory": "packages/data"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

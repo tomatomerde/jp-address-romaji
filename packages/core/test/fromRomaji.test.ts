@@ -61,6 +61,26 @@ describe('fromRomaji: reconstructs Japanese', () => {
     expect(result.value.parsed.town?.ja).toBe('円山西町');
   });
 
+  it('uses a supplied postal-code index to resolve an ambiguity', async () => {
+    const result = await fromRomaji('1-1 Ebisucho, Nakagyo-ku, Kyoto-shi, Kyoto 604-8081', {
+      postalCodeIndex: (code) => (code === '604-8081' ? ['夷町'] : undefined),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.parsed.town?.ja).toBe('夷町');
+  });
+
+  it('stays ambiguous when the postal code does not narrow it to one', async () => {
+    const result = await fromRomaji('1-1 Ebisucho, Nakagyo-ku, Kyoto-shi, Kyoto 604-8081', {
+      // A code that covers both colliding towns must not be resolved to a guess.
+      postalCodeIndex: () => ['夷町', '恵比須町'],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('AMBIGUOUS');
+    expect(result.message).toContain('did not narrow this to one');
+  });
+
   it('reports a genuine ambiguity between two distinct real towns', async () => {
     // 夷町 and 恵比須町, both in Kyoto's Nakagyo ward, both romanize to
     // "Ebisu-cho" — unlike 円山 above, both readings are legitimate.

@@ -19,7 +19,7 @@ import {
   formatMunicipality,
   formatTown,
 } from './romaji/format.js';
-import { isKyotoStreetAddress } from './kyoto.js';
+import { splitKyotoStreet } from './kyoto.js';
 import { isPlausibleReading } from './romaji/validate.js';
 
 const DEFAULTS: Required<Omit<ToRomajiOptions, never>> = {
@@ -79,15 +79,13 @@ export async function toRomaji(
         '`configureDataSource({ dataDir })` with a local data directory.',
     );
   }
-  if (isKyotoStreetAddress(japaneseAddress)) {
-    return fail(
-      'KYOTO_STREET_ADDRESS',
-      'Kyoto-style street-name addresses (e.g. "四条通烏丸東入ル") are not supported in this version.',
-    );
-  }
-
   const { postalCode, rest: withoutPostal } = splitPostalCode(japaneseAddress);
-  const normalized = await normalizeJapanese(withoutPostal);
+
+  // A Kyoto street phrase must come out before normalization: its street names
+  // contain the same kanji numerals as chome, so `烏丸通四条上ル笋町` would
+  // otherwise be read as chome 4 of an unrelated town. See kyoto.ts.
+  const { street: kyotoStreet, rest: withoutStreet } = splitKyotoStreet(withoutPostal);
+  const normalized = await normalizeJapanese(withoutStreet);
 
   if (!normalized.pref) {
     return fail('PREFECTURE_NOT_FOUND', `Could not identify a prefecture in "${japaneseAddress}".`);
@@ -132,10 +130,15 @@ export async function toRomaji(
   partial.city = city;
   if (ward) partial.ward = ward;
 
+  if (kyotoStreet) partial.kyotoStreet = kyotoStreet;
+
   if (!normalized.town) {
     return fail(
-      'TOWN_NOT_FOUND',
-      `Resolved only to ${city.romaji}; the town could not be identified in "${japaneseAddress}".`,
+      kyotoStreet ? 'KYOTO_STREET_ADDRESS' : 'TOWN_NOT_FOUND',
+      kyotoStreet
+        ? `Recognized the Kyoto street phrase "${kyotoStreet}", but the town that follows it ` +
+          `("${normalized.rest}") is not in the dataset for ${city.romaji}.`
+        : `Resolved only to ${city.romaji}; the town could not be identified in "${japaneseAddress}".`,
       { ...partial, level: normalized.level },
     );
   }
@@ -183,6 +186,7 @@ export async function toRomaji(
     city,
     ...(ward ? { ward } : {}),
     town,
+    ...(kyotoStreet ? { kyotoStreet } : {}),
     ...(normalized.chome !== undefined ? { chome: normalized.chome } : {}),
     blockNumbers,
     ...(unparsed ? { unparsed } : {}),

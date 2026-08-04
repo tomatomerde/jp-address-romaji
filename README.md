@@ -82,7 +82,7 @@ cannot be recovered from it. If a name has no kana reading, those styles fail wi
 ### `fromRomaji(romajiAddress)`
 
 Resolution is strictly outside-in — prefecture, then municipality, then town — because a town's
-romanization is unique within a known municipality 99.7% of the time but far less so nationally,
+romanization is unique within a known municipality 99.05% of the time but far less so nationally,
 and 13 municipality names collide across prefectures (`Date-shi` is both 北海道伊達市 and 福島県伊達市).
 
 When more than one Japanese address matches, it returns `AMBIGUOUS` **with the candidates**, and
@@ -98,11 +98,23 @@ const result = await fromRomaji('1-1 Ebisucho, Nakagyo-ku, Kyoto-shi, Kyoto');
 
 #### Postal code
 
-A postal code in the input is parsed and returned in `parsed.postalCode`. **It is not currently
-used to narrow `AMBIGUOUS` candidates** — the bundled dataset has no postal-code-to-town mapping
-(that would mean also bundling Japan Post's `KEN_ALL`, deferred to a future version). If you need to
-resolve an `AMBIGUOUS` result today, either present `candidates` to the user or apply your own
-postal-code lookup against the `partial` town names.
+A postal code in the input is parsed into `parsed.postalCode`, and can narrow an ambiguous
+romanization if you supply a way to look one up:
+
+```ts
+await fromRomaji('1-1 Ebisucho, Nakagyo-ku, Kyoto-shi, Kyoto 604-8081', {
+  postalCodeIndex: (code) => myPostalData[code],   // -> ['夷町']
+});
+// → { ok: true, … town: 夷町 }
+```
+
+No postal dataset is bundled. Genuine ambiguity is 0.95% of town romanizations, and most of it
+disappears when the full town name is written, so shipping Japan Post's `KEN_ALL` — a second data
+source with its own licence and update cadence — is not justified by what it would buy. The hook
+lets you use postal data you already have.
+
+A code that fails to single out one town leaves the result `AMBIGUOUS`. The candidates are never
+narrowed to a guess.
 
 ### `parse(address)`
 
@@ -131,7 +143,7 @@ the compiler makes you handle the failure case.
 | `KANA_REQUIRED_FOR_LONG_VOWELS` | A macron/circumflex/`oh` style was requested but no kana reading exists. |
 | `AMBIGUOUS` | Several Japanese addresses match. `candidates` holds them. |
 | `TOWN_NOT_FOUND` / `CITY_NOT_FOUND` / `PREFECTURE_NOT_FOUND` | Resolution stopped at that level. `partial` holds what was resolved. |
-| `KYOTO_STREET_ADDRESS` | Kyoto street-name addressing; unsupported (see below). |
+| `KYOTO_STREET_ADDRESS` | The street phrase was understood but the town after it is not in the dataset (see below). |
 | `DATA_NOT_CONFIGURED` | No dataset installed or configured. |
 | `EMPTY_INPUT` | No recognizable address in the input. |
 
@@ -162,13 +174,36 @@ version; the committed report is in [docs/coverage.md](./docs/coverage.md).
 ## Not supported
 
 - **Geocoding accuracy.** Coordinates are deliberately excluded from the bundled town data.
-- **Kyoto street-name addresses** (`四条通烏丸東入ル`). Detected and refused with
-  `KYOTO_STREET_ADDRESS` rather than silently dropping the street phrase.
 - **Building-name translation or romanization.** Building names and room numbers are isolated as
   `unparsed` and passed through untouched. The type has no `romaji` field for them, by design.
+- **Romanizing the Kyoto street phrase.** It is preserved, not translated — see below.
 - **`fromRomaji` reads western order only.** It expects the prefecture last. Output produced with
   `order: 'japanese'` is for display, not for feeding back in — `fromRomaji` will reject it with
   `PREFECTURE_NOT_FOUND`. Round-tripping works with the default western order.
+
+### Kyoto street-name addresses
+
+Central Kyoto is customarily addressed by naming an intersection and a direction before the town.
+These are supported:
+
+```ts
+await toRomaji('京都府京都市中京区烏丸通四条上ル笋町123');
+// formatted:   '123 Takannacho, Nakagyo-ku, Kyoto-shi, Kyoto, Japan'
+// kyotoStreet: '烏丸通四条上ル'
+```
+
+The street phrase is separated out **before** normalization, which is not optional: street names
+contain the same kanji numerals as chome, so `烏丸通四条上ル笋町` fed to the normalizer unchanged is
+read as chome 4 of an unrelated town.
+
+The phrase is navigational rather than administrative — the official address is the town plus its
+number — so it is kept verbatim on `parsed.kyotoStreet` and **not** rendered into the romanized
+string. It is never romanized: the dataset has no readings for street names, and guessing one is
+exactly what this library refuses to do. `fromRomaji` cannot reconstruct it, so a round-trip through
+romaji loses it.
+
+If the street phrase is recognized but the town after it is not in the dataset, you get
+`KYOTO_STREET_ADDRESS` with the phrase in `partial.kyotoStreet`.
 
 ### Known dataset defects you will hit
 

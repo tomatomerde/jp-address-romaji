@@ -26,6 +26,32 @@ import { isPlausibleReading } from './romaji/validate.js';
 import { numberToKanji } from './kanjiNumbers.js';
 import { containsJapanese } from './script.js';
 
+/** Options for {@link fromRomaji}. */
+export interface FromRomajiOptions {
+  /**
+   * Resolve a postal code to the town names (in Japanese) it covers, so that
+   * an otherwise ambiguous romanization can be narrowed to one.
+   *
+   * Genuine ambiguity is rare — 0.95% of town romanizations match more than one
+   * distinct town in the same municipality — and much of it disappears when the
+   * caller writes the full town name. Bundling Japan Post's KEN_ALL to close
+   * that last fraction would add a second data source with its own licence and
+   * update cadence, so this package does not ship one. This hook lets you plug
+   * in whatever postal data you already have:
+   *
+   * ```ts
+   * await fromRomaji('1-1 Ebisucho, Nakagyo-ku, Kyoto-shi, Kyoto 604-8081', {
+   *   postalCodeIndex: (code) => myPostalData[code],   // -> ['夷町']
+   * });
+   * ```
+   *
+   * Return the town names the code covers, or undefined if the code is unknown.
+   * A code that fails to single one out leaves the result AMBIGUOUS; the
+   * candidates are never narrowed to a guess.
+   */
+  postalCodeIndex?: (postalCode: string) => readonly string[] | undefined;
+}
+
 /** A Japanese address reconstructed from romaji. */
 export interface JapaneseAddress {
   /** Address written in Japanese, in conventional order. */
@@ -76,7 +102,10 @@ function candidateKeys(kana?: string, romajiField?: string): Set<string> {
  *
  * Example input: `"3-5-12 Nishi-Shinjuku, Shinjuku-ku, Tokyo 160-0023"`.
  */
-export async function fromRomaji(romajiAddress: string): Promise<Result<JapaneseAddress>> {
+export async function fromRomaji(
+  romajiAddress: string,
+  options: FromRomajiOptions = {},
+): Promise<Result<JapaneseAddress>> {
   if (!romajiAddress || !romajiAddress.trim()) {
     return fail('EMPTY_INPUT', 'Input address is empty.');
   }
@@ -223,14 +252,35 @@ export async function fromRomaji(romajiAddress: string): Promise<Result<Japanese
         ? buildParsed(partial, rec, numbers[0], numbers.slice(1), unparsed, postalCode)
         : buildParsed(partial, rec, undefined, numbers, unparsed, postalCode);
     });
+    // A postal code can single one out, when the caller supplied a way to
+    // look one up. If it does not narrow the set to exactly one, we keep the
+    // ambiguity rather than picking the "best" match.
+    const allowed = postalCode ? options.postalCodeIndex?.(postalCode) : undefined;
+    const narrowed = allowed
+      ? candidates.filter((c) => c.town?.ja !== undefined && allowed.includes(c.town.ja))
+      : candidates;
+
+    if (narrowed.length === 1) {
+      const only = narrowed[0]!;
+      return {
+        ok: true,
+        value: { formatted: renderJapanese(only), parsed: only },
+        ...(unparsed ? { unparsed } : {}),
+      };
+    }
+
     return {
       ok: false,
       reason: 'AMBIGUOUS',
       message:
         `"${name}" matches ${distinct.length} distinct towns in ` +
         `${prefRecord.pref}${cityPathName(record)}: ${distinct.join(', ')}. ` +
-        `Choose one of the returned candidates; this version does not use the ` +
-        `postal code to narrow them (see the "Postal code" section of the README).`,
+        (allowed
+          ? `The postal code ${postalCode} did not narrow this to one. `
+          : postalCode
+            ? `Pass a postalCodeIndex to use the postal code ${postalCode} for narrowing. `
+            : '') +
+        `Choose one of the returned candidates.`,
       partial,
       candidates,
     };
