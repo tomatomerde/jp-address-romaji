@@ -1,0 +1,24 @@
+{
+  "name": "jp-address-romaji-monorepo",
+  "private": true,
+  "type": "module",
+  "description": "Monorepo for jp-address-romaji: bidirectional Japanese/romaji address conversion.",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "coverage:measure": "tsx scripts/measure-coverage.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=18"
+  }
+}

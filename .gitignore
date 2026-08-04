@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.DS_Store
+
+# Generated address data. Built by `packages/data` at release time; never committed.
+packages/data/data/
+packages/data/*.tgz
+
+# Local caches for data generation
+.cache/

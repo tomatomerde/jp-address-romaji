@@ -1,0 +1,183 @@
+import { beforeAll, describe, expect, it } from 'vitest';
+import { toRomaji } from '../src/toRomaji.js';
+import { useFixtureData, withNetworkBlocked } from './helpers.js';
+
+beforeAll(() => useFixtureData());
+
+describe('toRomaji: normalization handled upstream', () => {
+  // These four spellings of one address must all converge. The normalization
+  // itself is @geolonia/normalize-japanese-addresses' job; this asserts we
+  // wired it up correctly rather than reimplementing any of it.
+  const equivalent = [
+    '東京都渋谷区上原1-2-3',
+    '東京都渋谷区上原一丁目2番3号',
+    '東京都渋谷区上原１ー２ー３',
+    '渋谷区上原1-2-3',
+  ];
+
+  it.each(equivalent)('normalizes %s identically', async (input) => {
+    const result = await toRomaji(input);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.formatted).toBe('1-2-3 Uehara, Shibuya-ku, Tokyo, Japan');
+  });
+});
+
+describe('toRomaji: chome folds into the block numbers', () => {
+  it('renders 西新宿三丁目5番12号 as 3-5-12', async () => {
+    const result = await toRomaji('東京都新宿区西新宿三丁目5番12号');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.formatted).toBe('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan');
+    expect(result.value.parsed.chome).toBe(3);
+    expect(result.value.parsed.blockNumbers).toEqual([5, 12]);
+  });
+});
+
+describe('toRomaji: designated cities and counties', () => {
+  it('orders ward before city', async () => {
+    const result = await toRomaji('北海道札幌市中央区大通西1-1');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.formatted).toContain('Chuo-ku, Sapporo-shi, Hokkaido');
+  });
+
+  it('reads 町 as machi where the dataset says so', async () => {
+    const result = await toRomaji('新潟県三島郡出雲崎町大字米田1');
+    if (result.ok) {
+      // The reading comes from the dataset, never from a guess.
+      expect(result.value.formatted).toContain('Izumozaki-machi');
+      expect(result.value.formatted).toContain('Santo-gun');
+    } else {
+      // Acceptable only as an explicit, typed refusal.
+      expect(['NO_ROMAJI_DATA', 'TOWN_NOT_FOUND']).toContain(result.reason);
+    }
+  });
+});
+
+describe('toRomaji: building names are never romanized', () => {
+  it('keeps the building name verbatim', async () => {
+    const result = await toRomaji('東京都渋谷区鶯谷町2-1 サンプルビル301');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.parsed.unparsed).toBe('サンプルビル301');
+    expect(result.value.formatted).toContain('サンプルビル301');
+  });
+
+  it('can omit the building name from the rendered line', async () => {
+    const result = await toRomaji('東京都渋谷区鶯谷町2-1 サンプルビル301', {
+      includeUnparsed: false,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.formatted).not.toContain('サンプルビル');
+    // Still preserved in the structure, just not rendered.
+    expect(result.value.parsed.unparsed).toBe('サンプルビル301');
+  });
+});
+
+describe('toRomaji: refuses rather than fabricates', () => {
+  it('fails with NO_ROMAJI_DATA for a rural oaza lacking readings', async () => {
+    const result = await toRomaji('青森県青森市大字三内字丸山1-1');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('NO_ROMAJI_DATA');
+    // The components that WERE resolved are still reported.
+    expect(result.partial?.prefecture?.romaji).toBe('Aomori');
+    expect(result.partial?.city?.romaji).toBe('Aomori-shi');
+  });
+
+  it('rejects corrupt dataset romaji instead of emitting a bare number', async () => {
+    // Asahikawa entries whose romaji collapsed to "10" etc. in the source data.
+    const result = await toRomaji('北海道旭川市一条通十丁目1');
+    if (result.ok) {
+      // If it succeeds, it must not be a bare number masquerading as a name.
+      expect(result.value.parsed.town?.romaji).not.toMatch(/^\d+$/);
+      expect(result.value.formatted).toMatch(/[A-Za-z]{2,}/);
+    } else {
+      expect(['NO_ROMAJI_DATA', 'CORRUPT_ROMAJI_DATA', 'TOWN_NOT_FOUND']).toContain(result.reason);
+    }
+  });
+
+  it('refuses Kyoto street-name addresses explicitly', async () => {
+    const result = await toRomaji('京都府京都市中京区四条通烏丸東入ル函谷鉾町');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('KYOTO_STREET_ADDRESS');
+  });
+
+  it('reports an unknown town rather than inventing one', async () => {
+    const result = await toRomaji('東京都渋谷区存在しない町1-1');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('TOWN_NOT_FOUND');
+  });
+
+  it('fails on empty input', async () => {
+    const result = await toRomaji('   ');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('EMPTY_INPUT');
+  });
+});
+
+describe('toRomaji: options', () => {
+  it('defaults to passport Hepburn with no long-vowel marks', async () => {
+    const result = await toRomaji('東京都渋谷区上原1-2-3');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.formatted).toContain('Tokyo');
+    expect(result.value.formatted).not.toMatch(/[ōŌ]/);
+  });
+
+  it('supports macrons, sourced from kana', async () => {
+    const result = await toRomaji('東京都渋谷区上原1-2-3', { longVowel: 'macron' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.formatted).toContain('Tōkyō');
+  });
+
+  it('supports the passport OH convention', async () => {
+    const result = await toRomaji('東京都渋谷区上原1-2-3', { longVowel: 'oh' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.formatted).toContain('Tohkyoh');
+  });
+
+  it('supports Japanese order', async () => {
+    const result = await toRomaji('東京都渋谷区上原1-2-3', { order: 'japanese' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.formatted).toBe('Tokyo, Shibuya-ku, Uehara 1-2-3, Japan');
+  });
+
+  it('places the postal code as requested', async () => {
+    const suffix = await toRomaji('〒151-0064 東京都渋谷区上原1-2-3');
+    expect(suffix.ok).toBe(true);
+    if (!suffix.ok) return;
+    expect(suffix.value.formatted).toContain('151-0064');
+    expect(suffix.value.parsed.postalCode).toBe('151-0064');
+
+    const omitted = await toRomaji('〒151-0064 東京都渋谷区上原1-2-3', { postalCode: 'omit' });
+    expect(omitted.ok).toBe(true);
+    if (!omitted.ok) return;
+    expect(omitted.value.formatted).not.toContain('151-0064');
+  });
+
+  it('can drop the country suffix and upper-case the line', async () => {
+    const result = await toRomaji('東京都渋谷区上原1-2-3', {
+      includeCountry: false,
+      capitalization: 'upper',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.formatted).toBe('1-2-3 UEHARA, SHIBUYA-KU, TOKYO');
+  });
+});
+
+describe('toRomaji: privacy guarantee', () => {
+  it('performs a full conversion without any network access', async () => {
+    const result = await withNetworkBlocked(() => toRomaji('東京都渋谷区上原1-2-3'));
+    expect(result.ok).toBe(true);
+  });
+});

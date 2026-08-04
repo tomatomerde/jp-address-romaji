@@ -1,0 +1,41 @@
+{
+  "name": "jp-address-romaji-data",
+  "version": "0.1.0",
+  "description": "Offline Japanese address dataset for jp-address-romaji, derived from the Digital Agency Address Base Registry via Geolonia.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "jp-address-romaji-data": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "data",
+    "README.md",
+    "ATTRIBUTION.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:data": "tsx src/build-data.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomatomerde/jp-address-romaji.git",
+    "directory": "packages/data"
+  }
+}
