@@ -1,0 +1,38 @@
+name: Check CLAUDE.md drift
+
+# Copy this file into a project repository's .github/workflows/ directory.
+#
+# It compares the common section ("ここから下は共通" and below) of the
+# project's CLAUDE.md against the canonical template in the dev-standards
+# repository, and emits a warning annotation on drift. It never fails the
+# build: drift is a reminder to sync, not an error.
+#
+# Requirements (manual, one-time per project repo):
+#   - A fine-grained PAT with Contents: Read access to
+#     tomatomerde/dev-standards, stored as the Actions secret
+#     DEV_STANDARDS_TOKEN (dev-standards is private).
+
+on:
+  pull_request:
+    paths:
+      - CLAUDE.md
+  workflow_dispatch:
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: tomatomerde/dev-standards
+          token: ${{ secrets.DEV_STANDARDS_TOKEN }}
+          path: .dev-standards
+      - name: Compare common section against canonical template
+        run: |
+          extract() { awk '/^# ここから下は共通/,0' "$1"; }
+          if diff <(extract .dev-standards/CLAUDE.template.md) <(extract CLAUDE.md); then
+            echo "Common section matches the canonical template."
+          else
+            echo "::warning file=CLAUDE.md::共通部分が dev-standards の原本からずれています。原本と同期してください（diff は上のログ参照）"
+          fi
