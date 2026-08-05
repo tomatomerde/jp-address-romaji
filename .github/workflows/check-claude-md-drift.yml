@@ -3,9 +3,10 @@ name: Check CLAUDE.md drift
 # NOTE FOR CONTRIBUTORS: this is a maintainer-only housekeeping check, and it is
 # not something your pull request has to satisfy. It compares the second half of
 # CLAUDE.md against a shared template kept in a private repository, and it only
-# ever emits a warning. On a pull request from a fork it skips itself entirely,
-# because GitHub does not pass secrets to fork-triggered workflows. Nothing about
-# your contribution is being judged here.
+# ever emits a warning. On a pull request from a fork the job still runs and
+# passes, but the comparison is skipped with a notice, because GitHub does not
+# pass secrets to fork-triggered workflows. Nothing about your contribution is
+# being judged here.
 #
 # Copy this file into a project repository's .github/workflows/ directory.
 #
@@ -45,7 +46,7 @@ jobs:
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice file=CLAUDE.md::DEV_STANDARDS_TOKEN が未設定のため CLAUDE.md のドリフト検査をスキップしました。有効化するには Actions シークレットに設定してください。"
+            echo "::notice file=CLAUDE.md::Maintainer-only check skipped: DEV_STANDARDS_TOKEN is not available (expected on pull requests from forks — nothing for contributors to do here). ／ メンテナ用チェックをスキップしました。fork からの PR では正常な動作で、コントリビュータ側の対応は不要です。有効化はメンテナが Actions シークレットで行います。"
           fi
       - name: Check out the canonical template
         if: steps.token.outputs.present == 'true'
