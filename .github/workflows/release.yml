@@ -3,23 +3,36 @@ name: Release
 # Publishes jp-address-romaji-data and jp-address-romaji to npm.
 #
 # Two triggers:
-#   - `v*` tag push: the normal release path. dry_run is forced off, both
-#     packages publish by default, and a GitHub Release is created from the
-#     matching CHANGELOG.md section.
+#   - tag push: the normal release path. dry_run is forced off, a GitHub
+#     Release is created from the matching CHANGELOG.md section, and the
+#     tag's shape decides what publishes:
+#       - `v1.2.3`      -> both packages, each package.json must read 1.2.3
+#       - `data-v1.2.3` -> jp-address-romaji-data only, its package.json
+#                          must read 1.2.3 (core's version is untouched and
+#                          not checked)
+#       - `core-v1.2.3` -> jp-address-romaji only, its package.json must
+#                          read 1.2.3 (data's version is untouched and not
+#                          checked)
+#     Any other tag shape fails the run explicitly rather than guessing.
+#     See docs/releasing.md for the full table.
 #   - workflow_dispatch: for testing the whole pipeline (dry_run defaults to
 #     true) or for re-running a release that failed partway — e.g. the data
 #     package published but core didn't — without cutting a new tag. No
-#     GitHub Release is created from a dispatch run.
+#     GitHub Release is created from a dispatch run, and — because there is
+#     no tag — no version check runs either; it publishes whatever version
+#     is currently on disk for the selected package(s). The version(s) about
+#     to be published are always logged and written to the step summary so
+#     that's not silent.
 #
 # The one destructive action in here is `npm publish`. Everything before it —
 # dataset build, assumption check, full test suite, packing, type-check on
-# the packed output, import smoke test — runs identically whether dry_run is
-# true or false, so a dry run proves the release would have worked, not just
-# that the workflow parses.
+# the packed output, packed-tarball content assertions, import smoke test —
+# runs identically whether dry_run is true or false, so a dry run proves the
+# release would have worked, not just that the workflow parses.
 
 on:
   push:
-    tags: ['v*']
+    tags: ['v*', 'data-v*', 'core-v*']
   workflow_dispatch:
     inputs:
       packages:
@@ -41,6 +54,16 @@ on:
 # step for why), no other write access.
 permissions:
   contents: write
+
+# One release at a time, full stop. A second run queued behind this one
+# waits rather than running in parallel — two overlapping runs could both
+# decide a version isn't on npm yet and race to publish it. Never cancel a
+# run already in flight: an in-progress `npm publish` (or the GitHub Release
+# creation right after it) being killed mid-step is a worse outcome than
+# whatever queued behind it waiting a few extra minutes.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -64,21 +87,45 @@ jobs:
       # Plan: work out, once, what this run is trying to do, so every later
       # step branches on a plain env var instead of re-deriving
       # event_name/inputs logic each time.
+      #
+      # Tag shape decides scope on a push: `v<version>` means both packages,
+      # `data-v<version>` / `core-v<version>` mean just that one. This is
+      # the only place that parses the tag string — everything downstream
+      # reads PUBLISH_DATA / PUBLISH_CORE / EXPECTED_VERSION.
       # -----------------------------------------------------------------
       - name: Determine release plan
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            # Tag push is the real release path: never a dry run, and the
-            # tag is the source of truth for the version every selected
-            # package.json must match.
             TAG="${{ github.ref_name }}"
+            case "$TAG" in
+              v[0-9]*)
+                SCOPE="both"
+                EXPECTED_VERSION="${TAG#v}"
+                RELEASE_TITLE="$TAG"
+                ;;
+              data-v[0-9]*)
+                SCOPE="data-only"
+                EXPECTED_VERSION="${TAG#data-v}"
+                RELEASE_TITLE="jp-address-romaji-data $TAG"
+                ;;
+              core-v[0-9]*)
+                SCOPE="core-only"
+                EXPECTED_VERSION="${TAG#core-v}"
+                RELEASE_TITLE="jp-address-romaji $TAG"
+                ;;
+              *)
+                echo "::error::Unrecognized tag '$TAG'. Expected v<version> (both packages), data-v<version> (data only), or core-v<version> (core only) — see docs/releasing.md." >&2
+                exit 1
+                ;;
+            esac
             echo "TAG=$TAG" >> "$GITHUB_ENV"
-            echo "EXPECTED_VERSION=${TAG#v}" >> "$GITHUB_ENV"
+            echo "EXPECTED_VERSION=$EXPECTED_VERSION" >> "$GITHUB_ENV"
+            echo "RELEASE_TITLE=$RELEASE_TITLE" >> "$GITHUB_ENV"
             echo "CHECK_VERSION=true" >> "$GITHUB_ENV"
             echo "DRY_RUN=false" >> "$GITHUB_ENV"
             echo "CREATE_RELEASE=true" >> "$GITHUB_ENV"
-            PACKAGES_INPUT="both"
+            PACKAGES_INPUT="$SCOPE"
           else
             echo "CHECK_VERSION=false" >> "$GITHUB_ENV"
             echo "DRY_RUN=${{ github.event.inputs.dry_run }}" >> "$GITHUB_ENV"
@@ -96,29 +143,107 @@ jobs:
           echo "CONCURRENCY=${{ github.event.inputs.concurrency || '8' }}" >> "$GITHUB_ENV"
 
       # -----------------------------------------------------------------
+      # Make the target version(s) visible even on the paths that don't
+      # verify them (workflow_dispatch has no tag to check against — see
+      # the version-guard step below). This is the one place a human
+      # skimming a dispatch run's summary can catch "that's not the version
+      # I meant to publish" before npm publish does.
+      # -----------------------------------------------------------------
+      - name: Log target package versions
+        shell: bash
+        run: |
+          {
+            echo "## Release plan"
+            echo ""
+            echo "- Trigger: \`${{ github.event_name }}\`"
+            echo "- dry_run: \`$DRY_RUN\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$PUBLISH_DATA" = "true" ]; then
+            v=$(node -p "require('./packages/data/package.json').version")
+            echo "Will publish jp-address-romaji-data @ $v"
+            echo "- jp-address-romaji-data: \`$v\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$PUBLISH_CORE" = "true" ]; then
+            v=$(node -p "require('./packages/core/package.json').version")
+            echo "Will publish jp-address-romaji @ $v"
+            echo "- jp-address-romaji: \`$v\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # -----------------------------------------------------------------
       # Version guard: publishing the wrong version is worse than not
       # publishing at all. Only meaningful for a tag push — workflow_dispatch
-      # has no tag to check against, and publishes whatever is currently on
-      # disk (that's the "re-run a stuck release" use case). Checks both
-      # package.json files regardless of the packages input, since a
-      # mismatched version anywhere in the workspace on a tagged commit means
-      # something is already wrong upstream of this run.
+      # has no tag to check against, and publishes whatever version is
+      # currently on disk (that's the "re-run a stuck release" use case).
+      #
+      # Scoped to the package(s) this tag is actually publishing: a
+      # `data-v*` tag only checks packages/data/package.json. Checking core's
+      # version too would make a data-only release fail every time core's
+      # version isn't also at that number, which is the normal state — data
+      # and core are allowed to be on independent version cycles.
       # -----------------------------------------------------------------
       - name: Verify tag matches package versions
         if: env.CHECK_VERSION == 'true'
         shell: bash
         run: |
           fail=false
-          for pkg in packages/data packages/core; do
-            name=$(node -p "require('./$pkg/package.json').name")
-            version=$(node -p "require('./$pkg/package.json').version")
+          if [ "$PUBLISH_DATA" = "true" ]; then
+            name=$(node -p "require('./packages/data/package.json').name")
+            version=$(node -p "require('./packages/data/package.json').version")
             if [ "$version" != "$EXPECTED_VERSION" ]; then
-              echo "::error::$name is at $version but tag $TAG expects $EXPECTED_VERSION"
+              echo "::error::$name is at $version but tag $TAG expects $EXPECTED_VERSION" >&2
               fail=true
             fi
-          done
+          fi
+          if [ "$PUBLISH_CORE" = "true" ]; then
+            name=$(node -p "require('./packages/core/package.json').name")
+            version=$(node -p "require('./packages/core/package.json').version")
+            if [ "$version" != "$EXPECTED_VERSION" ]; then
+              echo "::error::$name is at $version but tag $TAG expects $EXPECTED_VERSION" >&2
+              fail=true
+            fi
+          fi
           if [ "$fail" = "true" ]; then
             exit 1
+          fi
+
+      # -----------------------------------------------------------------
+      # CHANGELOG guard: a tag whose CHANGELOG section is missing, or still
+      # says "unreleased", produces a real, published GitHub Release with
+      # placeholder text in its body. Catch that mechanically instead of
+      # relying on whoever cuts the tag to have followed docs/releasing.md.
+      #
+      # Tag-push only (CHECK_VERSION mirrors that), and hard-fails there
+      # since tag pushes always run with DRY_RUN=false. The dry_run branch
+      # exists so the same check degrades to a warning rather than a hard
+      # failure if it's ever reached under dry_run=true.
+      # -----------------------------------------------------------------
+      - name: Check CHANGELOG has a dated section for this release
+        if: env.CHECK_VERSION == 'true'
+        shell: bash
+        run: |
+          heading="## $EXPECTED_VERSION"
+          section=$(awk -v heading="$heading" '
+            index($0, heading) == 1 { found=1; print; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md)
+
+          problem=""
+          if [ -z "$section" ]; then
+            problem="No '$heading' section found in CHANGELOG.md."
+          elif echo "$section" | grep -qi 'unreleased'; then
+            problem="CHANGELOG.md's '$heading' section still says 'unreleased'."
+          fi
+
+          if [ -n "$problem" ]; then
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "::warning::$problem Fix before the real tag push."
+            else
+              echo "::error::$problem Replace it with the release date before tagging (see docs/releasing.md)." >&2
+              exit 1
+            fi
+          else
+            echo "CHANGELOG.md has a dated section for $EXPECTED_VERSION."
           fi
 
       # -----------------------------------------------------------------
@@ -186,8 +311,9 @@ jobs:
       # `0.1.0` inside a `pnpm pack` tarball (verified) — where `npm publish`
       # run directly on a directory would leave `workspace:*` untouched and
       # produce an uninstallable package. Packing once, here, means every
-      # check below (attw, import smoke test, the eventual publish) inspects
-      # the exact bytes that would ship, not a re-derived approximation.
+      # check below (the tarball-content asserts, attw, import smoke test,
+      # the eventual publish) inspects the exact bytes that would ship, not
+      # a re-derived approximation.
       # -----------------------------------------------------------------
       - name: Pack data tarball
         if: env.PUBLISH_DATA == 'true'
@@ -210,6 +336,63 @@ jobs:
             tar -tzf "$f" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
           done
+
+      # -----------------------------------------------------------------
+      # `check:publishable` (above) only looks at the working directory's
+      # packages/data/data. It has never seen the tarball that is about to
+      # be published. `files` currently overrides .gitignore correctly
+      # (verified locally), but that is a property of today's package.json —
+      # a future `packages/data/.npmignore`, or a `files` edit that drops
+      # `data`, would silently ship an empty-of-data package with nothing
+      # in this pipeline noticing. Assert against the packed bytes
+      # themselves, not the working tree.
+      # -----------------------------------------------------------------
+      - name: Assert data tarball contents
+        if: env.PUBLISH_DATA == 'true'
+        shell: bash
+        run: |
+          version=$(node -p "require('./packages/data/package.json').version")
+          f="$RUNNER_TEMP/tarballs/jp-address-romaji-data-$version.tgz"
+
+          if ! tar -tzf "$f" | grep -qx 'package/data/ja.json'; then
+            echo "::error::$f is missing package/data/ja.json" >&2
+            exit 1
+          fi
+
+          # Matches check-publishable.mjs's own threshold (~1,899
+          # municipalities, guarded at 1800 there for the same reason).
+          # `|| true` is load-bearing. This step runs under `-eo pipefail`,
+          # and `grep -c` exits 1 when it counts zero — so on the one failure
+          # this check exists to catch (no dataset in the tarball at all) the
+          # assignment itself would abort the step before the error message
+          # below ever prints. The run would fail, but say nothing about why.
+          city_files=$(tar -tzf "$f" | grep -Ec '^package/data/ja/[^/]+/[^/]+\.json$' || true)
+          if [ "$city_files" -lt 1800 ]; then
+            echo "::error::$f has only $city_files municipality files under package/data/ja/ (need >= 1800)" >&2
+            exit 1
+          fi
+
+          echo "Data tarball OK: package/data/ja.json + $city_files municipality files."
+
+      - name: Assert core tarball contents
+        if: env.PUBLISH_CORE == 'true'
+        shell: bash
+        run: |
+          version=$(node -p "require('./packages/core/package.json').version")
+          f="$RUNNER_TEMP/tarballs/jp-address-romaji-$version.tgz"
+
+          fail=false
+          for entry in package/dist/index.js package/dist/index.d.ts; do
+            if ! tar -tzf "$f" | grep -qx "$entry"; then
+              echo "::error::$f is missing $entry" >&2
+              fail=true
+            fi
+          done
+          if [ "$fail" = "true" ]; then
+            exit 1
+          fi
+
+          echo "Core tarball OK: package/dist/index.js + package/dist/index.d.ts present."
 
       # esm-only profile confirmed present in @arethetypeswrong/cli (checked
       # `--help`; exit 0 against this package's tarball with it, exit 1 under
@@ -256,12 +439,27 @@ jobs:
       # commands below to `npm publish --provenance <tarball>`, add
       # `id-token: write` to `permissions`, and drop the manual .npmrc step
       # in favor of npm's own OIDC flow.
+      #
+      # .npmrc is written only when this run could actually publish
+      # (DRY_RUN != 'true'). Writing it unconditionally — including during a
+      # dry run, before NPM_TOKEN is known to even be set — used to mean a
+      # dry run with no secret configured wrote an auth line with an empty
+      # token, which can make `npm view` below fail with 401 for a reason
+      # that has nothing to do with what the dry run is supposed to be
+      # proving. If NPM_TOKEN is unset on a real (non-dry-run) publish, fail
+      # here with an explicit message instead of writing an empty-token
+      # .npmrc and letting a later `npm publish` 401 stand in for it.
       # -----------------------------------------------------------------
       - name: Configure npm auth
-        if: env.PUBLISH_DATA == 'true' || env.PUBLISH_CORE == 'true'
+        if: env.DRY_RUN != 'true' && (env.PUBLISH_DATA == 'true' || env.PUBLISH_CORE == 'true')
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$HOME/.npmrc"
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "::error::NPM_TOKEN Actions secret is not set. Set it before running a real (non-dry-run) release — see docs/releasing.md 'One-time setup'." >&2
+            exit 1
+          fi
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$HOME/.npmrc"
 
       # `npm view <pkg>@<version>` exits non-zero both when the package name
       # doesn't exist at all and when it exists but that version doesn't
@@ -301,17 +499,20 @@ jobs:
       # GitHub Release, tag pushes only. Best-effort notes extraction from
       # CHANGELOG.md: pulls the section under the heading that starts with
       # "## <version>", which is why docs/releasing.md asks you to replace
-      # the "unreleased" heading with "<version> — <date>" before tagging.
-      # If extraction comes up empty — heading missing, or not yet updated —
-      # fall back to a generic body rather than failing an otherwise-good
-      # release over release-notes formatting.
+      # the "unreleased" heading with "<version> — <date>" before tagging
+      # (and why the CHANGELOG guard step above fails the run if that never
+      # happened). If extraction still comes up empty, fall back to a
+      # generic body rather than failing an otherwise-good release over
+      # release-notes formatting. `index($0, heading) == 1` is a fixed-string
+      # prefix match, not `~`/regex — EXPECTED_VERSION contains literal `.`
+      # characters that a regex would treat as "any character".
       # -----------------------------------------------------------------
       - name: Extract changelog section
         if: env.CREATE_RELEASE == 'true' && env.DRY_RUN != 'true'
         shell: bash
         run: |
-          awk -v ver="$EXPECTED_VERSION" '
-            $0 ~ "^## " ver { found=1; print; next }
+          awk -v heading="## $EXPECTED_VERSION" '
+            index($0, heading) == 1 { found=1; print; next }
             found && /^## / { exit }
             found { print }
           ' CHANGELOG.md > release-notes.md
@@ -327,4 +528,4 @@ jobs:
         if: env.CREATE_RELEASE == 'true' && env.DRY_RUN != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$TAG" --title "$TAG" --notes-file release-notes.md
+        run: gh release create "$TAG" --title "$RELEASE_TITLE" --notes-file release-notes.md
