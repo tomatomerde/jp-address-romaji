@@ -223,3 +223,8 @@ await toRomaji('京都府京都市中京区烏丸通四条上ル笋町123');
 
 Node.js 18 以上。オフラインデータをファイルシステムから読むため、既定構成は Node 専用です。
 ブラウザで使う場合は、自身がホストするエンドポイント経由でデータを供給する必要があります。
+
+**ESM 専用で、CommonJS ビルドはありません。** 両パッケージとも `"type": "module"` で単一の ESM
+エントリポイントのみを提供しており、`require()` で読める `dist/*.cjs` は存在せず、今後追加する
+予定もありません。`import`（または CommonJS コードからの動的 `import()`）を使ってください。
+`require('jp-address-romaji')` は `ERR_REQUIRE_ESM` で失敗します。

@@ -1,0 +1,330 @@
+name: Release
+
+# Publishes jp-address-romaji-data and jp-address-romaji to npm.
+#
+# Two triggers:
+#   - `v*` tag push: the normal release path. dry_run is forced off, both
+#     packages publish by default, and a GitHub Release is created from the
+#     matching CHANGELOG.md section.
+#   - workflow_dispatch: for testing the whole pipeline (dry_run defaults to
+#     true) or for re-running a release that failed partway — e.g. the data
+#     package published but core didn't — without cutting a new tag. No
+#     GitHub Release is created from a dispatch run.
+#
+# The one destructive action in here is `npm publish`. Everything before it —
+# dataset build, assumption check, full test suite, packing, type-check on
+# the packed output, import smoke test — runs identically whether dry_run is
+# true or false, so a dry run proves the release would have worked, not just
+# that the workflow parses.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: 'Which package(s) to publish'
+        type: choice
+        options: ['both', 'data-only', 'core-only']
+        default: 'both'
+      dry_run:
+        description: 'Run every check but skip the actual npm publish'
+        type: boolean
+        default: true
+      concurrency:
+        description: 'Parallel downloads for the dataset build (matches the refresh workflow)'
+        type: string
+        default: '8'
+
+# contents: write is for the GitHub Release created on a tag push. Nothing
+# else here needs elevated permissions: no npm provenance (see the publish
+# step for why), no other write access.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # The dataset build alone can take several minutes over ~1,900 requests;
+    # leave headroom for typecheck/build/test/pack/attw on top of that.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # -----------------------------------------------------------------
+      # Plan: work out, once, what this run is trying to do, so every later
+      # step branches on a plain env var instead of re-deriving
+      # event_name/inputs logic each time.
+      # -----------------------------------------------------------------
+      - name: Determine release plan
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Tag push is the real release path: never a dry run, and the
+            # tag is the source of truth for the version every selected
+            # package.json must match.
+            TAG="${{ github.ref_name }}"
+            echo "TAG=$TAG" >> "$GITHUB_ENV"
+            echo "EXPECTED_VERSION=${TAG#v}" >> "$GITHUB_ENV"
+            echo "CHECK_VERSION=true" >> "$GITHUB_ENV"
+            echo "DRY_RUN=false" >> "$GITHUB_ENV"
+            echo "CREATE_RELEASE=true" >> "$GITHUB_ENV"
+            PACKAGES_INPUT="both"
+          else
+            echo "CHECK_VERSION=false" >> "$GITHUB_ENV"
+            echo "DRY_RUN=${{ github.event.inputs.dry_run }}" >> "$GITHUB_ENV"
+            echo "CREATE_RELEASE=false" >> "$GITHUB_ENV"
+            PACKAGES_INPUT="${{ github.event.inputs.packages }}"
+          fi
+
+          case "$PACKAGES_INPUT" in
+            both)      echo "PUBLISH_DATA=true"  >> "$GITHUB_ENV"; echo "PUBLISH_CORE=true"  >> "$GITHUB_ENV" ;;
+            data-only) echo "PUBLISH_DATA=true"  >> "$GITHUB_ENV"; echo "PUBLISH_CORE=false" >> "$GITHUB_ENV" ;;
+            core-only) echo "PUBLISH_DATA=false" >> "$GITHUB_ENV"; echo "PUBLISH_CORE=true"  >> "$GITHUB_ENV" ;;
+            *) echo "Unknown packages input: '$PACKAGES_INPUT'" >&2; exit 1 ;;
+          esac
+
+          echo "CONCURRENCY=${{ github.event.inputs.concurrency || '8' }}" >> "$GITHUB_ENV"
+
+      # -----------------------------------------------------------------
+      # Version guard: publishing the wrong version is worse than not
+      # publishing at all. Only meaningful for a tag push — workflow_dispatch
+      # has no tag to check against, and publishes whatever is currently on
+      # disk (that's the "re-run a stuck release" use case). Checks both
+      # package.json files regardless of the packages input, since a
+      # mismatched version anywhere in the workspace on a tagged commit means
+      # something is already wrong upstream of this run.
+      # -----------------------------------------------------------------
+      - name: Verify tag matches package versions
+        if: env.CHECK_VERSION == 'true'
+        shell: bash
+        run: |
+          fail=false
+          for pkg in packages/data packages/core; do
+            name=$(node -p "require('./$pkg/package.json').name")
+            version=$(node -p "require('./$pkg/package.json').version")
+            if [ "$version" != "$EXPECTED_VERSION" ]; then
+              echo "::error::$name is at $version but tag $TAG expects $EXPECTED_VERSION"
+              fail=true
+            fi
+          done
+          if [ "$fail" = "true" ]; then
+            exit 1
+          fi
+
+      # -----------------------------------------------------------------
+      # Build the real dataset on the runner. Unlike a Claude Code cloud
+      # session, this runner has unrestricted egress to Geolonia. Output goes
+      # straight into packages/data/data — not an arbitrary ./address-data
+      # like the refresh workflow uses — because that's what check:publishable
+      # and the data package's `files` field look at.
+      #
+      # This always runs, even for a core-only release: the test suite below
+      # needs a real dataset to exercise realdata.test.ts, and there's no
+      # reason a core-only release should skip proving the library still
+      # works against current data.
+      # -----------------------------------------------------------------
+      - name: Build the dataset
+        run: |
+          npx tsx packages/data/src/build-data.ts \
+            --out ./packages/data/data \
+            --concurrency "$CONCURRENCY"
+
+      # Blocking, unlike the refresh workflow's `continue-on-error: true`:
+      # that workflow produces a report for a human to read later; this is a
+      # release, and a violated assumption (like either landmine documented
+      # in CLAUDE.md) means the library will silently refuse addresses it
+      # used to handle. `set -o pipefail` is required — without it the exit
+      # status downstream of `tee` is tee's, not verify-data-assumptions',
+      # so a failing check would be reported as green.
+      - name: Verify data assumptions (blocking)
+        shell: bash
+        run: |
+          set -o pipefail
+          npx tsx scripts/verify-data-assumptions.ts --data ./packages/data/data | tee assumptions.txt
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Build
+        run: pnpm -r build
+
+      # Independent step, not relying on prepublishOnly: the actual publish
+      # step below runs `npm publish <tarball>`, and publishing a pre-built
+      # tarball does not run any lifecycle scripts (verified locally —
+      # prepublishOnly fires for `npm publish <directory>` but never for
+      # `npm publish some.tgz`; `pnpm pack` doesn't run it either). Without
+      # this explicit step, the one guard that stops a dataset-less package
+      # from shipping would never run in this pipeline.
+      - name: Check the data package is publishable
+        run: pnpm --filter jp-address-romaji-data run check:publishable
+
+      # JP_ADDRESS_ROMAJI_DATA_DIR switches on realdata.test.ts, which is
+      # skipped everywhere else. Blocking: this is the only thing in the
+      # whole pipeline that proves the dataset just built actually
+      # round-trips real addresses, not just that it has the expected file
+      # count.
+      - name: Test (fixtures + real dataset)
+        env:
+          JP_ADDRESS_ROMAJI_DATA_DIR: ./packages/data/data
+        run: pnpm test
+
+      # -----------------------------------------------------------------
+      # Pack. `pnpm pack` (not `npm pack`) matters here: it rewrites
+      # `workspace:*` protocol dependencies to the real published version
+      # before archiving — packages/core's devDependency on
+      # jp-address-romaji-data is `workspace:*` in the source tree and
+      # `0.1.0` inside a `pnpm pack` tarball (verified) — where `npm publish`
+      # run directly on a directory would leave `workspace:*` untouched and
+      # produce an uninstallable package. Packing once, here, means every
+      # check below (attw, import smoke test, the eventual publish) inspects
+      # the exact bytes that would ship, not a re-derived approximation.
+      # -----------------------------------------------------------------
+      - name: Pack data tarball
+        if: env.PUBLISH_DATA == 'true'
+        working-directory: packages/data
+        run: pnpm pack --pack-destination "$RUNNER_TEMP/tarballs"
+
+      - name: Pack core tarball
+        if: env.PUBLISH_CORE == 'true'
+        working-directory: packages/core
+        run: pnpm pack --pack-destination "$RUNNER_TEMP/tarballs"
+
+      - name: Summarize tarball contents
+        shell: bash
+        run: |
+          echo '## Tarball contents' >> "$GITHUB_STEP_SUMMARY"
+          for f in "$RUNNER_TEMP"/tarballs/*.tgz; do
+            [ -e "$f" ] || continue
+            echo "### $(basename "$f")" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tar -tzf "$f" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      # esm-only profile confirmed present in @arethetypeswrong/cli (checked
+      # `--help`; exit 0 against this package's tarball with it, exit 1 under
+      # the default "strict" profile). Both packages are ESM-only by design
+      # — see CLAUDE.md and README "Requirements" — so the strict profile's
+      # CJS-resolution warnings (node10, node16-from-require) are expected
+      # noise, not a defect. esm-only silences exactly those two checks and
+      # leaves node16-from-ESM and bundler resolution blocking.
+      - name: Check package types (arethetypeswrong, esm-only)
+        shell: bash
+        run: |
+          for f in "$RUNNER_TEMP"/tarballs/*.tgz; do
+            [ -e "$f" ] || continue
+            echo "::group::attw $(basename "$f")"
+            npx --yes @arethetypeswrong/cli --profile esm-only "$f"
+            echo "::endgroup::"
+          done
+
+      # Proves the built dist/ is actually importable, not just that tsc
+      # exited 0. Runs against the workspace dist/ rather than unpacking the
+      # tarball — pack only rewrites package.json, dist/ is byte-identical —
+      # which avoids an extra extract-and-install step.
+      - name: Import smoke test
+        shell: bash
+        run: |
+          if [ "$PUBLISH_CORE" = "true" ]; then
+            node --input-type=module -e \
+              "import('./packages/core/dist/index.js').then(m => console.log('core exports:', Object.keys(m)))"
+          fi
+          if [ "$PUBLISH_DATA" = "true" ]; then
+            node --input-type=module -e \
+              "import('./packages/data/dist/index.js').then(m => console.log('data exports:', Object.keys(m)))"
+          fi
+
+      # -----------------------------------------------------------------
+      # Publish. Data before core: the library fails every conversion with
+      # DATA_NOT_CONFIGURED without a dataset, so there's no reason to ship
+      # core against a data version that doesn't exist on the registry yet.
+      #
+      # provenance: not used. `pnpm publish` 9.15.0 has no --provenance flag
+      # (checked: absent from `pnpm publish --help`), and npm provenance
+      # additionally expects a public source repository — this one is
+      # currently private. If the repo goes public, switch the publish
+      # commands below to `npm publish --provenance <tarball>`, add
+      # `id-token: write` to `permissions`, and drop the manual .npmrc step
+      # in favor of npm's own OIDC flow.
+      # -----------------------------------------------------------------
+      - name: Configure npm auth
+        if: env.PUBLISH_DATA == 'true' || env.PUBLISH_CORE == 'true'
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$HOME/.npmrc"
+
+      # `npm view <pkg>@<version>` exits non-zero both when the package name
+      # doesn't exist at all and when it exists but that version doesn't
+      # (verified against the registry: both cases give exit 1) — either way
+      # "not yet published" and safe to proceed.
+      - name: Publish jp-address-romaji-data
+        if: env.PUBLISH_DATA == 'true'
+        shell: bash
+        run: |
+          version=$(node -p "require('./packages/data/package.json').version")
+          if npm view "jp-address-romaji-data@$version" version >/dev/null 2>&1; then
+            echo "jp-address-romaji-data@$version is already on npm; skipping."
+          elif [ "$DRY_RUN" = "true" ]; then
+            echo "[dry run] would publish jp-address-romaji-data@$version"
+          else
+            npm publish "$RUNNER_TEMP/tarballs/jp-address-romaji-data-$version.tgz"
+          fi
+
+      - name: Publish jp-address-romaji
+        if: env.PUBLISH_CORE == 'true'
+        shell: bash
+        run: |
+          version=$(node -p "require('./packages/core/package.json').version")
+          if npm view "jp-address-romaji@$version" version >/dev/null 2>&1; then
+            echo "jp-address-romaji@$version is already on npm; skipping."
+          elif [ "$DRY_RUN" = "true" ]; then
+            echo "[dry run] would publish jp-address-romaji@$version"
+          else
+            npm publish "$RUNNER_TEMP/tarballs/jp-address-romaji-$version.tgz"
+          fi
+
+      - name: Remove npm auth
+        if: always()
+        run: rm -f "$HOME/.npmrc"
+
+      # -----------------------------------------------------------------
+      # GitHub Release, tag pushes only. Best-effort notes extraction from
+      # CHANGELOG.md: pulls the section under the heading that starts with
+      # "## <version>", which is why docs/releasing.md asks you to replace
+      # the "unreleased" heading with "<version> — <date>" before tagging.
+      # If extraction comes up empty — heading missing, or not yet updated —
+      # fall back to a generic body rather than failing an otherwise-good
+      # release over release-notes formatting.
+      # -----------------------------------------------------------------
+      - name: Extract changelog section
+        if: env.CREATE_RELEASE == 'true' && env.DRY_RUN != 'true'
+        shell: bash
+        run: |
+          awk -v ver="$EXPECTED_VERSION" '
+            $0 ~ "^## " ver { found=1; print; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            {
+              echo "## $TAG"
+              echo ""
+              echo "See CHANGELOG.md."
+            } > release-notes.md
+          fi
+
+      - name: Create GitHub Release
+        if: env.CREATE_RELEASE == 'true' && env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$TAG" --title "$TAG" --notes-file release-notes.md
