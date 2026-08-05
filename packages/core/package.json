@@ -15,6 +15,7 @@
     "offline"
   ],
   "license": "MIT",
+  "author": "tomatomerde",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

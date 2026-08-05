@@ -1,0 +1,42 @@
+// ESLint flat config (ESLint 9+ format).
+//
+// Goal: catch real mistakes (unused variables, undefined references, etc.)
+// in a repo that has never been linted before — not reformat the existing
+// codebase. Deliberately does NOT enable typed linting (`projectService` /
+// `parserOptions.project`): it is slower and more brittle than the plain
+// syntactic rules below, and this repo already gets type coverage from
+// `tsc --noEmit` in `pnpm -r typecheck`.
+import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import globals from 'globals';
+
+export default tseslint.config(
+  {
+    ignores: ['**/dist/**', '**/node_modules/**', 'packages/data/data/**', '**/coverage/**'],
+  },
+  {
+    // .ts files: typescript-eslint's recommended preset turns off a few
+    // eslint:recommended rules (e.g. `no-undef`) that `tsc` already covers
+    // (see `pnpm -r typecheck`), which is correct only where a type checker
+    // is actually in the loop.
+    files: ['packages/*/src/**/*.ts', 'packages/*/test/**/*.ts', 'scripts/**/*.ts'],
+    extends: [js.configs.recommended, ...tseslint.configs.recommended],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+  {
+    // Plain JS scripts (no `tsc` backstop): keep eslint:recommended's
+    // `no-undef` etc. active instead of layering typescript-eslint's
+    // TS-oriented overrides on top.
+    files: ['scripts/**/*.mjs'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+);

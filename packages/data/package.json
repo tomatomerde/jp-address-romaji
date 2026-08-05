@@ -2,7 +2,20 @@
   "name": "jp-address-romaji-data",
   "version": "0.1.0",
   "description": "Offline Japanese address dataset for jp-address-romaji, derived from the Digital Agency Address Base Registry via Geolonia.",
+  "keywords": [
+    "japan",
+    "japanese",
+    "address",
+    "dataset",
+    "offline",
+    "address-base-registry",
+    "geolonia",
+    "municipalities",
+    "open-data",
+    "i18n"
+  ],
   "license": "MIT",
+  "author": "tomatomerde",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -40,6 +53,10 @@
     "type": "git",
     "url": "git+https://github.com/tomatomerde/jp-address-romaji.git",
     "directory": "packages/data"
+  },
+  "homepage": "https://github.com/tomatomerde/jp-address-romaji#readme",
+  "bugs": {
+    "url": "https://github.com/tomatomerde/jp-address-romaji/issues"
   },
   "publishConfig": {
     "access": "public"
