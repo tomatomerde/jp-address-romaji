@@ -277,8 +277,11 @@ jobs:
           set -o pipefail
           npx tsx scripts/verify-data-assumptions.ts --data ./packages/data/data | tee assumptions.txt
 
+      # Root script, not `pnpm -r`: also typechecks the test files, scripts/
+      # (including verify-data-assumptions.ts, which the step above just ran
+      # via tsx with types stripped), and vitest.config.ts.
       - name: Typecheck
-        run: pnpm -r typecheck
+        run: pnpm typecheck
 
       - name: Build
         run: pnpm -r build

@@ -54,7 +54,7 @@ sites themselves):
 
 ```sh
 pnpm lint                                   # ESLint
-pnpm -r typecheck                           # tsc --noEmit, both packages
+pnpm typecheck                              # tsc --noEmit: both packages, plus tests/scripts/vitest.config.ts
 pnpm -r build                               # compile both packages
 pnpm test                                   # fixture-based test suite; hermetic, no data download needed
 ```

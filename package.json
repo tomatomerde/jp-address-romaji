@@ -7,7 +7,7 @@
     "build": "pnpm -r build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.tests.json",
     "lint": "eslint .",
     "coverage:measure": "tsx scripts/measure-coverage.ts"
   },

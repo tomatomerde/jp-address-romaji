@@ -125,7 +125,7 @@ Two facts that are easy to get backwards:
 ```sh
 pnpm test                                   # fixtures only; hermetic
 JP_ADDRESS_ROMAJI_DATA_DIR=./address-data pnpm test   # + real-data integration suite
-pnpm -r typecheck && pnpm -r build
+pnpm typecheck && pnpm -r build             # -r だけでは test/scripts/vitest.config.ts が型検査されない
 npx tsx packages/data/src/build-data.ts --out ./address-data
 npx tsx scripts/verify-data-assumptions.ts --data ./address-data   # read the output
 npx tsx scripts/measure-coverage.ts --data ./address-data > docs/coverage.md
