@@ -66,6 +66,7 @@ gh api -X PUT repos/tomatomerde/jp-address-romaji/branches/main/protection --inp
 JSON
 
 gh secret set NPM_TOKEN --repo tomatomerde/jp-address-romaji
+gh secret set DEV_STANDARDS_TOKEN --repo tomatomerde/jp-address-romaji
 ```
 
 `required_approving_review_count` is 0 because a solo maintainer cannot approve their own pull
@@ -78,7 +79,16 @@ inline in `release.yml`).
 
 `NPM_TOKEN` must be an **Automation** token; the classic token types that require a one-time
 password cannot publish from CI. Without it the release workflow fails with an explicit message
-naming the secret rather than an opaque npm 401.
+naming the secret rather than an opaque npm 401. `DEV_STANDARDS_TOKEN` is a fine-grained PAT with
+Contents: Read on `tomatomerde/dev-standards`; without it the drift check skips itself with a
+notice, so it can be set at leisure.
+
+One consequence of protecting `main` to be aware of: required status checks reject **direct**
+pushes whose commits haven't passed them, and on a free personal plan no actor can be exempted.
+The `Refresh address data and coverage` workflow commits `docs/coverage.md` back with exactly such
+a push, so once protection is on, that step degrades to a warning pointing at the run's `reports`
+artifact — commit the regenerated report via a pull request instead. The build, assumption check,
+and artifacts are unaffected.
 
 ## Releasing 0.1.0
 
@@ -114,7 +124,9 @@ dataset build is verified only by construction and by local simulation of its sh
 
 ## Known gaps
 
-Deliberately left open rather than overlooked. Contributions welcome:
+Each of these was considered and deliberately deferred, not overlooked — so a change that closes
+one should say why the trade-off moved rather than just adding the machinery. Contributions
+welcome:
 
 - **CI tests only Node 22, while `engines` says `>=18`.** "Runs on Node 18" is currently an
   unverified promise that ships with the package. A build matrix would settle it.
@@ -134,7 +146,9 @@ that have actually cost time:
   `release.yml`, found by running it rather than by reading it.
 - **`typescript-eslint`'s recommended preset disables `no-undef`.** That is correct where `tsc`
   backs it up and silently fatal where it does not, which is why `eslint.config.js` keeps `.ts`
-  and plain-JS files in separate blocks.
+  and plain-JS files in separate blocks — and why `tsconfig.tests.json` exists: the package
+  tsconfigs check only `src/`, so the test files, `scripts/`, and `vitest.config.ts` need their
+  own `tsc` run (part of the root `pnpm typecheck`) for that assumption to hold.
 - **`pnpm pack` accepts neither `--filter` nor `-r`.** Pack each package with `working-directory`.
 - **pnpm's version belongs only in the root `package.json`'s `packageManager` field.** Repeating it
   in `pnpm/action-setup` makes the action refuse to start.
