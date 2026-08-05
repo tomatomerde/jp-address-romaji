@@ -46,9 +46,8 @@ function splitKana(fullKana, firstRomaji) {
   if (!fullKana || !firstRomaji) return [undefined, undefined];
   const target = key(firstRomaji);
   const syl = analyzeKana(fullKana);
-  let acc = '';
   for (let i = 0; i < syl.length; i++) {
-    acc = key(renderSyllables(syl.slice(0, i + 1), 'none'));
+    const acc = key(renderSyllables(syl.slice(0, i + 1), 'none'));
     if (acc === target) {
       return [syl.slice(0, i + 1).map(s => s.src).join(''), syl.slice(i + 1).map(s => s.src).join('')];
     }

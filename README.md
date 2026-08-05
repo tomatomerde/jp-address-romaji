@@ -241,3 +241,8 @@ Node-only; browser use requires supplying data through an endpoint you host.
 **ESM only, no CommonJS build.** Both packages ship `"type": "module"` with a single ESM entry
 point — there is no `require()`-compatible `dist/*.cjs`, and none is planned. Use `import` (or
 dynamic `import()` from CommonJS code); `require('jp-address-romaji')` fails with `ERR_REQUIRE_ESM`.
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for what this library must never break, local dev setup,
+and the branch/PR workflow.

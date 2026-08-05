@@ -94,7 +94,7 @@ export function toKatakana(input: string): string {
  * Used to refuse rather than emit a partially-spelled name.
  */
 export function isTransliterableKana(input: string): boolean {
-  const kana = toKatakana(input).replace(/[\s　]/g, '');
+  const kana = toKatakana(input).replace(/[\s\u3000]/g, '');
   if (kana.length === 0) return false;
   for (let i = 0; i < kana.length; i++) {
     const two = kana.slice(i, i + 2);
@@ -156,7 +156,7 @@ function toSyllables(kana: string): Syllable[] {
  * against its reading and re-render individual segments.
  */
 export function analyzeKana(reading: string): Syllable[] {
-  const kana = toKatakana(reading).replace(/[\s　]/g, '');
+  const kana = toKatakana(reading).replace(/[\s\u3000]/g, '');
   const syllables = toSyllables(kana);
 
   // Merge bare vowels that lengthen the preceding syllable (オウ, オオ, ウウ...).
@@ -258,7 +258,7 @@ export function kanaToRomaji(
   reading: string,
   style: LongVowelStyle = 'none',
 ): string | undefined {
-  const kana = toKatakana(reading).replace(/[\s　]/g, '');
+  const kana = toKatakana(reading).replace(/[\s\u3000]/g, '');
   if (kana.length === 0) return undefined;
   if (!isTransliterableKana(kana)) return undefined;
 

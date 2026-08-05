@@ -228,3 +228,8 @@ Node.js 18 以上。オフラインデータをファイルシステムから読
 エントリポイントのみを提供しており、`require()` で読める `dist/*.cjs` は存在せず、今後追加する
 予定もありません。`import`（または CommonJS コードからの動的 `import()`）を使ってください。
 `require('jp-address-romaji')` は `ERR_REQUIRE_ESM` で失敗します。
+
+## Contributing
+
+このライブラリが壊してはいけない前提、ローカル開発環境のセットアップ、ブランチ・PR の運用は
+[CONTRIBUTING.md](./CONTRIBUTING.md)（英語）を参照してください。
