@@ -1,5 +1,12 @@
 name: Check CLAUDE.md drift
 
+# NOTE FOR CONTRIBUTORS: this is a maintainer-only housekeeping check, and it is
+# not something your pull request has to satisfy. It compares the second half of
+# CLAUDE.md against a shared template kept in a private repository, and it only
+# ever emits a warning. On a pull request from a fork it skips itself entirely,
+# because GitHub does not pass secrets to fork-triggered workflows. Nothing about
+# your contribution is being judged here.
+#
 # Copy this file into a project repository's .github/workflows/ directory.
 #
 # It compares the common section ("ここから下は共通" and below) of the
