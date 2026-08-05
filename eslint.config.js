@@ -31,7 +31,13 @@ export default tseslint.config(
     // Plain JS scripts (no `tsc` backstop): keep eslint:recommended's
     // `no-undef` etc. active instead of layering typescript-eslint's
     // TS-oriented overrides on top.
-    files: ['scripts/**/*.mjs'],
+    //
+    // Match every .mjs anywhere, not `scripts/**/*.mjs`: flat-config patterns
+    // are anchored at the config's directory, so that one covered only the
+    // root `scripts/` and silently left `packages/data/scripts/` — where the
+    // publish guard lives — with no rules at all. `eslint.config.js` is listed
+    // explicitly for the same reason: it is the one plain `.js` in the repo.
+    files: ['**/*.mjs', 'eslint.config.js'],
     extends: [js.configs.recommended],
     languageOptions: {
       globals: {
