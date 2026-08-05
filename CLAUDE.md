@@ -136,6 +136,15 @@ lists under reading-plausibility is an address the library will refuse — read 
 
 Release procedure: `docs/releasing.md`.
 
+## 引き継ぎ文書の場所（共通部分の `NOTES.md` に対応）
+
+下の共通部分は中断時に `NOTES.md` を更新するよう求めているが、このプロジェクトではその役割を
+**`docs/next-session.md`** が担う。`NOTES.md` は存在しない。中断・引き継ぎのときは
+`docs/next-session.md` を書き換えること。二重管理を避けるため、`NOTES.md` を新設しないこと。
+
+人間の貢献者向けの「壊してはいけない前提」は `CONTRIBUTING.md` にある（共通部分が要求している
+とおり）。このファイルは Claude 向けの作業メモで、`CONTRIBUTING.md` とは読み手が違う。
+
 ---
 
 # ここから下は共通（全プロジェクトで同一。修正したら原本に反映）
