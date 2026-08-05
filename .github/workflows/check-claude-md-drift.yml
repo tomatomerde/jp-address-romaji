@@ -10,6 +10,12 @@ name: Check CLAUDE.md drift
 #
 # Copy this file into a project repository's .github/workflows/ directory.
 #
+# Note for external contributors: this workflow is maintainer housekeeping,
+# not a check your PR needs to satisfy. It references a private repository
+# you cannot see, only ever emits a warning, and never fails the build.
+# On PRs from forks the required secret is unavailable, so the check is
+# skipped by design — there is nothing for a contributor to fix here.
+#
 # It compares the common section ("ここから下は共通" and below) of the
 # project's CLAUDE.md against the canonical template in the dev-standards
 # repository, and emits a warning annotation on drift. It never fails the
@@ -38,7 +44,7 @@ jobs:
     env:
       DEV_STANDARDS_TOKEN: ${{ secrets.DEV_STANDARDS_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check whether the dev-standards token is configured
         id: token
         run: |
@@ -50,7 +56,7 @@ jobs:
           fi
       - name: Check out the canonical template
         if: steps.token.outputs.present == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: tomatomerde/dev-standards
           token: ${{ secrets.DEV_STANDARDS_TOKEN }}
