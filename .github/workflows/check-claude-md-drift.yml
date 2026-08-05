@@ -7,6 +7,12 @@ name: Check CLAUDE.md drift
 # repository, and emits a warning annotation on drift. It never fails the
 # build: drift is a reminder to sync, not an error.
 #
+# When DEV_STANDARDS_TOKEN is not configured, the comparison is skipped with
+# a notice instead of failing — passing an unset secret straight to
+# actions/checkout would hard-fail the job with "Input required and not
+# supplied: token". (secrets can't be tested directly in `if:` expressions
+# here, so the token is mapped to a job-level env var and probed in a step.)
+#
 # Requirements (manual, one-time per project repo):
 #   - A fine-grained PAT with Contents: Read access to
 #     tomatomerde/dev-standards, stored as the Actions secret
@@ -21,14 +27,28 @@ on:
 jobs:
   drift:
     runs-on: ubuntu-latest
+    env:
+      DEV_STANDARDS_TOKEN: ${{ secrets.DEV_STANDARDS_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - name: Check whether the dev-standards token is configured
+        id: token
+        run: |
+          if [ -n "${DEV_STANDARDS_TOKEN}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice file=CLAUDE.md::DEV_STANDARDS_TOKEN が未設定のため CLAUDE.md のドリフト検査をスキップしました。有効化するには Actions シークレットに設定してください。"
+          fi
+      - name: Check out the canonical template
+        if: steps.token.outputs.present == 'true'
+        uses: actions/checkout@v4
         with:
           repository: tomatomerde/dev-standards
           token: ${{ secrets.DEV_STANDARDS_TOKEN }}
           path: .dev-standards
       - name: Compare common section against canonical template
+        if: steps.token.outputs.present == 'true'
         run: |
           extract() { awk '/^# ここから下は共通/,0' "$1"; }
           if diff <(extract .dev-standards/CLAUDE.template.md) <(extract CLAUDE.md); then
