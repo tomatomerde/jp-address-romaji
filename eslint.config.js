@@ -16,10 +16,14 @@ export default tseslint.config(
   },
   {
     // .ts files: typescript-eslint's recommended preset turns off a few
-    // eslint:recommended rules (e.g. `no-undef`) that `tsc` already covers
-    // (see `pnpm -r typecheck`), which is correct only where a type checker
-    // is actually in the loop.
-    files: ['packages/*/src/**/*.ts', 'packages/*/test/**/*.ts', 'scripts/**/*.ts'],
+    // eslint:recommended rules (e.g. `no-undef`) that `tsc` already covers,
+    // which is correct only where a type checker is actually in the loop.
+    // For package src/ that is `pnpm -r typecheck`; for the test files,
+    // scripts/, and vitest.config.ts it is `tsconfig.tests.json` (run by the
+    // root `pnpm typecheck`) — the package tsconfigs include only src/, so
+    // without that file these were linted with `no-undef` off and no `tsc`
+    // behind them at all.
+    files: ['packages/*/src/**/*.ts', 'packages/*/test/**/*.ts', 'scripts/**/*.ts', 'vitest.config.ts'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     languageOptions: {
       globals: {

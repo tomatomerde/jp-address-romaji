@@ -23,8 +23,12 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # `pnpm typecheck` (root script), not `pnpm -r typecheck`: the recursive
+      # run covers only each package's src/. The root script adds
+      # tsconfig.tests.json, which checks the test files, scripts/, and
+      # vitest.config.ts — none of which any package tsconfig includes.
       - name: Typecheck
-        run: pnpm -r typecheck
+        run: pnpm typecheck
 
       - name: Build
         run: pnpm -r build

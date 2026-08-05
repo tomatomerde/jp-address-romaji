@@ -1,0 +1,14 @@
+{
+  // Typechecks everything `pnpm -r typecheck` does not: test files (excluded
+  // from the package tsconfigs via `include: ["src/**/*"]`), the root
+  // scripts/ (run with tsx, which strips types without checking them), and
+  // vitest.config.ts. Without this file, a type error in any of them is
+  // caught by nothing: typescript-eslint's recommended preset switches off
+  // the rules `tsc` is assumed to cover, and for these files no `tsc` runs.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["packages/*/test/**/*.ts", "scripts/**/*.ts", "vitest.config.ts"]
+}

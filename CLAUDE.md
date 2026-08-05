@@ -125,7 +125,7 @@ Two facts that are easy to get backwards:
 ```sh
 pnpm test                                   # fixtures only; hermetic
 JP_ADDRESS_ROMAJI_DATA_DIR=./address-data pnpm test   # + real-data integration suite
-pnpm -r typecheck && pnpm -r build
+pnpm typecheck && pnpm -r build             # -r だけでは test/scripts/vitest.config.ts が型検査されない
 npx tsx packages/data/src/build-data.ts --out ./address-data
 npx tsx scripts/verify-data-assumptions.ts --data ./address-data   # read the output
 npx tsx scripts/measure-coverage.ts --data ./address-data > docs/coverage.md
@@ -156,8 +156,8 @@ Release procedure: `docs/releasing.md`.
 このリポジトリは公開される。そのリンクは発行元のアカウント以外からは開けないため、公開履歴には
 永久に開けないリンクが残るだけになる。`Co-Authored-By:` は付けてよい。
 
-既存のコミットには付いてしまっているが、消すには履歴の書き換えが必要で、`main` への force push は
-下の共通部分で禁止されている。過去分はそのままにし、今後付けないことで対応する。
+（過去に付いてしまった分は、公開前の履歴整理でメンテナが除去する方針が決定済み。セッションは
+履歴の書き換えを行わないこと。）
 
 ---
 

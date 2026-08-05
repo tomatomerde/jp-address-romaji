@@ -103,6 +103,13 @@ jobs:
           echo '## Coverage' >> "$GITHUB_STEP_SUMMARY"
           head -40 docs/coverage.md >> "$GITHUB_STEP_SUMMARY"
 
+      # Branch protection on main (once enabled — see the maintainer runbook in
+      # docs/project-status.md) rejects direct pushes whose commits have not
+      # passed the required status checks, and on a free personal plan the bot
+      # cannot be exempted. When that happens this step must degrade to a
+      # warning, not fail the run: the dataset build and the assumption report
+      # above are the point of this workflow, and both have already succeeded.
+      # The regenerated report is always in the `reports` artifact either way.
       - name: Commit the coverage report
         if: github.event.inputs.commit_report != 'false'
         run: |
@@ -110,8 +117,10 @@ jobs:
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           if git diff --quiet docs/coverage.md; then
             echo 'Coverage report unchanged.'
+          elif git add docs/coverage.md \
+              && git commit -m 'Regenerate coverage report from the v2 dataset' \
+              && git push; then
+            echo 'Coverage report committed.'
           else
-            git add docs/coverage.md
-            git commit -m 'Regenerate coverage report from the v2 dataset'
-            git push
+            echo "::warning file=docs/coverage.md::Could not push the regenerated coverage report (branch protection rejects direct pushes once enabled). Download it from this run's 'reports' artifact and commit it via a pull request."
           fi
