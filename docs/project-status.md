@@ -28,6 +28,22 @@ Done:
 
 `main` holds all of the above.
 
+## This repository was recreated on 2026-08-07 — `#N` in the history is not this repository's
+
+Before going public, the history was cleaned of a personal email address on five commits. A force
+push cannot do that: GitHub keeps the old commits alive through `refs/pull/*/head`. So the old
+repository was deleted and an empty one created, and only the rewritten `main` was pushed. Not a
+byte of code changed — every one of the 31 commits has the same tree as before, and `HEAD`'s tree
+is still `ed79683`.
+
+The side effect is that **the pull-request numbers quoted in commit messages (`#1` through `#4`,
+`#8`) belong to the repository that no longer exists.** This repository starts from zero pull
+requests. GitHub autolinks `#N` in commit messages, so those links 404 today — and the moment a
+pull request is opened here, the old `#1` will start resolving to an unrelated one. That is the
+worse failure: a 404 announces itself, a wrong link does not. Follow the history by commit subject,
+not by number. (References inside `.md` files are not autolinked, so prose here is only misleading
+to a reader who goes looking.)
+
 ## Where work stopped (2026-08-07)
 
 Work on this repository is paused. Nothing is in flight: `main`, the working branch, and their
@@ -55,10 +71,12 @@ Two consequences for a session picking this up:
 
 What is genuinely unfinished is the release path, not the library:
 
-- The repository is **still private**, so none of the maintainer runbook below has been executed:
-  no branch protection, no `NPM_TOKEN`, no `DEV_STANDARDS_TOKEN`. Without that last one the drift
-  check skips its comparison with a notice — which is the state it is in today, and is why the
-  comparison above was made by hand.
+- The repository is **still private**, so most of the maintainer runbook below has not been
+  executed: no branch protection, no `NPM_TOKEN`. `DEV_STANDARDS_TOKEN` **is** set, as of the
+  recreation — the drift workflow was dispatched on 2026-08-07 and its canonical-template checkout
+  ran instead of skipping, finishing green with no warning annotation. That is a stronger check
+  than the by-hand comparison above, and it supersedes the earlier note that said the comparison
+  was being skipped.
 - `release.yml` has never run on GitHub Actions and nothing has ever been published to npm; see
   "Verified, and not" for exactly how far the local simulation of it goes.
 - No dataset has ever been built during development, because the Geolonia host is unreachable from
