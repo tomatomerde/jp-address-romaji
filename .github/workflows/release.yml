@@ -247,8 +247,8 @@ jobs:
           fi
 
       # -----------------------------------------------------------------
-      # Build the real dataset on the runner. Unlike a Claude Code cloud
-      # session, this runner has unrestricted egress to Geolonia. Output goes
+      # Build the real dataset on the runner. Unlike a network-restricted
+      # development environment, the runner reaches Geolonia. Output goes
       # straight into packages/data/data — not an arbitrary ./address-data
       # like the refresh workflow uses — because that's what check:publishable
       # and the data package's `files` field look at.

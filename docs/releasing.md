@@ -150,8 +150,8 @@ a dispatch run.
 The `Refresh address data and coverage` workflow does an equivalent dataset build on a GitHub
 runner and uploads the dataset as an artifact, but never publishes anything — it's a report, and its
 own assumption check is non-blocking. Use it to check on a schedule whether the upstream data has
-drifted, or to look at real data from an environment (like a Claude Code cloud session) that can't
-reach the dataset host itself. It runs monthly for that reason.
+drifted, or to look at real data from a development environment that cannot reach the dataset host
+itself. It runs monthly for that reason.
 
 ## Local publish (fallback, not the default)
 

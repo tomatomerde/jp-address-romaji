@@ -113,10 +113,10 @@ Two facts that are easy to get backwards:
 
 ## Environment
 
-- **`japanese-addresses-v2.geoloniamaps.com` is blocked** from Claude Code cloud sessions by the
-  egress policy, as are ABR, digital.go.jp, Japan Post, and Actions artifact blob storage. To touch
-  real data, run the **`Refresh address data and coverage`** workflow — GitHub runners have
-  unrestricted egress — and read its logs and step summary.
+- **`japanese-addresses-v2.geoloniamaps.com` may be unreachable** from a restricted development
+  environment, as may ABR, digital.go.jp, Japan Post, and Actions artifact blob storage. To touch
+  real data from one, run the **`Refresh address data and coverage`** workflow — GitHub runners
+  reach all of them — and read its logs and step summary.
 - **pnpm version lives only in root `package.json` `packageManager`.** Setting it in
   `pnpm/action-setup` too makes the action refuse to run.
 

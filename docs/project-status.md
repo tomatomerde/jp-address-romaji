@@ -61,8 +61,9 @@ What is genuinely unfinished is the release path, not the library:
   comparison above was made by hand.
 - `release.yml` has never run on GitHub Actions and nothing has ever been published to npm; see
   "Verified, and not" for exactly how far the local simulation of it goes.
-- No dataset has ever been built inside a session, because the Geolonia host is blocked from these
-  environments. The `Refresh address data and coverage` workflow is the way to touch real data.
+- No dataset has ever been built during development, because the Geolonia host is unreachable from
+  a network-restricted environment. The `Refresh address data and coverage` workflow is the way to
+  touch real data.
 
 ## Release tagging
 
