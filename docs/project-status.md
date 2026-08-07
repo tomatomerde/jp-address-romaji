@@ -28,6 +28,42 @@ Done:
 
 `main` holds all of the above.
 
+## Where work stopped (2026-08-07)
+
+Work on this repository is paused. Nothing is in flight: `main`, the working branch, and their
+remotes all point at the same commit, there is no stash and no uncommitted change, and CI on `main`
+is green. The project sits between "feature-complete" and "released", and everything still
+outstanding needs credentials or repository-admin rights that a working session does not have — so
+the pause costs nothing.
+
+Re-verified on 2026-08-07 by running the commands rather than reading them, on Node 22.22.2:
+`pnpm lint`, `pnpm typecheck`, `pnpm -r build`, `pnpm test` — all clean, 95 passed and 5 skipped,
+matching what "Verified, and not" records below.
+
+**The shared half of `CLAUDE.md` is frozen until the packages are published.** The template it is
+copied from is accepting only changes that would otherwise break CI or become irreversible after
+publication; wording improvements and newly promoted rules are queued for after the release,
+because each round of syncing was surfacing the next one and the projects could never catch up.
+Two consequences for a session picking this up:
+
+- Do not open another sync pull request for the section below 「ここから下は共通」.
+- That section is currently byte-identical to the template, and so is
+  `.github/workflows/check-claude-md-drift.yml` (compared 2026-08-07). The `@ cc876a6` reference on
+  line 1 of `CLAUDE.md` names an older revision of the template repository whose *content* is
+  unchanged, so the drift check has nothing to warn about; bumping that comment is not worth a pull
+  request while the freeze holds.
+
+What is genuinely unfinished is the release path, not the library:
+
+- The repository is **still private**, so none of the maintainer runbook below has been executed:
+  no branch protection, no `NPM_TOKEN`, no `DEV_STANDARDS_TOKEN`. Without that last one the drift
+  check skips its comparison with a notice — which is the state it is in today, and is why the
+  comparison above was made by hand.
+- `release.yml` has never run on GitHub Actions and nothing has ever been published to npm; see
+  "Verified, and not" for exactly how far the local simulation of it goes.
+- No dataset has ever been built inside a session, because the Geolonia host is blocked from these
+  environments. The `Refresh address data and coverage` workflow is the way to touch real data.
+
 ## Release tagging
 
 `.github/workflows/release.yml` publishes to npm. It is tag-driven, with `workflow_dispatch`
@@ -115,7 +151,9 @@ Verified by running it rather than by reading it:
 - The tarball assertion fails when the municipality-file count drops below its threshold
 - ESLint catches an unused variable in a `.ts` file and an undefined reference in a `.mjs` file,
   and passes once both are reverted
-- `pnpm lint && pnpm -r typecheck && pnpm -r build && pnpm test` — 95 passed, 5 skipped
+- `pnpm lint && pnpm typecheck && pnpm -r build && pnpm test` — 95 passed, 5 skipped (last re-run
+  2026-08-07, Node 22.22.2). The root `pnpm typecheck` is the one that matters: `pnpm -r typecheck`
+  alone skips the test files, `scripts/`, and `vitest.config.ts` — see Traps below
 
 **Not verified: `release.yml` has never run on GitHub Actions, and `npm publish` has never been
 executed in any form.** No dataset was built during that work, because the Geolonia host is
