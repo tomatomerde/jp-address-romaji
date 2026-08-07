@@ -67,8 +67,8 @@ JP_ADDRESS_ROMAJI_DATA_DIR=./address-data pnpm test
 ```
 
 That requires a built dataset at `./address-data`. **Building one requires network access to
-Geolonia's data host, which is not available from most sandboxed/cloud dev environments** (including
-Claude Code cloud sessions). If you need to exercise the real-data suite or check coverage numbers,
+Geolonia's data host, which is not available from most sandboxed or allowlist-only dev
+environments**. If you need to exercise the real-data suite or check coverage numbers,
 use this repository's **`Refresh address data and coverage`** GitHub Actions workflow instead of
 trying to build the dataset locally — it runs on a GitHub-hosted runner with normal internet access,
 and its logs and step summary show the result. Do not commit `packages/data/data/` — it's generated

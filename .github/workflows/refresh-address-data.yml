@@ -5,9 +5,9 @@ name: Refresh address data and coverage
 # depend on.
 #
 # This exists because the dataset host is not reachable from every environment
-# (Claude Code cloud sessions, for instance, allow only an allowlist of domains
-# by default). GitHub Actions runners have unrestricted egress, so this job can
-# do the fetch from anywhere — including a phone, via "Run workflow".
+# (a sandbox that allows only an allowlist of domains will not reach it). GitHub
+# Actions runners can, so this job does the fetch on your behalf and can be
+# started from anywhere — including a phone, via "Run workflow".
 #
 # The dataset itself is NOT committed: it is uploaded as an artifact. Only the
 # generated coverage report is committed, and only when asked.
