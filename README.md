@@ -1,10 +1,20 @@
 # jp-address-romaji
 
+[![CI](https://github.com/tomatomerde/jp-address-romaji/actions/workflows/ci.yml/badge.svg)](https://github.com/tomatomerde/jp-address-romaji/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-brightgreen.svg)](#requirements)
+[![ESM only](https://img.shields.io/badge/module-ESM%20only-orange.svg)](#requirements)
+
+**English** | [日本語](./README.ja.md)
+
 Bidirectional conversion between Japanese addresses and their romanized, western-order equivalents.
+For shipping labels, international checkout forms, and anywhere a Japanese address has to be
+written in Latin script.
 
-**Addresses are personal data, so this library never sends them anywhere.** There is no hosted API and no service to sign up for. It reads a local copy of the address dataset and, by default, makes no network requests at all — which is enforced by a test that replaces `fetch` with a stub that throws.
-
-日本語版は [README.ja.md](./README.ja.md) にあります。
+**Addresses are personal data, so this library never sends them anywhere.** There is no hosted API
+and no service to sign up for. It reads a local copy of the address dataset and, by default, makes
+no network requests at all — enforced by a test that replaces `fetch` with a stub that throws, so a
+regression that reaches the network fails CI.
 
 ```ts
 import { toRomaji, fromRomaji } from 'jp-address-romaji';
@@ -33,6 +43,12 @@ returns an explicit failure. A wrong shipping label is worse than a refused one.
 ```sh
 npm install jp-address-romaji jp-address-romaji-data
 ```
+
+> **Node.js 18+, ESM only.** There is no CommonJS build and none is planned —
+> `require('jp-address-romaji')` fails with `ERR_REQUIRE_ESM`. Use `import`, or a dynamic
+> `import()` from CommonJS code. The dataset is read from the filesystem, so the default
+> configuration is Node-only; browser use needs a data endpoint you host. Details under
+> [Requirements](#requirements).
 
 `jp-address-romaji-data` is optional but recommended: it is the offline dataset, and installing it
 means everything works with zero configuration. To point at your own copy instead:
@@ -122,14 +138,28 @@ Detects the script and returns a `ParsedAddress` either way.
 
 ### `toFormat(parsed, target)`
 
-Targets: `'google-i18n'`, `'shopify'`, `'stripe'`. The building name goes into the second address
-line of each, verbatim.
+If the address is going into a checkout form or a payment API rather than onto a label, the work
+isn't romanization — it's getting the pieces into the fields that provider expects. Japan doesn't
+map cleanly onto the `line1 / city / state` shape most of them assume, and the building name is the
+part that usually ends up mangled.
+
+Targets: `'google-i18n'`, `'shopify'`, `'stripe'`.
 
 ```ts
 toFormat(parsed, 'stripe');
 // { line1: '1-2-3 Uehara', line2: 'サンプルビル301', city: 'Shibuya-ku',
 //   state: 'Tokyo', postal_code: '151-0064', country: 'JP' }
 ```
+
+The building name is carried **verbatim and unromanized** into whichever field that target uses for
+a second address line — `line2` for Stripe, `address2` for Shopify, a second entry in
+`addressLines` for `google-i18n`. That is deliberate: `サンプルビル301` is what the courier reads,
+and there is no authoritative romanization for it.
+
+Everything else follows each target's own naming for the same values. The prefecture is `state`
+(Stripe), `province` (Shopify), or `administrativeArea` (`google-i18n`); the municipality and ward
+are joined into one locality line. `google-i18n` additionally keeps the town in `sublocality`,
+which the other two have no field for.
 
 ## Failures are values, not exceptions
 
