@@ -233,6 +233,22 @@ including commercial use. Verify the current terms for your use case at the link
 
 This library is MIT licensed. See [LICENSE](./LICENSE).
 
+## Status and disclaimer
+
+**Version `0.x`: the API may change.** This is a personal project, maintained on a best-effort
+basis. Issues and pull requests are welcome, but response times are not guaranteed.
+
+The software is provided **as is, without warranty of any kind**, as stated in the MIT licence.
+Two limits are worth spelling out beyond that boilerplate, because they are easy to assume away:
+
+- **A successful conversion is not a validated address.** The output reflects what the dataset
+  says; it does not certify that the address exists, is deliverable, or is currently in use.
+  Municipal mergers and address reorganizations mean the dataset lags reality by some amount.
+- **Do not use this as the sole basis for postal, legal, or financial decisions.** The library is
+  built to refuse rather than guess — that is why failures are typed values you have to handle —
+  but refusing is the guarantee, not correctness. If a wrong address carries real cost, verify
+  through the relevant authority.
+
 ## Requirements
 
 Node.js 18+. The offline dataset is read from the filesystem, so the default configuration is
