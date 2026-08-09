@@ -78,9 +78,15 @@ What is genuinely unfinished is the release path, not the library:
   now, so nothing else here is waiting on one.
 - `release.yml` has never run on GitHub Actions and nothing has ever been published to npm; see
   "Verified, and not" for exactly how far the local simulation of it goes.
-- No dataset has ever been built during development, because the Geolonia host is unreachable from
-  a network-restricted environment. The `Refresh address data and coverage` workflow is the way to
-  touch real data.
+- The Geolonia host is unreachable from a network-restricted environment, so the dataset cannot be
+  built locally. The `Refresh address data and coverage` workflow is the way to touch real data.
+
+  **Verified on 2026-08-09** by dispatching it: the dataset built (12,026,285 bytes, 1,899 files),
+  the assumption check passed, and the suite ran green against real data — 6 files, **100 tests
+  passed**, including the 5 in `realdata.test.ts` that are skipped everywhere else. The round-trip
+  test reported `mismatched: 0` over 4,303 real addresses: nothing came back as a *different*
+  address. The 2,213 that did not round-trip were all typed refusals (2,206 `NO_ROMAJI_DATA`,
+  1 `CORRUPT_ROMAJI_DATA`, 6 `AMBIGUOUS`), which is the designed behaviour.
 
 ## Release tagging
 
