@@ -75,6 +75,7 @@ jobs:
       # fixture-based suite CI already ran and prove nothing about the data
       # just downloaded.
       - name: Run the test suite against the real dataset
+        id: realdata_tests
         continue-on-error: true
         env:
           JP_ADDRESS_ROMAJI_DATA_DIR: ./address-data
@@ -94,8 +95,30 @@ jobs:
             assumptions.txt
           retention-days: 30
 
+      # The two steps above are continue-on-error so that a violated assumption
+      # or a failing test still leaves you with the dataset and the reports —
+      # that is the point of this workflow. The cost is that the run goes green
+      # either way, and the one step that proves the library works against real
+      # data becomes invisible unless someone opens the log. So state both
+      # outcomes at the top of the summary, where they are read.
       - name: Summarize into the run page
+        if: always()
+        env:
+          ASSUMPTIONS: ${{ steps.assumptions.outcome }}
+          REALDATA: ${{ steps.realdata_tests.outcome }}
         run: |
+          verdict() { [ "$1" = success ] && echo '✅ passed' || echo "⚠️ $1 — read the log before trusting this dataset"; }
+          {
+            echo '## Verdict'
+            echo
+            echo '| Check | Result |'
+            echo '| --- | --- |'
+            echo "| Dataset assumptions | $(verdict "$ASSUMPTIONS") |"
+            echo "| Test suite against the real dataset | $(verdict "$REALDATA") |"
+            echo
+            echo 'Both are non-blocking, so the run is green regardless. The table is the result.'
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
           echo '## Dataset assumptions' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           cat assumptions.txt >> "$GITHUB_STEP_SUMMARY"
