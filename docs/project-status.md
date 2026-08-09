@@ -56,27 +56,26 @@ Re-verified on 2026-08-07 by running the commands rather than reading them, on N
 `pnpm lint`, `pnpm typecheck`, `pnpm -r build`, `pnpm test` — all clean, 95 passed and 5 skipped,
 matching what "Verified, and not" records below.
 
-**The shared half of `CLAUDE.md` is frozen until the packages are published.** The template it is
-copied from is accepting only changes that would otherwise break CI or become irreversible after
-publication; wording improvements and newly promoted rules are queued for after the release,
-because each round of syncing was surfacing the next one and the projects could never catch up.
-Two consequences for a session picking this up:
+**The shared half of `CLAUDE.md` is delivered automatically; do not edit it and do not sync it by
+hand.** It sits between `<!-- BEGIN dev-standards common -->` and `<!-- END dev-standards common -->`,
+and it arrives from the template repository as an automated pull request whenever that repository
+changes. `.github/workflows/check-common-integrity.yml` hashes the block and fails if it was
+hand-edited — no secret and no network involved, so it also runs on pull requests from forks.
 
-- Do not open another sync pull request for the section below 「ここから下は共通」.
-- That section is currently byte-identical to the template, and so is
-  `.github/workflows/check-claude-md-drift.yml` (compared 2026-08-07). The `@ cc876a6` reference on
-  line 1 of `CLAUDE.md` names an older revision of the template repository whose *content* is
-  unchanged, so the drift check has nothing to warn about; bumping that comment is not worth a pull
-  request while the freeze holds.
+If a rule in that block is wrong, change it in the template repository; the fix comes back here on
+its own. Opening a pull request that edits the block directly will turn the check red and be
+reverted by the next sync.
+
+This replaced an older arrangement where the block was copied by hand and a warning-only job
+compared it against the private template through a per-repository token. That token is gone —
+`DEV_STANDARDS_TOKEN` is no longer used here — and so is the freeze that existed because syncing
+by hand was expensive enough that the projects could never catch up.
 
 What is genuinely unfinished is the release path, not the library:
 
 - The repository is **still private**, so most of the maintainer runbook below has not been
-  executed: no branch protection, no `NPM_TOKEN`. `DEV_STANDARDS_TOKEN` **is** set, as of the
-  recreation — the drift workflow was dispatched on 2026-08-07 and its canonical-template checkout
-  ran instead of skipping, finishing green with no warning annotation. That is a stronger check
-  than the by-hand comparison above, and it supersedes the earlier note that said the comparison
-  was being skipped.
+  executed: no branch protection, no `NPM_TOKEN`. The shared-block check needs no secret at all
+  now, so nothing else here is waiting on one.
 - `release.yml` has never run on GitHub Actions and nothing has ever been published to npm; see
   "Verified, and not" for exactly how far the local simulation of it goes.
 - No dataset has ever been built during development, because the Geolonia host is unreachable from
@@ -121,7 +120,9 @@ gh api -X PUT repos/tomatomerde/jp-address-romaji/branches/main/protection --inp
 JSON
 
 gh secret set NPM_TOKEN --repo tomatomerde/jp-address-romaji
-gh secret set DEV_STANDARDS_TOKEN --repo tomatomerde/jp-address-romaji
+
+# DEV_STANDARDS_TOKEN is obsolete — delete it if it is still there.
+gh secret delete DEV_STANDARDS_TOKEN --repo tomatomerde/jp-address-romaji
 ```
 
 `required_approving_review_count` is 0 because a solo maintainer cannot approve their own pull
@@ -134,9 +135,12 @@ inline in `release.yml`).
 
 `NPM_TOKEN` must be an **Automation** token; the classic token types that require a one-time
 password cannot publish from CI. Without it the release workflow fails with an explicit message
-naming the secret rather than an opaque npm 401. `DEV_STANDARDS_TOKEN` is a fine-grained PAT with
-Contents: Read on `tomatomerde/dev-standards`; without it the drift check skips itself with a
-notice, so it can be set at leisure.
+naming the secret rather than an opaque npm 401.
+
+`DEV_STANDARDS_TOKEN` is **no longer used** and should be deleted. It existed so a per-repository
+job could read the private template; the shared block is now verified against a hash committed
+here, which needs neither a secret nor the network. The token it replaced expired on a schedule and
+took a project's CI red with it — that failure mode is gone rather than deferred.
 
 One consequence of protecting `main` to be aware of: required status checks reject **direct**
 pushes whose commits haven't passed them, and on a free personal plan no actor can be exempted.
