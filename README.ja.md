@@ -1,10 +1,22 @@
 # jp-address-romaji
 
-日本の住所を、日本語表記とローマ字（国際・西洋語順）表記の間で双方向に変換する TypeScript ライブラリです。
+[![CI](https://github.com/tomatomerde/jp-address-romaji/actions/workflows/ci.yml/badge.svg)](https://github.com/tomatomerde/jp-address-romaji/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-brightgreen.svg)](#動作要件)
+[![ESM only](https://img.shields.io/badge/module-ESM%20only-orange.svg)](#動作要件)
 
-**住所は個人情報です。このライブラリは住所をどこにも送信しません。** ホスト型 API は提供せず、登録も不要です。住所データのローカルコピーを読み込み、既定では一切ネットワークアクセスを行いません。この保証は `fetch` を例外を投げるスタブに差し替えたテストで検証されています。
+[English](./README.md) | **日本語**
 
-The English README is the primary one: [README.md](./README.md).
+日本の住所を、日本語表記とローマ字（国際・西洋語順）表記の間で双方向に変換する TypeScript
+ライブラリです。配送ラベル、海外の決済フォームなど、日本の住所をラテン文字で書く必要が
+ある場面のためのものです。
+
+**住所は個人情報です。このライブラリは住所をどこにも送信しません。** ホスト型 API は提供せず、
+登録も不要です。住所データのローカルコピーを読み込み、既定では一切ネットワークアクセスを
+行いません。この保証は `fetch` を例外を投げるスタブに差し替えたテストで検証されており、
+ネットワークに到達する退行が入れば CI が落ちます。
+
+（英語版が原本です: [README.md](./README.md)）
 
 ```ts
 import { toRomaji, fromRomaji } from 'jp-address-romaji';
@@ -33,6 +45,12 @@ await fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo 160-0023');
 ```sh
 npm install jp-address-romaji jp-address-romaji-data
 ```
+
+> **Node.js 18 以上、ESM 専用。** CommonJS ビルドは無く、追加する予定もありません——
+> `require('jp-address-romaji')` は `ERR_REQUIRE_ESM` で失敗します。`import`、または
+> CommonJS からの動的 `import()` を使ってください。データセットはファイルシステムから
+> 読むため既定構成は Node 専用で、ブラウザで使うには自身がホストするエンドポイントが
+> 必要です。詳細は[動作要件](#動作要件)。
 
 `jp-address-romaji-data` はオフライン用データセットです。任意ですが、入れておけば設定不要で
 動作します。自前のデータを指す場合:
@@ -119,7 +137,26 @@ await fromRomaji('1-1 Ebisucho, Nakagyo-ku, Kyoto-shi, Kyoto 604-8081', {
 
 ### `toFormat(parsed, target)`
 
-対象: `'google-i18n'` / `'shopify'` / `'stripe'`。建物名は各形式の 2 行目の住所欄にそのまま入ります。
+住所がラベルではなく決済フォームや API に入る場合、必要なのはローマ字化そのものではなく、
+その提供元が期待するフィールドに正しく分解することです。日本の住所は多くの API が前提と
+する `line1 / city / state` の形に素直に収まらず、たいてい建物名が壊れます。
+
+対象: `'google-i18n'` / `'shopify'` / `'stripe'`。
+
+```ts
+toFormat(parsed, 'stripe');
+// { line1: '1-2-3 Uehara', line2: 'サンプルビル301', city: 'Shibuya-ku',
+//   state: 'Tokyo', postal_code: '151-0064', country: 'JP' }
+```
+
+建物名は、その形式が2行目の住所に使うフィールドへ**そのまま・ローマ字化せずに**入ります
+（Stripe は `line2`、Shopify は `address2`、`google-i18n` は `addressLines` の2要素目）。
+これは意図的で、`サンプルビル301` は配達員が読む文字列であり、権威ある読み方が存在しない
+ためです。
+
+それ以外も各形式の呼び名に従います。都道府県は `state`（Stripe）/ `province`（Shopify）/
+`administrativeArea`（`google-i18n`）に入り、市区町村と区は1つの locality 行にまとめられます。
+`google-i18n` だけは町字を `sublocality` に保持できます（他の2つには対応する欄がありません）。
 
 ## 失敗は例外ではなく値
 
