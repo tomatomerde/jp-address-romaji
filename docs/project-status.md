@@ -9,11 +9,10 @@ procedure itself, see [`releasing.md`](./releasing.md).
 
 ## Current state
 
-**The library is feature-complete for 0.1.0. Neither package is published yet.** Both
-`jp-address-romaji` and `jp-address-romaji-data` sit at `0.1.0`. Both names were re-checked against
-the registry on 2026-08-10 (`https://registry.npmjs.org/<name>` → 404 for each), so they were still
-unregistered then — worth repeating immediately before publishing, since time passes and the check
-costs one HTTP request.
+**Published.** `jp-address-romaji` and `jp-address-romaji-data` are both on npm at `0.1.0`,
+released 2026-08-10, each carrying an npm provenance attestation. `0.1.0-rc.1` was published a few
+hours earlier under the `next` dist-tag as a rehearsal — see the CHANGELOG for the three things it
+caught.
 
 Done:
 
@@ -75,13 +74,15 @@ by hand was expensive enough that the projects could never catch up.
 
 What is genuinely unfinished is the release path, not the library:
 
-- The repository **went public on 2026-08-10**. Branch protection and `NPM_TOKEN` from the
-  maintainer runbook below are still not set — both need repository-admin rights. The shared-block
-  check needs no secret at all, so nothing else here is waiting on one. Going public also enabled
-  npm provenance, which had been switched off only because npm requires a public source
-  repository; `release.yml` now publishes with `--provenance` and asks for `id-token: write`.
-- `release.yml` has never run on GitHub Actions and nothing has ever been published to npm; see
-  "Verified, and not" for exactly how far the local simulation of it goes.
+- The repository **went public on 2026-08-10**, which also enabled npm provenance — it had been
+  switched off only because npm requires a public source repository. `release.yml` publishes with
+  `--provenance` and asks for `id-token: write`.
+- **Branch protection is still not set** (`main` is `protected: false`); it needs repository-admin
+  rights. The shared-block check needs no secret, so nothing else is waiting on one.
+- `NPM_TOKEN` is set. It must be created with npm's **Bypass two-factor authentication (2FA)**
+  checkbox ticked — without it every publish fails with `EOTP`. It expires 90 days from
+  2026-08-10; the intent is to remove it before then by moving to npm trusted publishing, which
+  cannot be configured until a package exists (npm/cli#8544) and therefore had to wait for 0.1.0.
 - The Geolonia host is unreachable from a network-restricted environment, so the dataset cannot be
   built locally. The `Refresh address data and coverage` workflow is the way to touch real data.
 
@@ -159,24 +160,18 @@ a push, so once protection is on, that step degrades to a warning pointing at th
 artifact — commit the regenerated report via a pull request instead. The build, assumption check,
 and artifacts are unaffected.
 
-## Releasing 0.1.0
+## Releasing
 
-**Both packages currently sit at `0.1.0-rc.1`, not `0.1.0`.** The release candidate goes out first;
-see *Releasing 0.1.0: do the release candidate first* in [`releasing.md`](./releasing.md) for why
-and for what to check on the rc run.
+`0.1.0-rc.1` was published on 2026-08-10 and `0.1.0` followed the same day. Both packages are on
+npm. For the procedure and for what a release candidate does and does not protect, see
+[`releasing.md`](./releasing.md) — in particular that **the first version published to a name
+becomes `latest` regardless of `--tag`**, which is why the rc did not keep `npm install` clean and
+0.1.0 had to follow immediately.
 
-1. **Re-run the release workflow via `workflow_dispatch` with `dry_run: true`** and read it, rather
-   than assuming the last green run still applies. The first real dry run (2026-08-10) failed —
-   see the SIGPIPE entry under Traps — and a dry run is cheap next to a bad publish.
-2. Set `NPM_TOKEN` (see the runbook above). Nothing publishes without it, dry run or not.
-3. `git tag v0.1.0-rc.1 && git push origin v0.1.0-rc.1`. This publishes under the `next` dist-tag,
-   so `npm install jp-address-romaji` is unaffected.
-4. Verify the published rc: provenance present, GitHub Release body is the rc section only,
-   `npm view jp-address-romaji dist-tags` shows `next` and **no** `latest`, and a fresh
-   `npm install jp-address-romaji@next` in a scratch directory converts an address.
-5. Only then: bump both `package.json`s to `0.1.0`, replace the `## 0.1.0 — unreleased` heading with
-   the real date, and `git tag v0.1.0 && git push origin v0.1.0`. The workflow refuses to publish
-   while the heading still says `unreleased`.
+For a subsequent release: bump the version(s), date the CHANGELOG heading, push the tag. The
+workflow refuses to publish while the heading still says `unreleased`. Run a `dry_run: true`
+dispatch first and read it — the first real dry run of this workflow failed (see the SIGPIPE entry
+under Traps), so a previous green run is not evidence about the current commit.
 
 ## Verified, and not
 
@@ -214,12 +209,22 @@ Verified by running it rather than by reading it:
 That is the first time the packing path has been exercised against a real dataset, which matters
 more here than for an ordinary package: the dataset *is* the data package's contents.
 
-**Still not verified: `npm publish` has never been executed in any form**, and neither has the
-provenance attestation — `--provenance` sits inside the branch a dry run skips, so it is first
-exercised by the first real publish. If it fails there it fails at `npm publish`; it does not
-quietly publish an unattested package. The GitHub Release path (`Extract changelog section`,
-`Create GitHub Release`) is likewise tag-only and still unrun, as is the tag-shape version guard
-and the CHANGELOG date guard, both of which a dispatch run skips by design.
+**The tag-driven path has now run for real** (`v0.1.0-rc.1` then `v0.1.0`, 2026-08-10). That
+covers `npm publish`, the provenance attestation, the GitHub Release, the tag-shape version guard
+and the CHANGELOG date guard — everything a `workflow_dispatch` run skips by design.
+
+Verified from outside the workflow afterwards, against the registry rather than the run log:
+
+- `https://registry.npmjs.org/-/npm/v1/attestations/<pkg>@0.1.0-rc.1` lists `publish` and
+  `provenance` for both packages
+- the GitHub Release body for `v0.1.0-rc.1` was the rc section only, 12 lines, with no bleed from
+  the `0.1.0` section — the whole-field CHANGELOG matcher doing its job
+- `npm view <pkg> dist-tags` — this is where two assumptions broke; see the CHANGELOG's
+  `0.1.0-rc.1` entry and *Release candidates* in `releasing.md`
+
+**Still not verified: the `data-v*` and `core-v*` scoped tag shapes.** Only `v*` has been used. The
+scoped paths are exercised by the same `Determine release plan` step, but the combination of a
+scoped tag with the version guard checking only one package has never run.
 
 ## Known gaps
 

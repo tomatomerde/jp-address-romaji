@@ -1,18 +1,6 @@
 # Changelog
 
-## 0.1.0-rc.1 — 2026-08-10
-
-Release candidate for 0.1.0, published under the `next` dist-tag
-(`npm install jp-address-romaji@next`). The contents are the 0.1.0 section
-below; nothing is added or removed.
-
-It exists because `npm publish` is the one step of the release the dry runs
-cannot exercise, and it is not a step worth first attempting on a version
-that installs by default. Publishing this candidate exercises the real
-publish, the provenance attestation, the GitHub Release, and the dist-tag
-handling, on a version nobody gets by accident.
-
-## 0.1.0 — unreleased
+## 0.1.0 — 2026-08-10
 
 First release.
 
@@ -51,3 +39,22 @@ not romanized, because the dataset has no readings for street names.
 
 Not supported, each an explicit failure rather than a wrong answer: geocoding accuracy and
 building-name translation. `fromRomaji` reads western order only.
+
+## 0.1.0-rc.1 — 2026-08-10
+
+Release candidate, published under the `next` dist-tag to exercise the parts of the release that a
+dry run cannot reach: `npm publish` itself, the provenance attestation, and the GitHub Release.
+Identical in content to 0.1.0 above.
+
+It found three things, which is why it was worth spending a version on:
+
+- `NPM_TOKEN` has to be created with npm's **Bypass two-factor authentication (2FA)** checkbox
+  ticked. Without it every publish fails with `EOTP`, and no dry run can detect that because dry
+  runs never reach `npm publish`.
+- **The first version ever published to a name becomes `latest` regardless of `--tag`.** The
+  registry has to point `latest` somewhere. So for a brand-new package an rc does not protect
+  `npm install <pkg>` — only shipping the real version does, which is why 0.1.0 followed the same
+  day.
+- `jp-address-romaji`'s optional peer range on `jp-address-romaji-data` was `^0.1.0`, which a
+  prerelease does not satisfy, so the two rc packages could not be installed together at all. The
+  range is `^0.1.0-0` from 0.1.0 onwards.
