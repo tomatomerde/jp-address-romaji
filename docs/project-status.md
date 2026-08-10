@@ -78,8 +78,24 @@ What is genuinely unfinished is the release path, not the library:
   switched off only because npm requires a public source repository. `release.yml` asks for
   `id-token: write`; the `--provenance` flag is gone, because trusted publishing mints the
   attestation on its own.
-- **Branch protection is still not set** (`main` is `protected: false`); it needs repository-admin
-  rights. The shared-block check needs no secret, so nothing else is waiting on one.
+- **Branch protection is on** (2026-08-10). Direct pushes to `main` are refused; changes go through
+  a pull request whose `test` check must pass. `enforce_admins` is on, so that applies to the owner
+  too — unblocking yourself is a settings change, not a `--force`. `required_approving_review_count`
+  is 0 because a solo maintainer cannot approve their own pull request and 1 would make every one of
+  them permanently unmergeable.
+
+  Two settings that were chosen against the obvious default:
+
+  - **`strict: false`** (a branch need not be up to date with `main` to merge). With `strict: true`,
+    merging any pull request forces every other open one in the repository to be updated first.
+    `ci.yml` also runs on pushes to `main`, so a semantic conflict still turns something red.
+  - **`integrity` is deliberately not a required check.** `check-common-integrity.yml` is
+    path-filtered to `CLAUDE.md` and friends, so it does not start on a pull request that touches
+    nothing else — and a required check that never reports leaves the pull request stuck on
+    "Expected — waiting for status" forever. Only `test` is required, and it has no `paths:` filter.
+
+  The `Refresh address data and coverage` workflow was already built for this: when its push of
+  `docs/coverage.md` is refused, it degrades to a warning pointing at the run's artifact.
 - **The workflow moved to npm trusted publishing on 2026-08-10** and carries no token. Trusted
   publishers are registered for both packages (repository + `release.yml`, no environment). That
   could not have been done before `0.1.0` existed (npm/cli#8544).
@@ -126,7 +142,7 @@ gh repo edit tomatomerde/jp-address-romaji --default-branch main
 
 gh api -X PUT repos/tomatomerde/jp-address-romaji/branches/main/protection --input - <<'JSON'
 {
-  "required_status_checks": { "strict": true, "contexts": ["test"] },
+  "required_status_checks": { "strict": false, "contexts": ["test"] },
   "enforce_admins": true,
   "required_pull_request_reviews": { "required_approving_review_count": 0 },
   "restrictions": null,
@@ -139,13 +155,14 @@ JSON
 gh secret delete DEV_STANDARDS_TOKEN --repo tomatomerde/jp-address-romaji
 ```
 
-`required_approving_review_count` is 0 because a solo maintainer cannot approve their own pull
-request, and 1 would make every pull request permanently unmergeable. `enforce_admins: true`
-applies to the owner as well — that is the intent, but it means unblocking yourself is a settings
-change rather than a `--force`.
+The reasoning behind each field is above, under the release-path list. The one thing to re-derive
+rather than copy if this is ever applied to a different repository: **`contexts` must list only
+checks that run on every pull request.** Here that is `test` alone — `integrity` is path-filtered
+and would hang any pull request that does not touch `CLAUDE.md`.
 
-The visibility change has already been made, so the first command above is a no-op today; it is
-kept because the ordering it encodes still matters if the repository is ever recreated.
+Both `gh repo edit` calls and the protection call have already been made, so this block is a no-op
+today; it is kept because the ordering it encodes still matters if the repository is ever recreated
+(on a free plan, branch protection is only available on public repositories).
 
 `NPM_TOKEN` is no longer part of setup — the workflow authenticates through trusted publishing, so
 a fresh clone of this repository needs no npm secret at all. What it needs instead is a **trusted
