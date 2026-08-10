@@ -17,9 +17,48 @@ The workflow runs one release at a time (`concurrency: group: release, cancel-in
 a second run queues behind an in-flight one instead of running in parallel or cancelling it — killing
 a run mid-`npm publish` is worse than making the next run wait.
 
-## One-time setup (human, not automatable)
+## Trusted publishing (how the workflow authenticates)
 
-The workflow authenticates to npm with a token stored as a GitHub Actions secret. Create it once:
+**The workflow carries no npm token.** It publishes through npm *trusted publishing*: GitHub
+Actions mints a short-lived OIDC token, npm verifies it against a trusted publisher registered on
+the package, and the publish is authorised without any long-lived secret. Provenance attestations
+are generated automatically on this path, which is why there is no `--provenance` flag.
+
+Configured on npmjs.com per package (**all four**, on 2026-08-10) under *Settings → Trusted
+Publisher*:
+
+| Field | Value |
+| --- | --- |
+| Publisher | GitHub Actions |
+| Organization or user | `tomatomerde` |
+| Repository | this repository (both packages point at it) |
+| Workflow filename | `release.yml` |
+| Environment name | **empty** — the job declares no GitHub Environment, and a mismatch here rejects the publish |
+| Allowed actions | `npm publish` and `npm stage publish` |
+
+Three things the workflow must keep, or authentication breaks:
+
+- **`id-token: write`** in `permissions`. Without it there is no OIDC token to exchange.
+- **npm >= 11.5.1.** Node 22 ships npm 10.9.x, which does not support trusted publishing at all.
+  The `Ensure npm supports trusted publishing` step upgrades npm and asserts the version, so this
+  fails early and legibly instead of as an authentication error after the whole pipeline has run.
+  A dry run exercises that step, which is the only part of the OIDC path a dry run can reach.
+- **The workflow filename must stay `release.yml`.** The trusted publisher is registered against
+  that exact name; renaming the file silently invalidates it.
+
+**Not yet verified: no release has gone out through OIDC.** `0.1.0` was published with a token on
+2026-08-10, and this switch came afterwards. Nothing short of a real publish can test it — dry runs
+never reach `npm publish`. **Keep the `NPM_TOKEN` secret in place until an OIDC release succeeds**;
+it is unused by this workflow now, but it is the rollback if the exchange fails. Delete it (from
+both the repository secrets and npmjs.com) once a release has gone out without it.
+
+## One-time setup: the npm token (superseded, kept as rollback)
+
+Everything below describes the token path this workflow no longer uses. It is retained because the
+token is still the fallback until trusted publishing has been proven by a real release, and because
+the failure modes it documents are worth keeping.
+
+The workflow authenticated to npm with a token stored as a GitHub Actions secret. Create it once:
 
 1. Log in to [npmjs.com](https://www.npmjs.com/) and go to **Access Tokens → Generate New Token**.
    npm has merged classic and granular token creation into a single form; the fields that matter:
@@ -63,8 +102,8 @@ The workflow authenticates to npm with a token stored as a GitHub Actions secret
 3. Nothing else is needed. The workflow's own `permissions:` block already grants it what it needs:
    `contents: write` to create a GitHub Release, and `id-token: write` for provenance (below).
 
-npm provenance (`--provenance`) **is** used, together with `--access public` — which is not
-optional. For a name the registry does not know yet, npm refuses to mint an attestation unless
+npm provenance no longer needs the `--provenance` flag (trusted publishing adds it), but
+`--access public` is still passed and is **not** optional. For a name the registry does not know yet, npm refuses to mint an attestation unless
 access is stated explicitly:
 
 ```text
@@ -89,9 +128,10 @@ on, both easy to break without noticing:
   flag. The workflow already publishes packed tarballs with `npm publish`, so this is only a
   constraint on future edits.
 
-Authentication is still `NPM_TOKEN`, not npm's tokenless "trusted publishing" OIDC flow. That flow
-needs a trusted publisher configured on npm per package, which cannot be done before the package
-exists; worth revisiting once 0.1.0 is on the registry. Provenance does not depend on it.
+Authentication moved to trusted publishing after `0.1.0` shipped — see the section above. It could
+not have been set up earlier: npm refuses to register a trusted publisher for a package that does
+not exist yet ([npm/cli#8544](https://github.com/npm/cli/issues/8544)), so the first release had to
+go out on a token.
 
 **Exercised on 2026-08-10.** Both packages carry attestations for `0.1.0-rc.1` and `0.1.0`;
 `https://registry.npmjs.org/-/npm/v1/attestations/<pkg>@<version>` lists `publish` and
