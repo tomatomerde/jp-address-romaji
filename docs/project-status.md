@@ -10,8 +10,10 @@ procedure itself, see [`releasing.md`](./releasing.md).
 ## Current state
 
 **The library is feature-complete for 0.1.0. Neither package is published yet.** Both
-`jp-address-romaji` and `jp-address-romaji-data` sit at `0.1.0`, and both names were confirmed
-unregistered on npm during development — worth re-checking before publishing, since time passes.
+`jp-address-romaji` and `jp-address-romaji-data` sit at `0.1.0`. Both names were re-checked against
+the registry on 2026-08-10 (`https://registry.npmjs.org/<name>` → 404 for each), so they were still
+unregistered then — worth repeating immediately before publishing, since time passes and the check
+costs one HTTP request.
 
 Done:
 
@@ -73,9 +75,11 @@ by hand was expensive enough that the projects could never catch up.
 
 What is genuinely unfinished is the release path, not the library:
 
-- The repository is **still private**, so most of the maintainer runbook below has not been
-  executed: no branch protection, no `NPM_TOKEN`. The shared-block check needs no secret at all
-  now, so nothing else here is waiting on one.
+- The repository **went public on 2026-08-10**. Branch protection and `NPM_TOKEN` from the
+  maintainer runbook below are still not set — both need repository-admin rights. The shared-block
+  check needs no secret at all, so nothing else here is waiting on one. Going public also enabled
+  npm provenance, which had been switched off only because npm requires a public source
+  repository; `release.yml` now publishes with `--provenance` and asks for `id-token: write`.
 - `release.yml` has never run on GitHub Actions and nothing has ever been published to npm; see
   "Verified, and not" for exactly how far the local simulation of it goes.
 - The Geolonia host is unreachable from a network-restricted environment, so the dataset cannot be
@@ -136,8 +140,8 @@ request, and 1 would make every pull request permanently unmergeable. `enforce_a
 applies to the owner as well — that is the intent, but it means unblocking yourself is a settings
 change rather than a `--force`.
 
-Going public also unblocks npm provenance, currently disabled for exactly that reason (noted
-inline in `release.yml`).
+The visibility change has already been made, so the first command above is a no-op today; it is
+kept because the ordering it encodes still matters if the repository is ever recreated.
 
 `NPM_TOKEN` must be an **Automation** token; the classic token types that require a one-time
 password cannot publish from CI. Without it the release workflow fails with an explicit message
@@ -157,8 +161,9 @@ and artifacts are unaffected.
 
 ## Releasing 0.1.0
 
-1. **Run the release workflow once via `workflow_dispatch` with `dry_run: true`.** None of it has
-   executed for real yet.
+1. **Re-run the release workflow via `workflow_dispatch` with `dry_run: true`** and read it, rather
+   than assuming the last green run still applies. The first real dry run (2026-08-10) failed —
+   see the SIGPIPE entry under Traps — and a dry run is cheap next to a bad publish.
 2. Replace the `## 0.1.0 — unreleased` heading in `CHANGELOG.md` with the real date. The workflow
    refuses to publish while it still says `unreleased`.
 3. `git tag v0.1.0 && git push origin v0.1.0`.
@@ -184,10 +189,27 @@ Verified by running it rather than by reading it:
   2026-08-07, Node 22.22.2). The root `pnpm typecheck` is the one that matters: `pnpm -r typecheck`
   alone skips the test files, `scripts/`, and `vitest.config.ts` — see Traps below
 
-**Not verified: `release.yml` has never run on GitHub Actions, and `npm publish` has never been
-executed in any form.** No dataset was built during that work, because the Geolonia host is
-unreachable from the sandboxed environments it was done in, so every step downstream of a real
-dataset build is verified only by construction and by local simulation of its shell logic.
+**`release.yml` has now run on GitHub Actions.** Two `workflow_dispatch` dry runs on 2026-08-10,
+`packages: both`:
+
+- The **first failed**, at `Assert data tarball contents`, and the failure was in the check rather
+  than in the package — see the SIGPIPE entry under Traps. Everything before it passed: the dataset
+  built, assumptions held, typecheck, build, `check:publishable`, the full suite against real data,
+  and both `pnpm pack`s.
+- The **second, after the fix, was green end to end** — including
+  `@arethetypeswrong/cli --profile esm-only` on both packed tarballs, the import smoke test, and
+  the dry-run publish path. Run
+  [31372054290](https://github.com/tomatomerde/jp-address-romaji/actions/runs/31372054290).
+
+That is the first time the packing path has been exercised against a real dataset, which matters
+more here than for an ordinary package: the dataset *is* the data package's contents.
+
+**Still not verified: `npm publish` has never been executed in any form**, and neither has the
+provenance attestation — `--provenance` sits inside the branch a dry run skips, so it is first
+exercised by the first real publish. If it fails there it fails at `npm publish`; it does not
+quietly publish an unattested package. The GitHub Release path (`Extract changelog section`,
+`Create GitHub Release`) is likewise tag-only and still unrun, as is the tag-shape version guard
+and the CHANGELOG date guard, both of which a dispatch run skips by design.
 
 ## Known gaps
 
@@ -211,6 +233,17 @@ that have actually cost time:
   the step when the count is zero — exactly the case an assertion like that exists to report.
   `|| true` on the assignment is what keeps the error message reachable. This was a real defect in
   `release.yml`, found by running it rather than by reading it.
+- **Never pipe `tar -tzf` into `grep -q` under `pipefail`.** `grep -q` exits at its first match,
+  which closes the pipe and kills `tar` with SIGPIPE; `pipefail` then makes that the pipeline's
+  status. The data-tarball assertion therefore reported `package/data/ja.json` **missing because it
+  was present** — npm sorts `data/ja.json` ahead of `data/ja/...` (`.` is 0x2E, `/` is 0x2F), so it
+  matched on line 1 of a ~124 KB listing and `tar` never got to finish. A genuinely absent entry
+  failed it too, with the same message, so the check could not pass and could not discriminate.
+  Redirect the listing to a file and `grep` that. Found by the first real dry run of `release.yml`
+  (2026-08-10) — the code had been read many times and looked correct. This is the sibling of the
+  `grep -c` trap above, and it hid in the same file next to a comment explaining the `-c` case.
+  Note the size dependence: the core-tarball assertion had the identical shape and never failed,
+  because its listing fits in the 64 KB pipe buffer. Both are fixed.
 - **`typescript-eslint`'s recommended preset disables `no-undef`.** That is correct where `tsc`
   backs it up and silently fatal where it does not, which is why `eslint.config.js` keeps `.ts`
   and plain-JS files in separate blocks — and why `tsconfig.tests.json` exists: the package
