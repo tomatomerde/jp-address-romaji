@@ -22,10 +22,27 @@ a run mid-`npm publish` is worse than making the next run wait.
 The workflow authenticates to npm with a token stored as a GitHub Actions secret. Create it once:
 
 1. Log in to [npmjs.com](https://www.npmjs.com/), then **Access Tokens → Generate New Token →
-   Granular Access Token** (or `Automation` token type if you prefer the classic UI). Scope it to
-   publish access on `jp-address-romaji` and `jp-address-romaji-data` (or to your account/org if the
-   granular picker doesn't yet list unpublished packages — the first publish of a new name needs an
+   Granular Access Token** with **Packages and scopes: Read and write**. Scope it to publish access
+   on `jp-address-romaji` and `jp-address-romaji-data` (or to your account/org if the granular
+   picker doesn't yet list unpublished packages — the first publish of a new name needs an
    account-wide token regardless of scoping).
+
+   **The token type matters, and getting it wrong is not visible until the publish itself.** Only a
+   Granular Access Token, or a classic token of type **`Automation`**, can publish unattended. A
+   classic **`Publish`** token is still subject to the account's 2FA, so npm rejects it from CI
+   with:
+
+   ```text
+   npm error code EOTP
+   npm error This operation requires a one-time password from your authenticator.
+   ```
+
+   This happened on the first real tag push (`v0.1.0-rc.1`, 2026-08-10). Nothing was published —
+   the run failed at the publish step with both packages still absent from the registry — but the
+   whole pipeline ran first, so the feedback cost several minutes. `scripts/npm-publish.sh` now
+   recognises `EOTP` and says which token type to switch to; the underlying rule is still the one
+   above. This is also the clearest argument for the release-candidate procedure below: the token
+   type cannot be validated by any dry run, because dry runs never reach `npm publish`.
 2. Copy the token, then set it as a repository secret:
 
    ```sh
