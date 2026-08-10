@@ -63,9 +63,24 @@ The workflow authenticates to npm with a token stored as a GitHub Actions secret
 3. Nothing else is needed. The workflow's own `permissions:` block already grants it what it needs:
    `contents: write` to create a GitHub Release, and `id-token: write` for provenance (below).
 
-npm provenance (`--provenance`) **is** used. It was off while the repository was private — npm's
-provenance feature requires a public source repository — and was enabled when the repository went
-public on 2026-08-10. Two things it depends on, both easy to break without noticing:
+npm provenance (`--provenance`) **is** used, together with `--access public` — which is not
+optional. For a name the registry does not know yet, npm refuses to mint an attestation unless
+access is stated explicitly:
+
+```text
+npm error code EUSAGE
+npm error Can't generate provenance for new or private package, you must set `access` to public.
+```
+
+An unscoped package is public by default, so the flag looks redundant, and npm still rejects it:
+"default" is not "explicitly public". These two packages survived their first release only because
+their `package.json`s happened to carry `publishConfig.access`; the two sibling projects without it
+failed on their first real tag push (2026-08-10). `scripts/npm-publish.sh` passes the flag for
+every publish.
+
+Provenance was off while the repository was private — npm requires a public source repository for
+it — and was enabled when the repository went public on 2026-08-10. Two further things it depends
+on, both easy to break without noticing:
 
 - **`repository.url` in each `package.json` must name this repository.** npm compares it against
   the repository the workflow runs in and **fails the publish** if they disagree. Both packages
@@ -78,10 +93,10 @@ Authentication is still `NPM_TOKEN`, not npm's tokenless "trusted publishing" OI
 needs a trusted publisher configured on npm per package, which cannot be done before the package
 exists; worth revisiting once 0.1.0 is on the registry. Provenance does not depend on it.
 
-**Not yet exercised:** provenance only runs on a real publish, and `--provenance` is inside the
-`else` branch that a dry run skips. The 2026-08-10 dry run proved everything up to and including
-packing; the provenance attestation itself is first tested by the first real publish. If it fails
-there, it fails loudly at `npm publish` — it does not publish an unattested package silently.
+**Exercised on 2026-08-10.** Both packages carry attestations for `0.1.0-rc.1` and `0.1.0`;
+`https://registry.npmjs.org/-/npm/v1/attestations/<pkg>@<version>` lists `publish` and
+`provenance` for each. Note that none of this is reachable by a dry run — `--provenance` sits
+inside the branch a dry run skips — so a green dry run says nothing about it either way.
 
 ## Tag scheme
 
