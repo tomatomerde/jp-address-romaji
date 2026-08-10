@@ -21,28 +21,34 @@ a run mid-`npm publish` is worse than making the next run wait.
 
 The workflow authenticates to npm with a token stored as a GitHub Actions secret. Create it once:
 
-1. Log in to [npmjs.com](https://www.npmjs.com/), then **Access Tokens → Generate New Token →
-   Granular Access Token** with **Packages and scopes: Read and write**. Scope it to publish access
-   on `jp-address-romaji` and `jp-address-romaji-data` (or to your account/org if the granular
-   picker doesn't yet list unpublished packages — the first publish of a new name needs an
-   account-wide token regardless of scoping).
+1. Log in to [npmjs.com](https://www.npmjs.com/) and go to **Access Tokens → Generate New Token**.
+   npm has merged classic and granular token creation into a single form; the fields that matter:
 
-   **The token type matters, and getting it wrong is not visible until the publish itself.** Only a
-   Granular Access Token, or a classic token of type **`Automation`**, can publish unattended. A
-   classic **`Publish`** token is still subject to the account's 2FA, so npm rejects it from CI
-   with:
+   | Field | Value | Why |
+   | --- | --- | --- |
+   | **Bypass two-factor authentication (2FA)** | **ticked** | Without it npm demands a one-time password on publish, which CI cannot supply |
+   | Packages and scopes → Permissions | **Read and write** | Defaults to read-only |
+   | Select packages | **All packages** | An unpublished name does not appear in the per-package picker, so the first publish of a new name needs account-wide scope. Narrow it afterwards |
+   | IP ranges | **leave empty** | GitHub-hosted runners have no stable egress IP |
+   | Organizations → Permissions | No access | Not needed |
+
+   **The 2FA checkbox is the one that bites, and it is invisible until the publish itself.** A token
+   created without it is rejected from CI with:
 
    ```text
    npm error code EOTP
    npm error This operation requires a one-time password from your authenticator.
    ```
 
-   This happened on the first real tag push (`v0.1.0-rc.1`, 2026-08-10). Nothing was published —
-   the run failed at the publish step with both packages still absent from the registry — but the
-   whole pipeline ran first, so the feedback cost several minutes. `scripts/npm-publish.sh` now
-   recognises `EOTP` and says which token type to switch to; the underlying rule is still the one
-   above. This is also the clearest argument for the release-candidate procedure below: the token
-   type cannot be validated by any dry run, because dry runs never reach `npm publish`.
+   This happened twice on `v0.1.0-rc.1` (2026-08-10). Nothing was published either time — the run
+   failed at the publish step with both packages still absent from the registry — but the whole
+   pipeline ran first, so each attempt cost several minutes. **Regenerating an existing token does
+   not change this setting**; a new token has to be created with the box ticked.
+   `scripts/npm-publish.sh` recognises `EOTP` and names the checkbox.
+
+   This is the clearest argument for the release-candidate procedure below: no dry run can validate
+   the token, because dry runs never reach `npm publish`. Had this been `0.1.0` rather than an rc,
+   the same two failures would sit in the history of the version everyone installs.
 2. Copy the token, then set it as a repository secret:
 
    ```sh
