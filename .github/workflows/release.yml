@@ -82,8 +82,38 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
 
       - run: pnpm install --frozen-lockfile
+
+      # Trusted publishing (OIDC) needs npm >= 11.5.1; Node 22 ships npm
+      # 10.9.x, so without this the publish fails at the very end of the
+      # pipeline with an authentication error that says nothing about
+      # versions. Asserting the version here turns that into an early,
+      # legible failure — and a dry run exercises it, which the publish
+      # itself can never be.
+      - name: Ensure npm supports trusted publishing
+        shell: bash
+        run: |
+          npm install -g npm@latest
+          v=$(npm --version)
+          echo "npm $v"
+          node -e '
+            const [have] = process.argv.slice(1);
+            const need = "11.5.1";
+            const cmp = (a, b) => {
+              const pa = a.split("-")[0].split(".").map(Number);
+              const pb = b.split("-")[0].split(".").map(Number);
+              for (let i = 0; i < 3; i++) {
+                if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+              }
+              return 0;
+            };
+            if (cmp(have, need) < 0) {
+              console.error(`::error::npm ${have} is too old for trusted publishing; ${need} or later is required. The workflow upgrades npm globally, so this means that upgrade did not take effect.`);
+              process.exit(1);
+            }
+          ' "$v"
 
       # -----------------------------------------------------------------
       # Plan: work out, once, what this run is trying to do, so every later
@@ -468,64 +498,6 @@ jobs:
               "import('./packages/data/dist/index.js').then(m => console.log('data exports:', Object.keys(m)))"
           fi
 
-      # -----------------------------------------------------------------
-      # Publish. Data before core: the library fails every conversion with
-      # DATA_NOT_CONFIGURED without a dataset, so there's no reason to ship
-      # core against a data version that doesn't exist on the registry yet.
-      #
-      # provenance: enabled. It was off while the repository was private —
-      # npm's provenance feature requires a public source repository — and
-      # was turned on when the repository went public on 2026-08-10. Both
-      # publish commands below use `npm`, not `pnpm publish` (9.15.0 has no
-      # --provenance flag at all), and the job asks for `id-token: write`
-      # above so npm can exchange an OIDC token for a Sigstore attestation.
-      #
-      # npm cross-checks the manifest's `repository.url` against the
-      # repository the workflow is running in and refuses to publish if they
-      # disagree. Both packages point at
-      # git+https://github.com/tomatomerde/jp-address-romaji.git, which is
-      # this repository — keep it that way, or provenance starts failing the
-      # release rather than silently degrading.
-      #
-      # Authentication is still the NPM_TOKEN .npmrc below, not npm's
-      # tokenless OIDC ("trusted publishing") flow. That flow needs a
-      # trusted publisher configured on the npm side per package, which
-      # cannot be done before the package exists. Worth revisiting after
-      # 0.1.0 is on the registry; provenance itself does not depend on it.
-      #
-      # .npmrc is written only when this run could actually publish
-      # (DRY_RUN != 'true'). Writing it unconditionally — including during a
-      # dry run, before NPM_TOKEN is known to even be set — used to mean a
-      # dry run with no secret configured wrote an auth line with an empty
-      # token, which can make `npm view` below fail with 401 for a reason
-      # that has nothing to do with what the dry run is supposed to be
-      # proving. If NPM_TOKEN is unset on a real (non-dry-run) publish, fail
-      # here with an explicit message instead of writing an empty-token
-      # .npmrc and letting a later `npm publish` 401 stand in for it.
-      # -----------------------------------------------------------------
-      - name: Configure npm auth
-        if: env.DRY_RUN != 'true' && (env.PUBLISH_DATA == 'true' || env.PUBLISH_CORE == 'true')
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -z "$NPM_TOKEN" ]; then
-            echo "::error::NPM_TOKEN Actions secret is not set. Set it before running a real (non-dry-run) release — see docs/releasing.md 'One-time setup'." >&2
-            exit 1
-          fi
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$HOME/.npmrc"
-
-          # Confirm the token authenticates at all before the publish steps.
-          # This catches a revoked, expired or mistyped token, which would
-          # otherwise surface as a bare 401 from `npm publish`. It does NOT
-          # catch a token of the wrong *type* — a classic "Publish" token
-          # passes `whoami` and then fails at publish with EOTP, which the
-          # publish steps below explain.
-          if ! whoami_out=$(npm whoami 2>&1); then
-            echo "::error::NPM_TOKEN is set but npm rejected it: ${whoami_out}. Regenerate the token and update the secret — see docs/releasing.md 'One-time setup'." >&2
-            exit 1
-          fi
-          echo "Authenticated to npm as ${whoami_out}."
-
       # `npm view <pkg>@<version>` exits non-zero both when the package name
       # doesn't exist at all and when it exists but that version doesn't
       # (verified against the registry: both cases give exit 1) — either way
@@ -567,10 +539,6 @@ jobs:
             ./scripts/npm-publish.sh "jp-address-romaji" "$dist_tag" \
               "$RUNNER_TEMP/tarballs/jp-address-romaji-$version.tgz"
           fi
-
-      - name: Remove npm auth
-        if: always()
-        run: rm -f "$HOME/.npmrc"
 
       # -----------------------------------------------------------------
       # GitHub Release, tag pushes only. Best-effort notes extraction from
