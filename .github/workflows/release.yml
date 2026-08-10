@@ -359,7 +359,21 @@ jobs:
           version=$(node -p "require('./packages/data/package.json').version")
           f="$RUNNER_TEMP/tarballs/jp-address-romaji-data-$version.tgz"
 
-          if ! tar -tzf "$f" | grep -qx 'package/data/ja.json'; then
+          # Materialize the listing once; never pipe `tar` into `grep`.
+          # `grep -q` exits at its first match, closing the pipe and killing
+          # `tar` with SIGPIPE. Under `-eo pipefail` that non-zero status
+          # becomes the pipeline's, so this check reported "missing"
+          # precisely BECAUSE the entry was present and matched early. npm
+          # sorts `data/ja.json` ahead of `data/ja/...` ('.' < '/'), so it
+          # matched on the first line of a ~124 KB listing, every time. The
+          # check could not pass: a genuinely absent entry fails it too, for
+          # the honest reason, so the two outcomes were indistinguishable.
+          # Found by the first real dry run of this workflow (2026-08-10);
+          # reproduced locally with a tarball built in npm's sort order.
+          listing="$RUNNER_TEMP/data-tarball-listing.txt"
+          tar -tzf "$f" > "$listing"
+
+          if ! grep -qx 'package/data/ja.json' "$listing"; then
             echo "::error::$f is missing package/data/ja.json" >&2
             exit 1
           fi
@@ -371,7 +385,7 @@ jobs:
           # this check exists to catch (no dataset in the tarball at all) the
           # assignment itself would abort the step before the error message
           # below ever prints. The run would fail, but say nothing about why.
-          city_files=$(tar -tzf "$f" | grep -Ec '^package/data/ja/[^/]+/[^/]+\.json$' || true)
+          city_files=$(grep -Ec '^package/data/ja/[^/]+/[^/]+\.json$' "$listing" || true)
           if [ "$city_files" -lt 1800 ]; then
             echo "::error::$f has only $city_files municipality files under package/data/ja/ (need >= 1800)" >&2
             exit 1
@@ -386,9 +400,19 @@ jobs:
           version=$(node -p "require('./packages/core/package.json').version")
           f="$RUNNER_TEMP/tarballs/jp-address-romaji-$version.tgz"
 
+          # Same reason as the data assertion above: grep a materialized
+          # listing, never a pipe from `tar`. Core's listing is small enough
+          # today that it fits in the 64 KB pipe buffer, so `tar` finishes
+          # writing before `grep -q` can SIGPIPE it and the bug stays
+          # dormant here. That is the argument for fixing it now rather than
+          # when dist/ grows past the buffer — at which point this step
+          # would start reporting a present file as missing.
+          listing="$RUNNER_TEMP/core-tarball-listing.txt"
+          tar -tzf "$f" > "$listing"
+
           fail=false
           for entry in package/dist/index.js package/dist/index.d.ts; do
-            if ! tar -tzf "$f" | grep -qx "$entry"; then
+            if ! grep -qx "$entry" "$listing"; then
               echo "::error::$f is missing $entry" >&2
               fail=true
             fi
