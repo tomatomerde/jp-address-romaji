@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.0-rc.1 — 2026-08-10
+
+Release candidate for 0.1.0, published under the `next` dist-tag
+(`npm install jp-address-romaji@next`). The contents are the 0.1.0 section
+below; nothing is added or removed.
+
+It exists because `npm publish` is the one step of the release the dry runs
+cannot exercise, and it is not a step worth first attempting on a version
+that installs by default. Publishing this candidate exercises the real
+publish, the provenance attestation, the GitHub Release, and the dist-tag
+handling, on a version nobody gets by accident.
+
 ## 0.1.0 — unreleased
 
 First release.

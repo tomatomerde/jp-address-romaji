@@ -80,6 +80,29 @@ A `data-v*` or `core-v*` release does **not** require the other package's versio
 `packages/core/package.json` stays at `0.1.0`, then tagging `data-v0.2.0`, is the normal way to ship a
 data-only refresh.
 
+### Prereleases and the dist-tag
+
+**A version containing a `-` is published to the `next` dist-tag; everything else goes to
+`latest`.** The workflow derives this from the version alone — there is no input to set it, and
+both publish steps derive it the same way.
+
+This is not a nicety. `npm publish` with no `--tag` moves `latest` **even for a semver
+prerelease** — npm does not special-case them. Publishing `0.1.0-rc.1` without `--tag next` would
+make `npm install jp-address-romaji` hand every user the release candidate, and the only repair is
+publishing a real version on top; the mistake is public and silent in the meantime. The `Release
+plan` step summary prints the dist-tag for exactly this reason — it is the one field whose wrong
+value looks like a successful release.
+
+So `v0.1.0-rc.1` publishes both packages at `0.1.0-rc.1` under `next`, installable with
+`npm install jp-address-romaji@next` and invisible to everyone else. The scoped shapes work the
+same way (`data-v0.2.0-rc.1` → `next`).
+
+One consequence to keep in mind: **CHANGELOG headings are matched on the version as a whole
+field**, so `## 0.1.0-rc.1` and `## 0.1.0` are different sections and each release gets only its
+own. That matters because the earlier prefix match treated `## 0.1.0` as matching
+`## 0.1.0-rc.1 — …` too, which silently folded the rc's notes (and everything after it) into the
+real release's notes.
+
 ## Cutting a release
 
 1. Decide the version(s). Bump `version` in whichever of `packages/data/package.json` /
@@ -87,10 +110,10 @@ data-only refresh.
    tag; for a `data-v*`/`core-v*` tag only that package's version needs to match the tag (see the
    table above).
 2. Replace that package's `## <version> — unreleased` heading in `CHANGELOG.md` with the real date,
-   e.g. `## 0.1.0 — 2026-08-05`. The release workflow extracts the GitHub Release body from whichever
-   section heading starts with `## <version>`, so this has to happen before tagging — the workflow's
-   own CHANGELOG guard step fails the run if the section is missing or still says `unreleased`, tag
-   push only (`workflow_dispatch` only warns). Commit both changes.
+   e.g. `## 0.1.0 — 2026-08-05`. The release workflow extracts the GitHub Release body from the
+   section whose heading's version field is exactly `<version>`, so this has to happen before
+   tagging — the workflow's own CHANGELOG guard step fails the run if the section is missing or
+   still says `unreleased`, tag push only (`workflow_dispatch` only warns). Commit both changes.
 3. Tag and push:
 
    ```sh
@@ -110,6 +133,29 @@ data-only refresh.
 If a package name/version is already on the registry when the workflow runs — for instance you're
 re-pushing a tag after a partial failure — that package's publish step detects it via `npm view` and
 skips rather than erroring, so re-running is safe.
+
+### Releasing 0.1.0: do the release candidate first
+
+`npm publish` is the only step of this pipeline a dry run cannot exercise, and it is the one step
+that cannot be undone — npm keeps a published version forever, and unpublishing is limited to the
+first 72 hours with zero dependents. The same is true of the provenance attestation and the GitHub
+Release, both of which only happen on a real tag push. Attempting all three for the first time on
+the version that installs by default is the expensive way to find out something is wrong.
+
+So:
+
+1. Tag `v0.1.0-rc.1` with both `package.json`s at `0.1.0-rc.1`. It publishes under `next`, so
+   `npm install jp-address-romaji` is unaffected — only `@next` sees it.
+2. Read the run: provenance attached (the npm page shows a provenance section), the GitHub Release
+   created with the rc's notes and not the 0.1.0 section, both packages resolvable at
+   `npm view jp-address-romaji@next`, and `npm view jp-address-romaji dist-tags` showing **no**
+   `latest`.
+3. Install the rc from the registry in a scratch directory and run a conversion. Up to this point
+   everything has been tested from a local tarball; this is the first time the published artifact
+   is exercised.
+4. Then bump both `package.json`s to `0.1.0`, date the `## 0.1.0` heading, and tag `v0.1.0`.
+
+The rc version is spent permanently, which is what rc versions are for.
 
 ### Manual / dispatch runs
 
