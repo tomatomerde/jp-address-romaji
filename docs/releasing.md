@@ -39,18 +39,40 @@ Publisher*:
 Three things the workflow must keep, or authentication breaks:
 
 - **`id-token: write`** in `permissions`. Without it there is no OIDC token to exchange.
-- **npm >= 11.5.1.** Node 22 ships npm 10.9.x, which does not support trusted publishing at all.
-  The `Ensure npm supports trusted publishing` step upgrades npm and asserts the version, so this
-  fails early and legibly instead of as an authentication error after the whole pipeline has run.
-  A dry run exercises that step, which is the only part of the OIDC path a dry run can reach.
+- **npm >= 11.5.1.** The runner's bundled npm does not meet this, so the
+  `Ensure npm supports trusted publishing` step upgrades npm and asserts the version. It fails
+  early and legibly instead of as an authentication error after the whole pipeline has run.
 - **The workflow filename must stay `release.yml`.** The trusted publisher is registered against
   that exact name; renaming the file silently invalidates it.
 
-**Not yet verified: no release has gone out through OIDC.** `0.1.0` was published with a token on
-2026-08-10, and this switch came afterwards. Nothing short of a real publish can test it — dry runs
-never reach `npm publish`. **Keep the `NPM_TOKEN` secret in place until an OIDC release succeeds**;
-it is unused by this workflow now, but it is the rollback if the exchange fails. Delete it (from
-both the repository secrets and npmjs.com) once a release has gone out without it.
+### The npm version, measured
+
+That guard step is the only part of the OIDC path a dry run can reach. The dry run of 2026-08-10
+(run `31402994984`, on the merge commit that introduced this) measured **npm 10.9.8** from
+`setup-node` on Node 22 — below the requirement — and **12.0.2** after the guard's
+`npm install -g npm@latest`. Without the guard this pipeline would reach `npm publish` and fail with
+an authentication error that says nothing about versions.
+
+This job calls `setup-node` exactly once, so that upgraded npm is what the publish steps get. **A
+second `setup-node` would not be harmless**: it swaps the whole toolchain, and the upgrade survives
+only while the same Node from the tool cache is reselected. The sibling projects, which re-enter
+`setup-node` for a different-runtime smoke test, watch npm drop back to 10.8.2 mid-run and recover
+only by coincidence of version. If a `setup-node` is ever added after the guard here, re-read the
+npm version at the publish step.
+
+### Not yet verified: no release has gone out through OIDC
+
+`0.1.0` was published with a token on 2026-08-10, and this switch came afterwards. Dry runs never
+reach `npm publish`, so nothing short of a real publish can test the token exchange.
+
+**Re-pushing `v0.1.0` will not test it either.** The publish steps skip a version that is already on
+the registry — the dry run above printed `jp-address-romaji-data@0.1.0 is already on npm; skipping.`
+and the same for `jp-address-romaji`. The first real exercise of OIDC is therefore **the next version
+bump**, and it exercises it twice, once per package.
+
+**Keep the `NPM_TOKEN` secret in place until then.** It is unused by this workflow now, but it is the
+rollback if the exchange fails. Delete it (from both the repository secrets and npmjs.com) once a
+release has gone out without it.
 
 ## One-time setup: the npm token (superseded, kept as rollback)
 
@@ -102,9 +124,9 @@ The workflow authenticated to npm with a token stored as a GitHub Actions secret
 3. Nothing else is needed. The workflow's own `permissions:` block already grants it what it needs:
    `contents: write` to create a GitHub Release, and `id-token: write` for provenance (below).
 
-npm provenance no longer needs the `--provenance` flag (trusted publishing adds it), but
-`--access public` is still passed and is **not** optional. For a name the registry does not know yet, npm refuses to mint an attestation unless
-access is stated explicitly:
+npm provenance no longer needs the `--provenance` flag — trusted publishing mints the attestation
+automatically. **`--access public` is still passed, and is not optional.** For a name the registry
+does not know yet, npm refuses to mint an attestation unless access is stated explicitly:
 
 ```text
 npm error code EUSAGE
@@ -125,18 +147,19 @@ on, both easy to break without noticing:
   the repository the workflow runs in and **fails the publish** if they disagree. Both packages
   point at `git+https://github.com/tomatomerde/jp-address-romaji.git`.
 - **The publish command must be `npm`, not `pnpm publish`** — pnpm 9.15.0 has no `--provenance`
-  flag. The workflow already publishes packed tarballs with `npm publish`, so this is only a
-  constraint on future edits.
+  flag. Whether pnpm implements npm's OIDC exchange has not been checked; the workflow does not
+  depend on it, because it publishes packed tarballs with `npm publish`. This is a constraint on
+  future edits only.
 
 Authentication moved to trusted publishing after `0.1.0` shipped — see the section above. It could
 not have been set up earlier: npm refuses to register a trusted publisher for a package that does
 not exist yet ([npm/cli#8544](https://github.com/npm/cli/issues/8544)), so the first release had to
 go out on a token.
 
-**Exercised on 2026-08-10.** Both packages carry attestations for `0.1.0-rc.1` and `0.1.0`;
-`https://registry.npmjs.org/-/npm/v1/attestations/<pkg>@<version>` lists `publish` and
-`provenance` for each. Note that none of this is reachable by a dry run — `--provenance` sits
-inside the branch a dry run skips — so a green dry run says nothing about it either way.
+**Exercised on 2026-08-10, on the token path.** Both packages carry attestations for `0.1.0-rc.1`
+and `0.1.0`; `https://registry.npmjs.org/-/npm/v1/attestations/<pkg>@<version>` lists `publish` and
+`provenance` for each. Attestation minting has not been observed on the trusted-publishing path —
+it happens inside the branch a dry run skips, so a green dry run says nothing about it either way.
 
 ## Tag scheme
 

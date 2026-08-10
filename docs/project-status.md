@@ -75,14 +75,19 @@ by hand was expensive enough that the projects could never catch up.
 What is genuinely unfinished is the release path, not the library:
 
 - The repository **went public on 2026-08-10**, which also enabled npm provenance — it had been
-  switched off only because npm requires a public source repository. `release.yml` publishes with
-  `--provenance` and asks for `id-token: write`.
+  switched off only because npm requires a public source repository. `release.yml` asks for
+  `id-token: write`; the `--provenance` flag is gone, because trusted publishing mints the
+  attestation on its own.
 - **Branch protection is still not set** (`main` is `protected: false`); it needs repository-admin
   rights. The shared-block check needs no secret, so nothing else is waiting on one.
-- `NPM_TOKEN` is set. It must be created with npm's **Bypass two-factor authentication (2FA)**
-  checkbox ticked — without it every publish fails with `EOTP`. It expires 90 days from
-  2026-08-10; the intent is to remove it before then by moving to npm trusted publishing, which
-  cannot be configured until a package exists (npm/cli#8544) and therefore had to wait for 0.1.0.
+- **The workflow moved to npm trusted publishing on 2026-08-10** and carries no token. Trusted
+  publishers are registered for both packages (repository + `release.yml`, no environment). That
+  could not have been done before `0.1.0` existed (npm/cli#8544).
+- **`NPM_TOKEN` is still set, deliberately.** No release has gone out through OIDC yet, and neither
+  a dry run nor a re-push of `v0.1.0` can produce one — dry runs stop before `npm publish`, and the
+  publish step skips a version already on the registry. **The next version bump is the first real
+  test; keep the secret until it passes.** The token expires 90 days from 2026-08-10, so if no
+  release has happened by then, decide consciously whether to renew it or drop the rollback.
 - The Geolonia host is unreachable from a network-restricted environment, so the dataset cannot be
   built locally. The `Refresh address data and coverage` workflow is the way to touch real data.
 
@@ -130,8 +135,6 @@ gh api -X PUT repos/tomatomerde/jp-address-romaji/branches/main/protection --inp
 }
 JSON
 
-gh secret set NPM_TOKEN --repo tomatomerde/jp-address-romaji
-
 # DEV_STANDARDS_TOKEN is obsolete — delete it if it is still there.
 gh secret delete DEV_STANDARDS_TOKEN --repo tomatomerde/jp-address-romaji
 ```
@@ -144,9 +147,16 @@ change rather than a `--force`.
 The visibility change has already been made, so the first command above is a no-op today; it is
 kept because the ordering it encodes still matters if the repository is ever recreated.
 
-`NPM_TOKEN` must be an **Automation** token; the classic token types that require a one-time
-password cannot publish from CI. Without it the release workflow fails with an explicit message
-naming the secret rather than an opaque npm 401.
+`NPM_TOKEN` is no longer part of setup — the workflow authenticates through trusted publishing, so
+a fresh clone of this repository needs no npm secret at all. What it needs instead is a **trusted
+publisher registered on npmjs.com for each package**: publisher *GitHub Actions*, this repository,
+workflow filename `release.yml`, environment name left empty. `docs/releasing.md` has the table.
+
+The advice this paragraph used to give — "`NPM_TOKEN` must be an **Automation** token" — was wrong
+and is retracted. npm has merged classic and granular token creation into one form; there is no
+Automation type to pick. The field that decides whether a token can publish from CI is the **Bypass
+two-factor authentication (2FA)** checkbox, and regenerating an existing token does not change it.
+That only matters now for the rollback token.
 
 `DEV_STANDARDS_TOKEN` is **no longer used** and should be deleted. It existed so a per-repository
 job could read the private template; the shared block is now verified against a hash committed
@@ -221,6 +231,19 @@ Verified from outside the workflow afterwards, against the registry rather than 
   the `0.1.0` section — the whole-field CHANGELOG matcher doing its job
 - `npm view <pkg> dist-tags` — this is where two assumptions broke; see the CHANGELOG's
   `0.1.0-rc.1` entry and *Release candidates* in `releasing.md`
+
+**A third dry run followed the switch to trusted publishing** (run
+[31402994984](https://github.com/tomatomerde/jp-address-romaji/actions/runs/31402994984),
+2026-08-10, on the merge commit). Green end to end. What it actually proves is narrow but was the
+point of running it: the `Ensure npm supports trusted publishing` guard works on a real runner. It
+measured **npm 10.9.8** from `setup-node` — below trusted publishing's 11.5.1 floor — and 12.0.2
+after the upgrade. Without that step the pipeline would have reached `npm publish` and failed with
+an authentication error that names no version.
+
+**Still not verified: an OIDC publish.** Both publish steps printed `… is already on npm; skipping.`,
+which is also the answer to "can we just re-push `v0.1.0` to test it" — no. Dry runs stop before
+`npm publish`; the registry check stops a re-push. The first real exercise is the next version bump.
+`NPM_TOKEN` stays until then.
 
 **Still not verified: the `data-v*` and `core-v*` scoped tag shapes.** Only `v*` has been used. The
 scoped paths are exercised by the same `Determine release plan` step, but the combination of a
