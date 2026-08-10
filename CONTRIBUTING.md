@@ -74,6 +74,18 @@ trying to build the dataset locally — it runs on a GitHub-hosted runner with n
 and its logs and step summary show the result. Do not commit `packages/data/data/` — it's generated
 output, gitignored, and rebuilt at release time; a PR that adds it will not be merged.
 
+### Why there is a separate `tsconfig.tests.json`
+
+Do not delete it, and do not drop it from `pnpm typecheck`. It is the only thing type-checking the
+test files, `scripts/`, and `vitest.config.ts` — the per-package tsconfigs cover `src/` alone.
+
+Without it those files get no `tsc` run at all, and **lint does not cover for it**:
+`typescript-eslint`'s recommended preset turns off `no-undef`, which is correct when `tsc` is
+backing it up and silently fatal when it is not. That combination once left a whole tier of files
+unchecked; deliberately injected type errors passed `lint`, `typecheck`, and `test` alike. Removing
+this config, or narrowing the root `typecheck` script, reopens exactly that hole — and it reopens it
+invisibly, because everything still goes green.
+
 ## Adding or changing tests
 
 If you add a test for a bug fix or a new behavior, check that it actually exercises the code path:
