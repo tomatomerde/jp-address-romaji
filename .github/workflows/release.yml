@@ -514,6 +514,18 @@ jobs:
           fi
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$HOME/.npmrc"
 
+          # Confirm the token authenticates at all before the publish steps.
+          # This catches a revoked, expired or mistyped token, which would
+          # otherwise surface as a bare 401 from `npm publish`. It does NOT
+          # catch a token of the wrong *type* — a classic "Publish" token
+          # passes `whoami` and then fails at publish with EOTP, which the
+          # publish steps below explain.
+          if ! whoami_out=$(npm whoami 2>&1); then
+            echo "::error::NPM_TOKEN is set but npm rejected it: ${whoami_out}. Regenerate the token and update the secret — see docs/releasing.md 'One-time setup'." >&2
+            exit 1
+          fi
+          echo "Authenticated to npm as ${whoami_out}."
+
       # `npm view <pkg>@<version>` exits non-zero both when the package name
       # doesn't exist at all and when it exists but that version doesn't
       # (verified against the registry: both cases give exit 1) — either way
@@ -537,7 +549,8 @@ jobs:
           elif [ "$DRY_RUN" = "true" ]; then
             echo "[dry run] would publish jp-address-romaji-data@$version --tag $dist_tag"
           else
-            npm publish --provenance --tag "$dist_tag" "$RUNNER_TEMP/tarballs/jp-address-romaji-data-$version.tgz"
+            ./scripts/npm-publish.sh "jp-address-romaji-data" "$dist_tag" \
+              "$RUNNER_TEMP/tarballs/jp-address-romaji-data-$version.tgz"
           fi
 
       - name: Publish jp-address-romaji
@@ -551,7 +564,8 @@ jobs:
           elif [ "$DRY_RUN" = "true" ]; then
             echo "[dry run] would publish jp-address-romaji@$version --tag $dist_tag"
           else
-            npm publish --provenance --tag "$dist_tag" "$RUNNER_TEMP/tarballs/jp-address-romaji-$version.tgz"
+            ./scripts/npm-publish.sh "jp-address-romaji" "$dist_tag" \
+              "$RUNNER_TEMP/tarballs/jp-address-romaji-$version.tgz"
           fi
 
       - name: Remove npm auth
