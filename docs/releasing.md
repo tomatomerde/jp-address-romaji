@@ -37,15 +37,28 @@ The workflow authenticates to npm with a token stored as a GitHub Actions secret
    Equivalently, via the web UI: repo → **Settings → Secrets and variables → Actions → New
    repository secret**, name `NPM_TOKEN`.
 
-3. Nothing else is needed. The workflow's own `permissions:` block already grants it what it needs
-   to create a GitHub Release (`contents: write`); it does not use OIDC/provenance (see below).
+3. Nothing else is needed. The workflow's own `permissions:` block already grants it what it needs:
+   `contents: write` to create a GitHub Release, and `id-token: write` for provenance (below).
 
-npm provenance (`--provenance`) is **not** used, for two independent reasons, either of which alone
-would be enough: `pnpm publish` 9.15.0 has no `--provenance` flag at all, and npm's provenance
-feature requires a public source repository, which this one currently is not. If the repository goes
-public, switching the publish step to plain `npm publish --provenance` and adding
-`permissions: id-token: write` is what re-enables it — noted inline in `release.yml` where the
-decision is made.
+npm provenance (`--provenance`) **is** used. It was off while the repository was private — npm's
+provenance feature requires a public source repository — and was enabled when the repository went
+public on 2026-08-10. Two things it depends on, both easy to break without noticing:
+
+- **`repository.url` in each `package.json` must name this repository.** npm compares it against
+  the repository the workflow runs in and **fails the publish** if they disagree. Both packages
+  point at `git+https://github.com/tomatomerde/jp-address-romaji.git`.
+- **The publish command must be `npm`, not `pnpm publish`** — pnpm 9.15.0 has no `--provenance`
+  flag. The workflow already publishes packed tarballs with `npm publish`, so this is only a
+  constraint on future edits.
+
+Authentication is still `NPM_TOKEN`, not npm's tokenless "trusted publishing" OIDC flow. That flow
+needs a trusted publisher configured on npm per package, which cannot be done before the package
+exists; worth revisiting once 0.1.0 is on the registry. Provenance does not depend on it.
+
+**Not yet exercised:** provenance only runs on a real publish, and `--provenance` is inside the
+`else` branch that a dry run skips. The 2026-08-10 dry run proved everything up to and including
+packing; the provenance attestation itself is first tested by the first real publish. If it fails
+there, it fails loudly at `npm publish` — it does not publish an unattested package silently.
 
 ## Tag scheme
 

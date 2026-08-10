@@ -49,11 +49,13 @@ on:
         type: string
         default: '8'
 
-# contents: write is for the GitHub Release created on a tag push. Nothing
-# else here needs elevated permissions: no npm provenance (see the publish
-# step for why), no other write access.
+# contents: write is for the GitHub Release created on a tag push.
+# id-token: write is what lets npm mint a provenance attestation for the
+# published tarballs (see the publish step). Nothing else here needs
+# elevated permissions.
 permissions:
   contents: write
+  id-token: write
 
 # One release at a time, full stop. A second run queued behind this one
 # waits rather than running in parallel — two overlapping runs could both
@@ -435,13 +437,25 @@ jobs:
       # DATA_NOT_CONFIGURED without a dataset, so there's no reason to ship
       # core against a data version that doesn't exist on the registry yet.
       #
-      # provenance: not used. `pnpm publish` 9.15.0 has no --provenance flag
-      # (checked: absent from `pnpm publish --help`), and npm provenance
-      # additionally expects a public source repository — this one is
-      # currently private. If the repo goes public, switch the publish
-      # commands below to `npm publish --provenance <tarball>`, add
-      # `id-token: write` to `permissions`, and drop the manual .npmrc step
-      # in favor of npm's own OIDC flow.
+      # provenance: enabled. It was off while the repository was private —
+      # npm's provenance feature requires a public source repository — and
+      # was turned on when the repository went public on 2026-08-10. Both
+      # publish commands below use `npm`, not `pnpm publish` (9.15.0 has no
+      # --provenance flag at all), and the job asks for `id-token: write`
+      # above so npm can exchange an OIDC token for a Sigstore attestation.
+      #
+      # npm cross-checks the manifest's `repository.url` against the
+      # repository the workflow is running in and refuses to publish if they
+      # disagree. Both packages point at
+      # git+https://github.com/tomatomerde/jp-address-romaji.git, which is
+      # this repository — keep it that way, or provenance starts failing the
+      # release rather than silently degrading.
+      #
+      # Authentication is still the NPM_TOKEN .npmrc below, not npm's
+      # tokenless OIDC ("trusted publishing") flow. That flow needs a
+      # trusted publisher configured on the npm side per package, which
+      # cannot be done before the package exists. Worth revisiting after
+      # 0.1.0 is on the registry; provenance itself does not depend on it.
       #
       # .npmrc is written only when this run could actually publish
       # (DRY_RUN != 'true'). Writing it unconditionally — including during a
@@ -478,7 +492,7 @@ jobs:
           elif [ "$DRY_RUN" = "true" ]; then
             echo "[dry run] would publish jp-address-romaji-data@$version"
           else
-            npm publish "$RUNNER_TEMP/tarballs/jp-address-romaji-data-$version.tgz"
+            npm publish --provenance "$RUNNER_TEMP/tarballs/jp-address-romaji-data-$version.tgz"
           fi
 
       - name: Publish jp-address-romaji
@@ -491,7 +505,7 @@ jobs:
           elif [ "$DRY_RUN" = "true" ]; then
             echo "[dry run] would publish jp-address-romaji@$version"
           else
-            npm publish "$RUNNER_TEMP/tarballs/jp-address-romaji-$version.tgz"
+            npm publish --provenance "$RUNNER_TEMP/tarballs/jp-address-romaji-$version.tgz"
           fi
 
       - name: Remove npm auth
