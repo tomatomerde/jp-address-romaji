@@ -160,15 +160,21 @@ jobs:
             echo "- Trigger: \`${{ github.event_name }}\`"
             echo "- dry_run: \`$DRY_RUN\`"
           } >> "$GITHUB_STEP_SUMMARY"
+          # The dist-tag is shown here because it is the one field whose
+          # wrong value is silent and public: an rc landing on `latest`
+          # looks like a successful release right up until someone runs
+          # `npm install`.
           if [ "$PUBLISH_DATA" = "true" ]; then
             v=$(node -p "require('./packages/data/package.json').version")
-            echo "Will publish jp-address-romaji-data @ $v"
-            echo "- jp-address-romaji-data: \`$v\`" >> "$GITHUB_STEP_SUMMARY"
+            case "$v" in *-*) t=next ;; *) t=latest ;; esac
+            echo "Will publish jp-address-romaji-data @ $v (dist-tag: $t)"
+            echo "- jp-address-romaji-data: \`$v\` → dist-tag \`$t\`" >> "$GITHUB_STEP_SUMMARY"
           fi
           if [ "$PUBLISH_CORE" = "true" ]; then
             v=$(node -p "require('./packages/core/package.json').version")
-            echo "Will publish jp-address-romaji @ $v"
-            echo "- jp-address-romaji: \`$v\`" >> "$GITHUB_STEP_SUMMARY"
+            case "$v" in *-*) t=next ;; *) t=latest ;; esac
+            echo "Will publish jp-address-romaji @ $v (dist-tag: $t)"
+            echo "- jp-address-romaji: \`$v\` → dist-tag \`$t\`" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       # -----------------------------------------------------------------
@@ -223,10 +229,16 @@ jobs:
         if: env.CHECK_VERSION == 'true'
         shell: bash
         run: |
+          # Match the version as a whole field, not as a line prefix. A
+          # prefix match makes "## 0.1.0" also match "## 0.1.0-rc.1 — …",
+          # so once a prerelease section exists the real release binds to
+          # the wrong section — and because both headings match, the
+          # `exit` rule never fires and the "section" becomes the rest of
+          # the file. Verified against a fixture with rc.1, 0.1.0 and
+          # 0.0.9 sections: each version now selects only its own.
           heading="## $EXPECTED_VERSION"
-          section=$(awk -v heading="$heading" '
-            index($0, heading) == 1 { found=1; print; next }
-            found && /^## / { exit }
+          section=$(awk -v want="$EXPECTED_VERSION" '
+            /^## / { if ($2 == want) { found=1; print; next } else if (found) exit }
             found { print }
           ' CHANGELOG.md)
 
@@ -506,17 +518,26 @@ jobs:
       # doesn't exist at all and when it exists but that version doesn't
       # (verified against the registry: both cases give exit 1) — either way
       # "not yet published" and safe to proceed.
+      #
+      # --tag is not optional here. `npm publish` with no --tag always moves
+      # the `latest` dist-tag, including for semver prereleases — npm does
+      # not special-case them. Publishing 0.1.0-rc.1 without this would make
+      # `npm install jp-address-romaji` hand everyone the release candidate,
+      # and the only repair is publishing a real version afterwards. A
+      # version containing `-` is a prerelease and goes to `next`; anything
+      # else goes to `latest`. Keep both publish steps in agreement.
       - name: Publish jp-address-romaji-data
         if: env.PUBLISH_DATA == 'true'
         shell: bash
         run: |
           version=$(node -p "require('./packages/data/package.json').version")
+          case "$version" in *-*) dist_tag=next ;; *) dist_tag=latest ;; esac
           if npm view "jp-address-romaji-data@$version" version >/dev/null 2>&1; then
             echo "jp-address-romaji-data@$version is already on npm; skipping."
           elif [ "$DRY_RUN" = "true" ]; then
-            echo "[dry run] would publish jp-address-romaji-data@$version"
+            echo "[dry run] would publish jp-address-romaji-data@$version --tag $dist_tag"
           else
-            npm publish --provenance "$RUNNER_TEMP/tarballs/jp-address-romaji-data-$version.tgz"
+            npm publish --provenance --tag "$dist_tag" "$RUNNER_TEMP/tarballs/jp-address-romaji-data-$version.tgz"
           fi
 
       - name: Publish jp-address-romaji
@@ -524,12 +545,13 @@ jobs:
         shell: bash
         run: |
           version=$(node -p "require('./packages/core/package.json').version")
+          case "$version" in *-*) dist_tag=next ;; *) dist_tag=latest ;; esac
           if npm view "jp-address-romaji@$version" version >/dev/null 2>&1; then
             echo "jp-address-romaji@$version is already on npm; skipping."
           elif [ "$DRY_RUN" = "true" ]; then
-            echo "[dry run] would publish jp-address-romaji@$version"
+            echo "[dry run] would publish jp-address-romaji@$version --tag $dist_tag"
           else
-            npm publish --provenance "$RUNNER_TEMP/tarballs/jp-address-romaji-$version.tgz"
+            npm publish --provenance --tag "$dist_tag" "$RUNNER_TEMP/tarballs/jp-address-romaji-$version.tgz"
           fi
 
       - name: Remove npm auth
@@ -552,9 +574,8 @@ jobs:
         if: env.CREATE_RELEASE == 'true' && env.DRY_RUN != 'true'
         shell: bash
         run: |
-          awk -v heading="## $EXPECTED_VERSION" '
-            index($0, heading) == 1 { found=1; print; next }
-            found && /^## / { exit }
+          awk -v want="$EXPECTED_VERSION" '
+            /^## / { if ($2 == want) { found=1; print; next } else if (found) exit }
             found { print }
           ' CHANGELOG.md > release-notes.md
           if [ ! -s release-notes.md ]; then

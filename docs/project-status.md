@@ -161,12 +161,22 @@ and artifacts are unaffected.
 
 ## Releasing 0.1.0
 
+**Both packages currently sit at `0.1.0-rc.1`, not `0.1.0`.** The release candidate goes out first;
+see *Releasing 0.1.0: do the release candidate first* in [`releasing.md`](./releasing.md) for why
+and for what to check on the rc run.
+
 1. **Re-run the release workflow via `workflow_dispatch` with `dry_run: true`** and read it, rather
    than assuming the last green run still applies. The first real dry run (2026-08-10) failed —
    see the SIGPIPE entry under Traps — and a dry run is cheap next to a bad publish.
-2. Replace the `## 0.1.0 — unreleased` heading in `CHANGELOG.md` with the real date. The workflow
-   refuses to publish while it still says `unreleased`.
-3. `git tag v0.1.0 && git push origin v0.1.0`.
+2. Set `NPM_TOKEN` (see the runbook above). Nothing publishes without it, dry run or not.
+3. `git tag v0.1.0-rc.1 && git push origin v0.1.0-rc.1`. This publishes under the `next` dist-tag,
+   so `npm install jp-address-romaji` is unaffected.
+4. Verify the published rc: provenance present, GitHub Release body is the rc section only,
+   `npm view jp-address-romaji dist-tags` shows `next` and **no** `latest`, and a fresh
+   `npm install jp-address-romaji@next` in a scratch directory converts an address.
+5. Only then: bump both `package.json`s to `0.1.0`, replace the `## 0.1.0 — unreleased` heading with
+   the real date, and `git tag v0.1.0 && git push origin v0.1.0`. The workflow refuses to publish
+   while the heading still says `unreleased`.
 
 ## Verified, and not
 
@@ -229,6 +239,16 @@ welcome:
 `CONTRIBUTING.md` covers the invariants that must not be broken. These are the operational ones
 that have actually cost time:
 
+- **`npm publish` moves the `latest` dist-tag even for a semver prerelease.** npm does not
+  special-case them, so `0.1.0-rc.1` published without `--tag next` becomes what everyone installs.
+  Both publish steps derive the tag from the version (`*-*` → `next`), and the run summary prints
+  it, because a wrong dist-tag looks exactly like a successful release until someone installs.
+- **CHANGELOG headings are matched on the version as a whole field, not as a line prefix.** The
+  prefix form made `## 0.1.0` match `## 0.1.0-rc.1 — …` as well; because both headings matched, the
+  "stop at the next heading" rule never fired and the extracted section ran to the end of the file.
+  Adding a prerelease section is what exposed it. Verified against a fixture with `0.1.0-rc.1`,
+  `0.1.0` and `0.0.9` sections: each version now selects only its own, and a missing version yields
+  empty so the guard still fails.
 - **GitHub Actions runs `shell: bash` with `-eo pipefail`.** `count=$(... | grep -c ...)` aborts
   the step when the count is zero — exactly the case an assertion like that exists to report.
   `|| true` on the assignment is what keeps the error message reachable. This was a real defect in
