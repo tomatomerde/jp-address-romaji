@@ -157,28 +157,45 @@ If a package name/version is already on the registry when the workflow runs — 
 re-pushing a tag after a partial failure — that package's publish step detects it via `npm view` and
 skips rather than erroring, so re-running is safe.
 
-### Releasing 0.1.0: do the release candidate first
+### Release candidates, and what they do and do not protect
 
 `npm publish` is the only step of this pipeline a dry run cannot exercise, and it is the one step
 that cannot be undone — npm keeps a published version forever, and unpublishing is limited to the
 first 72 hours with zero dependents. The same is true of the provenance attestation and the GitHub
-Release, both of which only happen on a real tag push. Attempting all three for the first time on
-the version that installs by default is the expensive way to find out something is wrong.
+Release, both of which only happen on a real tag push. That is the case for publishing a candidate
+first, and 0.1.0 was released that way on 2026-08-10.
 
-So:
+**Two things that were assumed about the rc turned out to be false, and both were only visible
+after publishing it.** Read these before deciding to spend a version on a candidate:
 
-1. Tag `v0.1.0-rc.1` with both `package.json`s at `0.1.0-rc.1`. It publishes under `next`, so
-   `npm install jp-address-romaji` is unaffected — only `@next` sees it.
-2. Read the run: provenance attached (the npm page shows a provenance section), the GitHub Release
-   created with the rc's notes and not the 0.1.0 section, both packages resolvable at
-   `npm view jp-address-romaji@next`, and `npm view jp-address-romaji dist-tags` showing **no**
-   `latest`.
-3. Install the rc from the registry in a scratch directory and run a conversion. Up to this point
-   everything has been tested from a local tarball; this is the first time the published artifact
-   is exercised.
-4. Then bump both `package.json`s to `0.1.0`, date the `## 0.1.0` heading, and tag `v0.1.0`.
+- **The first version ever published to a name becomes `latest` no matter what `--tag` says.** The
+  registry has to point `latest` somewhere, and on a brand-new package there is nothing else to
+  point at. `0.1.0-rc.1` went out with `--tag next` — the log even says
+  `Publishing … with tag next` — and `latest` still resolved to it. `latest` cannot be deleted, so
+  the only repair is publishing the real version. **For the first release of a new name, a
+  candidate protects nothing about `npm install <pkg>`; it only buys you a rehearsal.**
+- **A prerelease does not satisfy a caret range.** `jp-address-romaji`'s optional peer range on
+  `jp-address-romaji-data` was `^0.1.0`, which `0.1.0-rc.1` does not match, so the two rc packages
+  could not be installed together at all (`npm error notarget`) and the "install it and convert
+  something" check could not run. The range is `^0.1.0-0` from 0.1.0 onwards, which does admit
+  prereleases — without that, future candidates are untestable in the same way.
 
-The rc version is spent permanently, which is what rc versions are for.
+So a candidate is worth cutting when you want to rehearse the publish path, and it did earn its
+keep here: it caught the `EOTP` token problem twice and both facts above, on a version that was
+superseded hours later. It is not worth cutting if you expect it to keep a new name's `latest`
+clean, because it cannot.
+
+The sequence, when you do cut one:
+
+1. Tag `v<version>-rc.N` with both `package.json`s at that version.
+2. Read the run: provenance attached (`https://registry.npmjs.org/-/npm/v1/attestations/<pkg>@<version>`
+   lists `publish` and `provenance`), the GitHub Release created with the rc's notes and not the
+   stable section, and `npm view <pkg> dist-tags` showing what you expect — including `latest`, if
+   this is the first publish of the name.
+3. Install from the registry in a scratch directory and run a conversion. Everything before this
+   was tested from a local tarball. **Check that the packages can actually be installed together**
+   before concluding anything from this step succeeding or failing.
+4. Then bump both `package.json`s to the stable version, date its heading, and tag it.
 
 ### Manual / dispatch runs
 
