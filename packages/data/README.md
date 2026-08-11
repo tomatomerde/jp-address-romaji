@@ -1,5 +1,11 @@
 # jp-address-romaji-data
 
+[![npm](https://img.shields.io/npm/v/jp-address-romaji-data.svg)](https://www.npmjs.com/package/jp-address-romaji-data)
+[![CI](https://github.com/tomatomerde/jp-address-romaji/actions/workflows/ci.yml/badge.svg)](https://github.com/tomatomerde/jp-address-romaji/actions/workflows/ci.yml)
+[![Code: MIT](https://img.shields.io/badge/code-MIT-blue.svg)](https://github.com/tomatomerde/jp-address-romaji/blob/main/LICENSE)
+[![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-brightgreen.svg)](https://github.com/tomatomerde/jp-address-romaji#requirements)
+[![module: ESM only](https://img.shields.io/badge/module-ESM%20only-orange.svg)](https://github.com/tomatomerde/jp-address-romaji#requirements)
+
 The offline Japanese address dataset used by
 [`jp-address-romaji`](https://www.npmjs.com/package/jp-address-romaji).
 
@@ -9,6 +15,9 @@ npm install jp-address-romaji jp-address-romaji-data
 
 Installing it is all you need to do — `jp-address-romaji` finds it automatically, and every
 conversion then runs locally with no network access.
+
+**ESM only, Node.js 18+.** This package exists to be installed alongside the library, not used on
+its own; see the [library's requirements](https://github.com/tomatomerde/jp-address-romaji#requirements).
 
 ## What's in it
 
