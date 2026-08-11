@@ -276,7 +276,7 @@ the compiler makes you handle the failure case.
 | `KANA_REQUIRED_FOR_LONG_VOWELS` | A macron/circumflex/`oh` style was requested but no kana reading exists. |
 | `AMBIGUOUS` | Several Japanese addresses match. `candidates` holds them. |
 | `TOWN_NOT_FOUND` / `CITY_NOT_FOUND` / `PREFECTURE_NOT_FOUND` | Resolution stopped at that level. `partial` holds what was resolved. |
-| `KYOTO_STREET_ADDRESS` | The street phrase was understood but the town after it is not in the dataset (see below). |
+| `KYOTO_STREET_ADDRESS` | The street phrase was understood but the town after it is not in the dataset (see [Kyoto street-name addresses](#kyoto-street-name-addresses)). |
 | `DATA_NOT_CONFIGURED` | No dataset installed or configured. |
 | `EMPTY_INPUT` | No recognizable address in the input. |
 

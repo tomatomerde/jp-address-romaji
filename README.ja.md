@@ -269,7 +269,7 @@ toFormat(parsed, 'stripe');
 | `KANA_REQUIRED_FOR_LONG_VOWELS` | 長音表記を要求されたがカナ読みが無い。 |
 | `AMBIGUOUS` | 複数の日本語住所が該当。`candidates` に格納。 |
 | `TOWN_NOT_FOUND` / `CITY_NOT_FOUND` / `PREFECTURE_NOT_FOUND` | その階層で解決が止まった。`partial` に判明分を格納。 |
-| `KYOTO_STREET_ADDRESS` | 通り名は認識できたが、後続の町字がデータに無い（下記）。 |
+| `KYOTO_STREET_ADDRESS` | 通り名は認識できたが、後続の町字がデータに無い（[京都市の通り名住所](#京都市の通り名住所)）。 |
 | `DATA_NOT_CONFIGURED` | データセット未導入・未設定。 |
 | `EMPTY_INPUT` | 住所として認識できる内容が無い。 |
 
