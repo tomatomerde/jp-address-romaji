@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The README's coverage paragraph called coverage "effectively uniform" while
+  quoting a 15-point spread in the same sentence, and claimed every prefecture
+  was at 100% on chome entries. Re-measured against the committed
+  `docs/coverage.md`: 21 of the 47 prefectures are at 99.9% or better, 6 are
+  below 95% and 2 below 90%, and Hokkaido is at 99.96% on chome entries rather
+  than 100.00%. Both statements are now the measured ones.
+- The `fromRomaji` API heading omitted the options parameter that its own
+  example twenty lines below passes (`postalCodeIndex`). The signature in the
+  source is `fromRomaji(romajiAddress, options?)`.
+- `pnpm coverage:measure` was presented as something a reader could run
+  against "your dataset version". It is a repository script, not part of the
+  published package, and needs a clone plus a built dataset.
+
+### Changed
+
+- `packages/core/README.md` — the page npm actually shows — carried no badges
+  and never said the package is ESM-only, so the compatibility wall that the
+  repository README puts next to its install command was missing from the
+  surface most readers see first. It now has a Requirements section covering
+  ESM-only, Node 18+/Node-only, the separate data package, and the 0.x
+  maintenance posture, plus the "what it does not guarantee" paragraph.
+  `packages/data/README.md` gained the same badges and a pointer.
+- Both repository READMEs reordered so that requirements, coverage, the
+  unsupported cases and the disclaimer come *before* the API reference.
+- Added `scripts/assert-npm-version.sh` and a second npm-version assertion
+  immediately before publishing, matching the sibling repositories. Nothing
+  in this workflow re-runs `actions/setup-node` today, so it is a guard
+  against that changing rather than a fix for a live defect.
+
 ## 0.1.0 — 2026-08-10
 
 First release.
