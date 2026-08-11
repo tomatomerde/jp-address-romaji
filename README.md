@@ -148,10 +148,12 @@ and refuses rather than emitting a wrong address, so they surface as failures:
   implausibly long for the name it reads, we cannot trust it, and the address becomes unreachable
   in both directions: `toRomaji` returns `CORRUPT_ROMAJI_DATA` and `fromRomaji` will not offer it
   as a candidate. This is rare in the current dataset.
-- **Short forms of a town name can be ambiguous.** 1.23% of town romanizations match more than one
-  distinct town within the same municipality — Hakodate has both `昭和町` and `昭和一丁目`, so
-  `"Showa"` matches both. Writing the full name (`"Showa-cho"`) resolves it, and this library's own
-  output always does. Typed short forms return `AMBIGUOUS` with the candidates.
+- **Short forms of a town name can be ambiguous.** Measured on the shipped dataset with the
+  matcher's own key functions (`scripts/measure-ambiguity.ts`): 1.10% of the romanization keys
+  `fromRomaji` indexes (2,778 of 252,587) match more than one distinct town within the same
+  municipality — Hakodate has both `昭和町` and `昭和`, so `"Showa"` matches both. Writing the
+  full name (`"Showa-cho"`) resolves roughly half of those cases, and this library's own output
+  always writes the full name. Typed short forms return `AMBIGUOUS` with the candidates.
 
 ## Status and disclaimer
 
@@ -201,7 +203,7 @@ cannot be recovered from it. If a name has no kana reading, those styles fail wi
 ### `fromRomaji(romajiAddress, options?)`
 
 Resolution is strictly outside-in — prefecture, then municipality, then town — because a town's
-romanization is unique within a known municipality 99.05% of the time but far less so nationally,
+romanization key is unique within a known municipality 98.9% of the time but far less so nationally,
 and 13 municipality names collide across prefectures (`Date-shi` is both 北海道伊達市 and 福島県伊達市).
 
 When more than one Japanese address matches, it returns `AMBIGUOUS` **with the candidates**, and
@@ -227,10 +229,11 @@ await fromRomaji('1-1 Ebisucho, Nakagyo-ku, Kyoto-shi, Kyoto 604-8081', {
 // → { ok: true, … town: 夷町 }
 ```
 
-No postal dataset is bundled. Genuine ambiguity is 0.95% of town romanizations, and most of it
-disappears when the full town name is written, so shipping Japan Post's `KEN_ALL` — a second data
-source with its own licence and update cadence — is not justified by what it would buy. The hook
-lets you use postal data you already have.
+No postal dataset is bundled. The ambiguity that even a full town name cannot resolve is 0.69%
+of full-form romanization keys (1,404 of 204,671, involving 2,620 towns nationally — measured by
+`scripts/measure-ambiguity.ts` on the shipped dataset), so shipping Japan Post's `KEN_ALL` — a
+second data source with its own licence and update cadence — is not justified by what it would
+buy. The hook lets you use postal data you already have.
 
 A code that fails to single out one town leaves the result `AMBIGUOUS`. The candidates are never
 narrowed to a guess.

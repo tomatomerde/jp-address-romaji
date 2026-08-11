@@ -278,31 +278,24 @@ changing rather than a fix for a live defect — the sibling workflows, which do
 smoke test on the oldest supported runtime, are where it earns its keep. The script was checked on
 both sides of the 11.5.1 boundary with a stub `npm` (11.5.0 fails, 11.5.1 passes).
 
-## Unresolved: the two ambiguity figures disagree
+## Resolved (2026-08-11): the two ambiguity figures disagreed, and both were stale
 
-**Two numbers in this repository describe the same quantity and do not match.** Both are worded as
-"the share of town romanizations that match more than one distinct town within the same
-municipality":
+The README used to quote 0.95% and 1.23% for the same quantity. Neither could be traced to a
+method, and neither reproduces against the shipped dataset with the shipping matcher. Settled by
+downloading `jp-address-romaji-data@0.1.0` from the npm registry and measuring with the matcher's
+own key functions — `scripts/measure-ambiguity.ts`, added for exactly this, so the numbers are
+reproducible instead of archaeological:
 
-| Figure | Where | Introduced by |
-| --- | --- | --- |
-| **1.23%** | `README.md` / `README.ja.md`, "Known dataset defects" | `8fc5908` "Fix two defects the real v2 dataset exposed; rewrite the coverage story" |
-| **0.95%** | `README.md` / `README.ja.md` (postal-code section), `packages/core/src/fromRomaji.ts` JSDoc, `CLAUDE.md` | `c213b13` "Support Kyoto street addresses, add publish tooling and a postal-code hook" |
+- **1.10%** of the romanization keys `fromRomaji` indexes (2,778/252,587, full forms plus stemmed
+  short forms) map to ≥2 distinct towns in one municipality; 4,869 towns (3.74%) are involved.
+- **0.69%** of full-form keys (1,404/204,671; 2,620 towns) — the residue a full town name cannot
+  resolve, which is the figure the KEN_ALL trade-off actually rests on.
 
-`c213b13` is the later commit, but its message says only "measured ambiguity is 0.95%" without
-recording what it was measured against — while `8fc5908` is explicitly the commit that recomputed
-everything for the v2 dataset (638,567 entries, up from v1's 277,656). So "newer wins" and "measured
-on the shipped data" point at *different* numbers, and neither can be settled by reading.
-
-**This was left alone rather than guessed at.** Picking one and deleting the other is a coin flip
-dressed up as a fix, and the 0.95% figure is load-bearing: it is the stated reason for not bundling
-Japan Post's `KEN_ALL`.
-
-Settling it needs a real dataset, which this development environment cannot reach. Dispatch
-**`Refresh address data and coverage`**, then compute the figure both ways over
-`packages/data/data` — per distinct romanization string and per town entry — since the most likely
-explanation is that the two were measured over different denominators. Whichever way it lands,
-update all five sites together.
+A method matrix (dedupe by name/record × plausibility filter on/off × vowel styles × stems) was
+run to see whether any variant reproduces the historical 0.95/1.23; none does — the closest are
+0.91% and 1.40%, so both old figures belonged to earlier versions of the key logic. The
+transcription risk is closed structurally: `candidateKeys`/`stemKey` are exported from
+`fromRomaji.ts` and the script imports them rather than copying them.
 
 ## Known gaps
 
