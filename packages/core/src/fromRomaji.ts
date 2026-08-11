@@ -32,9 +32,11 @@ export interface FromRomajiOptions {
    * Resolve a postal code to the town names (in Japanese) it covers, so that
    * an otherwise ambiguous romanization can be narrowed to one.
    *
-   * Genuine ambiguity is rare — 0.95% of town romanizations match more than one
-   * distinct town in the same municipality — and much of it disappears when the
-   * caller writes the full town name. Bundling Japan Post's KEN_ALL to close
+   * Genuine ambiguity is rare — 0.69% of full-form romanization keys match more
+   * than one distinct town in the same municipality (1.10% once the indexed
+   * short forms are included; measured by scripts/measure-ambiguity.ts on the
+   * shipped dataset) — and roughly half of the indexed collisions disappear
+   * when the caller writes the full town name. Bundling Japan Post's KEN_ALL to close
    * that last fraction would add a second data source with its own licence and
    * update cadence, so this package does not ship one. This hook lets you plug
    * in whatever postal data you already have:
@@ -67,8 +69,15 @@ function fail(reason: Failure['reason'], message: string, partial?: Partial<Pars
 /** Administrative suffixes as they appear in romanized input. */
 const SUFFIX_PATTERN = /[-\s]?(shi|ku|cho|chou|machi|mura|son|gun|city|ward)$/i;
 
-/** Strip the administrative suffix so `Shibuya-ku` matches `渋谷区`. */
-function stemKey(token: string): string {
+/**
+ * Strip the administrative suffix so `Shibuya-ku` matches `渋谷区`.
+ *
+ * Exported (along with {@link candidateKeys}) for scripts/measure-ambiguity.ts,
+ * so the published ambiguity figures are measured with the exact functions the
+ * matcher runs — not a transcription that can drift. Not part of the public
+ * API: index.ts does not re-export it.
+ */
+export function stemKey(token: string): string {
   return normalizeRomajiKey(token.replace(SUFFIX_PATTERN, ''));
 }
 
@@ -79,7 +88,7 @@ function stemKey(token: string): string {
  * is never transliterated, since inferring a reading from kanji is exactly the
  * guess this library refuses to make.
  */
-function candidateKeys(kana?: string, romajiField?: string): Set<string> {
+export function candidateKeys(kana?: string, romajiField?: string): Set<string> {
   const keys = new Set<string>();
   const add = (v: string | undefined) => {
     if (!v) return;

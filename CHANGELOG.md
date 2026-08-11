@@ -4,6 +4,15 @@
 
 ### Fixed
 
+- The two conflicting ambiguity figures (0.95% and 1.23%) are both gone: neither reproduced
+  against the shipped dataset with the shipping matcher, and a method matrix found no variant
+  that yields them — they belonged to earlier versions of the key logic. All sites now quote
+  values measured by the new `scripts/measure-ambiguity.ts` on `jp-address-romaji-data@0.1.0`,
+  using the matcher's own exported `candidateKeys`: 1.10% of indexed romanization keys collide
+  within a municipality (2,778/252,587; 4,869 towns), 0.69% of full-form keys (1,404/204,671;
+  2,620 towns). The KEN_ALL trade-off in the README and CLAUDE.md now cites the 0.69% figure,
+  and "unique within a known municipality" is 98.9%, not 99.05%.
+
 - The README's coverage paragraph called coverage "effectively uniform" while
   quoting a 15-point spread in the same sentence, and claimed every prefecture
   was at 100% on chome entries. Re-measured against the committed

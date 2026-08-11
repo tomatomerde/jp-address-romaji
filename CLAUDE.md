@@ -55,7 +55,8 @@ Node.js 18+; browser use requires supplying data through an endpoint you host yo
   `order: 'japanese'` is for display; feeding it back in is rejected with `PREFECTURE_NOT_FOUND`.
 - **No bundled postal-code dataset.** `postalCodeIndex` is a hook for the caller's own data; Japan
   Post's `KEN_ALL` is not shipped (a second data source with its own licence and update cadence
-  wasn't justified by the 0.95% of genuine ambiguity it would resolve).
+  wasn't justified by the 0.69% of full-form-key ambiguity it would resolve — measured by
+  `scripts/measure-ambiguity.ts`).
 - **Browser use without a hosted data endpoint.** The default configuration reads the dataset from
   the filesystem, so it is Node-only out of the box.
 
