@@ -96,24 +96,7 @@ jobs:
         shell: bash
         run: |
           npm install -g npm@latest
-          v=$(npm --version)
-          echo "npm $v"
-          node -e '
-            const [have] = process.argv.slice(1);
-            const need = "11.5.1";
-            const cmp = (a, b) => {
-              const pa = a.split("-")[0].split(".").map(Number);
-              const pb = b.split("-")[0].split(".").map(Number);
-              for (let i = 0; i < 3; i++) {
-                if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
-              }
-              return 0;
-            };
-            if (cmp(have, need) < 0) {
-              console.error(`::error::npm ${have} is too old for trusted publishing; ${need} or later is required. The workflow upgrades npm globally, so this means that upgrade did not take effect.`);
-              process.exit(1);
-            }
-          ' "$v"
+          ./scripts/assert-npm-version.sh "after install"
 
       # -----------------------------------------------------------------
       # Plan: work out, once, what this run is trying to do, so every later
@@ -497,6 +480,18 @@ jobs:
             node --input-type=module -e \
               "import('./packages/data/dist/index.js').then(m => console.log('data exports:', Object.keys(m)))"
           fi
+
+      # Nothing between the npm upgrade near the top of this job and here
+      # re-runs setup-node today, so this should be a no-op — but it is the
+      # cheapest possible guard against that changing. In the sibling
+      # repositories, where a smoke test on the oldest supported runtime does
+      # re-run setup-node, the tool cache can put the Node-bundled npm (10.9.x,
+      # below trusted publishing's 11.5.1 floor) back on PATH. The resulting
+      # failure is an authentication error at `npm publish` that names no
+      # version, so all three repositories assert in the same two places.
+      - name: Re-assert npm version immediately before publishing
+        shell: bash
+        run: ./scripts/assert-npm-version.sh "immediately before publish"
 
       # `npm view <pkg>@<version>` exits non-zero both when the package name
       # doesn't exist at all and when it exists but that version doesn't

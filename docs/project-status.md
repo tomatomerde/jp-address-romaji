@@ -262,9 +262,47 @@ which is also the answer to "can we just re-push `v0.1.0` to test it" — no. Dr
 `npm publish`; the registry check stops a re-push. The first real exercise is the next version bump.
 `NPM_TOKEN` stays until then.
 
-**Still not verified: the `data-v*` and `core-v*` scoped tag shapes.** Only `v*` has been used. The
-scoped paths are exercised by the same `Determine release plan` step, but the combination of a
-scoped tag with the version guard checking only one package has never run.
+**The scoped tag shapes were exercised locally on 2026-08-11, short of the registry.** The
+`Determine release plan`, `Verify tag matches package versions` and CHANGELOG-guard blocks were
+extracted from `release.yml` with `yq` and run verbatim against this working tree for seven tags:
+`v0.1.0`, `data-v0.1.0` and `core-v0.1.0` select the right scope and pass; `data-v0.2.0` and
+`core-v0.1.1` fail on the version guard naming only the package the tag selects; `vgarbage` and
+`data-vX` are rejected as unrecognized shapes. What that does **not** cover is the rest of a
+`data-v*` run — packing, the tarball assertions, and a publish where only one of the two packages
+moves. Those still wait for a real scoped release.
+
+**A second npm-version assertion now runs immediately before publishing**
+(`scripts/assert-npm-version.sh`, shared byte-identically with the sibling repositories). This
+workflow does not re-run `actions/setup-node` after the upgrade, so it is a guard against that
+changing rather than a fix for a live defect — the sibling workflows, which do switch Node for a
+smoke test on the oldest supported runtime, are where it earns its keep. The script was checked on
+both sides of the 11.5.1 boundary with a stub `npm` (11.5.0 fails, 11.5.1 passes).
+
+## Unresolved: the two ambiguity figures disagree
+
+**Two numbers in this repository describe the same quantity and do not match.** Both are worded as
+"the share of town romanizations that match more than one distinct town within the same
+municipality":
+
+| Figure | Where | Introduced by |
+| --- | --- | --- |
+| **1.23%** | `README.md` / `README.ja.md`, "Known dataset defects" | `8fc5908` "Fix two defects the real v2 dataset exposed; rewrite the coverage story" |
+| **0.95%** | `README.md` / `README.ja.md` (postal-code section), `packages/core/src/fromRomaji.ts` JSDoc, `CLAUDE.md` | `c213b13` "Support Kyoto street addresses, add publish tooling and a postal-code hook" |
+
+`c213b13` is the later commit, but its message says only "measured ambiguity is 0.95%" without
+recording what it was measured against — while `8fc5908` is explicitly the commit that recomputed
+everything for the v2 dataset (638,567 entries, up from v1's 277,656). So "newer wins" and "measured
+on the shipped data" point at *different* numbers, and neither can be settled by reading.
+
+**This was left alone rather than guessed at.** Picking one and deleting the other is a coin flip
+dressed up as a fix, and the 0.95% figure is load-bearing: it is the stated reason for not bundling
+Japan Post's `KEN_ALL`.
+
+Settling it needs a real dataset, which this development environment cannot reach. Dispatch
+**`Refresh address data and coverage`**, then compute the figure both ways over
+`packages/data/data` — per distinct romanization string and per town entry — since the most likely
+explanation is that the two were measured over different denominators. Whichever way it lands,
+update all five sites together.
 
 ## Known gaps
 

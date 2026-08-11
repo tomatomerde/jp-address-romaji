@@ -1,9 +1,11 @@
 # jp-address-romaji
 
+[![npm](https://img.shields.io/npm/v/jp-address-romaji.svg)](https://www.npmjs.com/package/jp-address-romaji)
 [![CI](https://github.com/tomatomerde/jp-address-romaji/actions/workflows/ci.yml/badge.svg)](https://github.com/tomatomerde/jp-address-romaji/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-brightgreen.svg)](#requirements)
 [![ESM only](https://img.shields.io/badge/module-ESM%20only-orange.svg)](#requirements)
+[![no network at runtime](https://img.shields.io/badge/network%20at%20runtime-none-brightgreen.svg)](#requirements)
 
 **English** | [日本語](./README.ja.md)
 
@@ -66,6 +68,107 @@ npx jp-address-romaji-data build --out ./address-data
 
 That download contacts Geolonia once. Converting addresses never does.
 
+## Requirements
+
+Node.js 18+. The offline dataset is read from the filesystem, so the default configuration is
+Node-only; browser use requires supplying data through an endpoint you host.
+
+**ESM only, no CommonJS build.** Both packages ship `"type": "module"` with a single ESM entry
+point — there is no `require()`-compatible `dist/*.cjs`, and none is planned. Use `import` (or
+dynamic `import()` from CommonJS code); `require('jp-address-romaji')` fails with `ERR_REQUIRE_ESM`.
+
+## Coverage
+
+Measured over all 638,567 town-level records of the shipped dataset:
+
+| Segment | Entries | Usable |
+| --- | ---: | ---: |
+| **Chome-bearing (urban, 住居表示)** | 92,971 | **99.99%** |
+| **`大字`-prefixed (rural)** | 61,330 | **99.96%** |
+| National | 638,567 | **99.55%** |
+
+Coverage is **not** uniform across prefectures, and the national figure hides the spread: 21 of the
+47 prefectures are at 99.9% or better, but 6 are below 95% and 2 below 90% — Yamanashi (84.95%) and
+Nagano (85.02%). Chome-bearing entries are the even part: every prefecture is at 99.96% or better
+there, and Hokkaido is the only one not at exactly 100.00%. So urban addresses convert essentially
+everywhere, while refusals concentrate in the non-chome entries of a few prefectures. The
+per-prefecture table is in [docs/coverage.md](./docs/coverage.md).
+
+Where a name has no usable reading — 0.45% of entries nationally — you get `NO_ROMAJI_DATA` rather
+than a guess.
+
+**Romaji and kana do not go missing together.** 89.51% of entries carry a romaji field but 99.55%
+carry a kana reading, so roughly one entry in ten is romanized by transliterating its kana. That
+path is not a fallback for rare cases; it is load-bearing.
+
+These figures are produced by `scripts/measure-coverage.ts`, which lives in this repository rather
+than in the published package: regenerating them for a different dataset version needs a clone and
+a built dataset (`pnpm coverage:measure --data ./address-data`), not an `npm install`.
+
+## Not supported
+
+- **Geocoding accuracy.** Coordinates are deliberately excluded from the bundled town data.
+- **Building-name translation or romanization.** Building names and room numbers are isolated as
+  `unparsed` and passed through untouched. The type has no `romaji` field for them, by design.
+- **Romanizing the Kyoto street phrase.** It is preserved, not translated — see below.
+- **`fromRomaji` reads western order only.** It expects the prefecture last. Output produced with
+  `order: 'japanese'` is for display, not for feeding back in — `fromRomaji` will reject it with
+  `PREFECTURE_NOT_FOUND`. Round-tripping works with the default western order.
+
+### Kyoto street-name addresses
+
+Central Kyoto is customarily addressed by naming an intersection and a direction before the town.
+These are supported:
+
+```ts
+await toRomaji('京都府京都市中京区烏丸通四条上ル笋町123');
+// formatted:   '123 Takannacho, Nakagyo-ku, Kyoto-shi, Kyoto, Japan'
+// kyotoStreet: '烏丸通四条上ル'
+```
+
+The street phrase is separated out **before** normalization, which is not optional: street names
+contain the same kanji numerals as chome, so `烏丸通四条上ル笋町` fed to the normalizer unchanged is
+read as chome 4 of an unrelated town.
+
+The phrase is navigational rather than administrative — the official address is the town plus its
+number — so it is kept verbatim on `parsed.kyotoStreet` and **not** rendered into the romanized
+string. It is never romanized: the dataset has no readings for street names, and guessing one is
+exactly what this library refuses to do. `fromRomaji` cannot reconstruct it, so a round-trip through
+romaji loses it.
+
+If the street phrase is recognized but the town after it is not in the dataset, you get
+`KYOTO_STREET_ADDRESS` with the phrase in `partial.kyotoStreet`.
+
+### Known dataset defects you will hit
+
+These are properties of the upstream data, not of the conversion logic. The library detects them
+and refuses rather than emitting a wrong address, so they surface as failures:
+
+- **A few rows carry a reading that belongs to a neighbouring entry.** Where the kana is
+  implausibly long for the name it reads, we cannot trust it, and the address becomes unreachable
+  in both directions: `toRomaji` returns `CORRUPT_ROMAJI_DATA` and `fromRomaji` will not offer it
+  as a candidate. This is rare in the current dataset.
+- **Short forms of a town name can be ambiguous.** 1.23% of town romanizations match more than one
+  distinct town within the same municipality — Hakodate has both `昭和町` and `昭和一丁目`, so
+  `"Showa"` matches both. Writing the full name (`"Showa-cho"`) resolves it, and this library's own
+  output always does. Typed short forms return `AMBIGUOUS` with the candidates.
+
+## Status and disclaimer
+
+**Version `0.x`: the API may change.** This is a personal project, maintained on a best-effort
+basis. Issues and pull requests are welcome, but response times are not guaranteed.
+
+The software is provided **as is, without warranty of any kind**, as stated in the MIT licence.
+Two limits are worth spelling out beyond that boilerplate, because they are easy to assume away:
+
+- **A successful conversion is not a validated address.** The output reflects what the dataset
+  says; it does not certify that the address exists, is deliverable, or is currently in use.
+  Municipal mergers and address reorganizations mean the dataset lags reality by some amount.
+- **Do not use this as the sole basis for postal, legal, or financial decisions.** The library is
+  built to refuse rather than guess — that is why failures are typed values you have to handle —
+  but refusing is the guarantee, not correctness. If a wrong address carries real cost, verify
+  through the relevant authority.
+
 ## API
 
 ### `toRomaji(japaneseAddress, options?)`
@@ -95,7 +198,7 @@ field. That field is ALL-CAPS and already stripped of vowel length (`KITA1-JOHIG
 cannot be recovered from it. If a name has no kana reading, those styles fail with
 `KANA_REQUIRED_FOR_LONG_VOWELS` rather than silently emitting an unmarked spelling.
 
-### `fromRomaji(romajiAddress)`
+### `fromRomaji(romajiAddress, options?)`
 
 Resolution is strictly outside-in — prefecture, then municipality, then town — because a town's
 romanization is unique within a known municipality 99.05% of the time but far less so nationally,
@@ -173,81 +276,9 @@ the compiler makes you handle the failure case.
 | `KANA_REQUIRED_FOR_LONG_VOWELS` | A macron/circumflex/`oh` style was requested but no kana reading exists. |
 | `AMBIGUOUS` | Several Japanese addresses match. `candidates` holds them. |
 | `TOWN_NOT_FOUND` / `CITY_NOT_FOUND` / `PREFECTURE_NOT_FOUND` | Resolution stopped at that level. `partial` holds what was resolved. |
-| `KYOTO_STREET_ADDRESS` | The street phrase was understood but the town after it is not in the dataset (see below). |
+| `KYOTO_STREET_ADDRESS` | The street phrase was understood but the town after it is not in the dataset (see [Kyoto street-name addresses](#kyoto-street-name-addresses)). |
 | `DATA_NOT_CONFIGURED` | No dataset installed or configured. |
 | `EMPTY_INPUT` | No recognizable address in the input. |
-
-## Coverage
-
-Measured over all 638,567 town-level records of the shipped dataset:
-
-| Segment | Entries | Usable |
-| --- | ---: | ---: |
-| **Chome-bearing (urban, 住居表示)** | 92,971 | **99.99%** |
-| **`大字`-prefixed (rural)** | 61,330 | **99.96%** |
-| National | 638,567 | **99.55%** |
-
-Coverage is effectively uniform: the lowest-scoring prefectures are Yamanashi (84.95%) and Nagano
-(85.02%), and every prefecture is at 100% on chome entries. Expect conversion to succeed for
-ordinary addresses, urban or rural.
-
-Where a name has no usable reading — 0.45% of entries — you get `NO_ROMAJI_DATA` rather than a
-guess.
-
-**Romaji and kana do not go missing together.** 89.51% of entries carry a romaji field but 99.55%
-carry a kana reading, so roughly one entry in ten is romanized by transliterating its kana. That
-path is not a fallback for rare cases; it is load-bearing.
-
-Run `pnpm coverage:measure --data ./address-data` to regenerate these figures for your dataset
-version; the committed report is in [docs/coverage.md](./docs/coverage.md).
-
-## Not supported
-
-- **Geocoding accuracy.** Coordinates are deliberately excluded from the bundled town data.
-- **Building-name translation or romanization.** Building names and room numbers are isolated as
-  `unparsed` and passed through untouched. The type has no `romaji` field for them, by design.
-- **Romanizing the Kyoto street phrase.** It is preserved, not translated — see below.
-- **`fromRomaji` reads western order only.** It expects the prefecture last. Output produced with
-  `order: 'japanese'` is for display, not for feeding back in — `fromRomaji` will reject it with
-  `PREFECTURE_NOT_FOUND`. Round-tripping works with the default western order.
-
-### Kyoto street-name addresses
-
-Central Kyoto is customarily addressed by naming an intersection and a direction before the town.
-These are supported:
-
-```ts
-await toRomaji('京都府京都市中京区烏丸通四条上ル笋町123');
-// formatted:   '123 Takannacho, Nakagyo-ku, Kyoto-shi, Kyoto, Japan'
-// kyotoStreet: '烏丸通四条上ル'
-```
-
-The street phrase is separated out **before** normalization, which is not optional: street names
-contain the same kanji numerals as chome, so `烏丸通四条上ル笋町` fed to the normalizer unchanged is
-read as chome 4 of an unrelated town.
-
-The phrase is navigational rather than administrative — the official address is the town plus its
-number — so it is kept verbatim on `parsed.kyotoStreet` and **not** rendered into the romanized
-string. It is never romanized: the dataset has no readings for street names, and guessing one is
-exactly what this library refuses to do. `fromRomaji` cannot reconstruct it, so a round-trip through
-romaji loses it.
-
-If the street phrase is recognized but the town after it is not in the dataset, you get
-`KYOTO_STREET_ADDRESS` with the phrase in `partial.kyotoStreet`.
-
-### Known dataset defects you will hit
-
-These are properties of the upstream data, not of the conversion logic. The library detects them
-and refuses rather than emitting a wrong address, so they surface as failures:
-
-- **A few rows carry a reading that belongs to a neighbouring entry.** Where the kana is
-  implausibly long for the name it reads, we cannot trust it, and the address becomes unreachable
-  in both directions: `toRomaji` returns `CORRUPT_ROMAJI_DATA` and `fromRomaji` will not offer it
-  as a candidate. This is rare in the current dataset.
-- **Short forms of a town name can be ambiguous.** 1.23% of town romanizations match more than one
-  distinct town within the same municipality — Hakodate has both `昭和町` and `昭和一丁目`, so
-  `"Showa"` matches both. Writing the full name (`"Showa-cho"`) resolves it, and this library's own
-  output always does. Typed short forms return `AMBIGUOUS` with the candidates.
 
 ## Data source and licensing
 
@@ -262,31 +293,6 @@ The Address Base Registry is published by the Digital Agency under terms permitt
 including commercial use. Verify the current terms for your use case at the link above.
 
 This library is MIT licensed. See [LICENSE](./LICENSE).
-
-## Status and disclaimer
-
-**Version `0.x`: the API may change.** This is a personal project, maintained on a best-effort
-basis. Issues and pull requests are welcome, but response times are not guaranteed.
-
-The software is provided **as is, without warranty of any kind**, as stated in the MIT licence.
-Two limits are worth spelling out beyond that boilerplate, because they are easy to assume away:
-
-- **A successful conversion is not a validated address.** The output reflects what the dataset
-  says; it does not certify that the address exists, is deliverable, or is currently in use.
-  Municipal mergers and address reorganizations mean the dataset lags reality by some amount.
-- **Do not use this as the sole basis for postal, legal, or financial decisions.** The library is
-  built to refuse rather than guess — that is why failures are typed values you have to handle —
-  but refusing is the guarantee, not correctness. If a wrong address carries real cost, verify
-  through the relevant authority.
-
-## Requirements
-
-Node.js 18+. The offline dataset is read from the filesystem, so the default configuration is
-Node-only; browser use requires supplying data through an endpoint you host.
-
-**ESM only, no CommonJS build.** Both packages ship `"type": "module"` with a single ESM entry
-point — there is no `require()`-compatible `dist/*.cjs`, and none is planned. Use `import` (or
-dynamic `import()` from CommonJS code); `require('jp-address-romaji')` fails with `ERR_REQUIRE_ESM`.
 
 ## Contributing
 
