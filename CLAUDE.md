@@ -5,63 +5,60 @@
 
 ## 目的
 
-Bidirectional Japanese ⇄ romaji address conversion, published to npm as two packages:
-`jp-address-romaji` (library) and `jp-address-romaji-data` (offline dataset). Addresses are
-personal data, so the library sends them nowhere: no hosted API, no signup, and by default it
-reads a local copy of the address dataset and makes no network requests at conversion time. Runs on
-Node.js 18+; browser use requires supplying data through an endpoint you host yourself.
+日本の住所とローマ字表記の双方向変換。npm に2パッケージとして公開している:
+`jp-address-romaji`（ライブラリ）と `jp-address-romaji-data`（オフラインデータセット）。
+住所は個人情報なので、ライブラリはそれをどこにも送らない: ホスト型 API なし、サインアップ
+なし、既定では住所データセットのローカルコピーを読み、**変換時にネットワークへのリクエストを
+一切行わない**。Node.js 18+ で動作。ブラウザで使う場合は、自分でホストするエンドポイント
+経由でデータを供給する必要がある。
 
 ## 差別化点（＝壊してはいけない価値）
 
-- **Never reinvent address normalization.** It is delegated entirely to
-  `@geolonia/normalize-japanese-addresses`. Full-width digits, kanji numerals, `丁目/番/号` vs
-  hyphens, omitted prefectures and character variants are all its job. This package is the layer
-  above: romanization, word order, reverse lookup, output formats.
-- **Never guess a reading.** Romaji comes from the dataset — its romaji field, or its kana reading
-  transliterated deterministically. When neither exists, return an explicit typed failure. Failures
-  are values, not exceptions, so callers must handle them. A wrong shipping label is worse than a
-  refused one.
-- **The offline guarantee is enforced, not just documented.** The upstream normalizer defaults to a
-  hosted API; this package always points it at a local directory and fails with
-  `DATA_NOT_CONFIGURED` rather than falling back to the network. A test replaces `globalThis.fetch`
-  with a throwing stub, so a regression that reaches the network fails CI (see Landmines below).
-- **`fromRomaji` resolves strictly outside-in** (prefecture → municipality → town) and, when a
-  romanization matches more than one real town, returns `AMBIGUOUS` **with the candidates** rather
-  than guessing among them.
-- **Kyoto street-name addresses are supported without inventing a romanization for the street
-  phrase.** It is split off before normalization (see Landmines) and preserved verbatim on
-  `parsed.kyotoStreet` — never romanized, never fed back through `fromRomaji`.
+- **住所正規化を再発明しない。** 正規化は `@geolonia/normalize-japanese-addresses` に全面的に
+  委譲する。全角数字、漢数字、`丁目/番/号` とハイフンの揺れ、都道府県の省略、異体字は
+  すべて向こうの仕事。このパッケージはその上の層——ローマ字化、語順、逆引き、出力形式——だけを作る。
+- **読みを推測しない。** ローマ字はデータセット由来に限る——romaji フィールドか、かな読みの
+  決定的な翻字。どちらも無ければ、型付きの明示的な失敗を返す。失敗は例外ではなく値なので、
+  呼び出し側は必ず処理することになる。**間違った宛名ラベルは、拒否された宛名ラベルより悪い。**
+- **オフライン保証は文書ではなく実装で強制している。** 上流の正規化器は既定でホスト型 API を
+  向く。このパッケージは常にローカルディレクトリを指定し、ネットワークに落ちる代わりに
+  `DATA_NOT_CONFIGURED` で失敗する。テストが `globalThis.fetch` を throw するスタブに
+  置き換えているので、ネットワークに到達する退行は CI で落ちる（下の地雷の節を参照）。
+- **`fromRomaji` は外側から内側へ厳密に解決する**（都道府県 → 市区町村 → 町名）。ある
+  ローマ字表記が実在の複数の町に一致するときは、勝手に選ばず **`AMBIGUOUS` を候補付きで**返す。
+- **京都の通り名住所を、通り名部分のローマ字化を発明せずに扱う。** 通り名は正規化の**前に**
+  切り離し（地雷の節を参照）、`parsed.kyotoStreet` に原文のまま保持する——ローマ字化しないし、
+  `fromRomaji` に戻し入れることもしない。
 
 ## データ出典
 
-- Source: the Japanese Digital Agency's **Address Base Registry**
-  (アドレス・ベース・レジストリ, <https://www.digital.go.jp/policies/base_registry_address>),
-  published under terms permitting free use including commercial use. Verify the current terms
-  before redistributing a generated dataset.
-- Processed and served by **Geolonia**: `@geolonia/japanese-addresses-v2` (the data) and
-  `@geolonia/normalize-japanese-addresses` (normalization), both MIT licensed. Full attribution is
-  in `packages/data/ATTRIBUTION.md`.
-- The dataset is fetched from Geolonia **once**, at build/refresh time
-  (`jp-address-romaji-data build` / `packages/data/src/build-data.ts`), then read locally
-  thereafter. Converting addresses never touches the network — see the offline guarantee above and
-  in Landmines.
+- 出典はデジタル庁の**アドレス・ベース・レジストリ**
+  （<https://www.digital.go.jp/policies/base_registry_address>）。商用を含む自由な利用を
+  認める条件で公開されている。生成したデータセットを再配布する前に、最新の利用条件を
+  確認すること。
+- 加工・配信は **Geolonia**: `@geolonia/japanese-addresses-v2`（データ）と
+  `@geolonia/normalize-japanese-addresses`（正規化）、いずれも MIT ライセンス。
+  帰属表示の全文は `packages/data/ATTRIBUTION.md` にある。
+- データセットは Geolonia から**一度だけ**、ビルド/更新時に取得する
+  （`jp-address-romaji-data build` / `packages/data/src/build-data.ts`）。以後はローカルを
+  読む。住所の変換はネットワークに触れない——上の差別化点と地雷の節にあるオフライン保証を参照。
 
 ## 非対応範囲
 
-- **Geocoding accuracy.** Coordinates are deliberately excluded from the bundled town data (see
-  Landmines: `point`, below) — this library makes no geocoding claim.
-- **Building-name or room-number translation.** These are isolated as `unparsed` and passed through
-  untouched; the type has no `romaji` field for them, by design.
-- **Romanizing the Kyoto street phrase.** It is preserved verbatim, not translated — the dataset has
-  no readings for street names, and guessing one is exactly what this library refuses to do.
-- **`fromRomaji` accepts western order only** (prefecture last). Output produced with
-  `order: 'japanese'` is for display; feeding it back in is rejected with `PREFECTURE_NOT_FOUND`.
-- **No bundled postal-code dataset.** `postalCodeIndex` is a hook for the caller's own data; Japan
-  Post's `KEN_ALL` is not shipped (a second data source with its own licence and update cadence
-  wasn't justified by the 0.69% of full-form-key ambiguity it would resolve — measured by
-  `scripts/measure-ambiguity.ts`).
-- **Browser use without a hosted data endpoint.** The default configuration reads the dataset from
-  the filesystem, so it is Node-only out of the box.
+- **ジオコーディングの精度。** 座標は同梱の町データから意図的に除外している（地雷の節の
+  `point` を参照）——このライブラリはジオコーディングについて何も主張しない。
+- **建物名・部屋番号の翻訳。** これらは `unparsed` として分離し、手を付けずに素通しする。
+  型にこれらの `romaji` フィールドが無いのは設計。
+- **京都の通り名部分のローマ字化。** 原文のまま保持し、翻訳しない——データセットに通り名の
+  読みは無く、読みを推測することこそこのライブラリが拒否していること。
+- **`fromRomaji` は西洋語順（都道府県が最後）のみ受け付ける。** `order: 'japanese'` の出力は
+  表示用で、それを入力に戻すと `PREFECTURE_NOT_FOUND` で拒否される。
+- **郵便番号データセットの同梱なし。** `postalCodeIndex` は呼び出し側が自前データを渡す
+  フックであり、日本郵便の `KEN_ALL` は同梱しない（別ライセンス・別更新周期の第2データ源を
+  抱えるコストが、それで解消する完全形キー曖昧性 0.69% に見合わなかった——
+  `scripts/measure-ambiguity.ts` による実測）。
+- **ホスト型データエンドポイント無しのブラウザ利用。** 既定の構成はデータセットを
+  ファイルシステムから読むので、そのままでは Node 専用。
 
 ## パッケージング: ESM 専用
 
@@ -74,69 +71,66 @@ Node.js 18+; browser use requires supplying data through an endpoint you host yo
 - CJS 対応は今回のスコープ外であり、将来の課題として残す。技術的には可能: 上流の
   `@geolonia/normalize-japanese-addresses` は CJS/ESM 両対応。
 
-## Landmines — each of these was a real bug
+## 地雷 — どれも実際に起きた不具合
 
-- **`point` is mandatory on prefecture and city records, forbidden on town records.** Upstream's
-  `prefectureToResultPoint`/`cityToResultPoint` index into `point` with no null check and throw
-  without it; only `machiAzaToResultPoint` guards it. Town points are dropped purely for size (~190k
-  records) — this library makes no geocoding claim. Do not "optimize" the first two away.
+- **`point` は都道府県・市区町村レコードでは必須、町レコードでは禁止。** 上流の
+  `prefectureToResultPoint`/`cityToResultPoint` は null チェック無しで `point` を参照して
+  throw する。ガードがあるのは `machiAzaToResultPoint` だけ。町の座標を落としているのは
+  純粋にサイズのため（約19万レコード）——このライブラリはジオコーディングを主張しない。
+  前者2つを「最適化」で消さないこと。
+- **町名ローマ字の末尾数字を剥がさない。** v2 では丁目が独立フィールドを持つので、末尾の
+  数字は名前の一部: `政和第一` → `"Seiwadai1"`、`四重麦四` → `"Yoemugi4"`。以前の版が
+  これを剥がしていて（v1 データでは正しかった）、これらの名前を静かに切り詰めていた。
+- **`isPlausibleReading` は `大字`/`字` を漢字側だけでなくかな側からも剥がすこと。** v2 は
+  読みに接頭辞を展開して綴る（`大字三泊村` → `オオアザサンドマリムラ`）。片側だけ剥がした
+  結果、読みを持つ全エントリの 3.65%——23,193 件——が「壊れている」と誤判定された。すべて
+  誤検知で、すべて普通の農村部の住所で、ライブラリはそれらを拒否していた。
+- **京都の通り名は正規化の*前に*切り離すこと。** 通り名は丁目と同じ漢数字を含むため、
+  `烏丸通四条上ル笋町` をそのまま入れると無関係な町の4丁目として読まれる。
+  `packages/core/src/kyoto.ts` を参照。
+- **オフライン保証は主張ではなく強制。** 上流の正規化器は既定でホスト型 API を向く。テストは
+  `globalThis.fetch` を throw するスタブに置き換えており、変換が一度でもネットワークに
+  到達すれば CI が落ちる。ネットワークへのフォールバックを決して追加しないこと。
 
-- **Never strip a trailing digit from town romaji.** In v2 the chome has its own field, so a trailing
-  digit belongs to the name: `政和第一` → `"Seiwadai1"`, `四重麦四` → `"Yoemugi4"`. An earlier version
-  stripped it (correct for v1 data) and silently truncated those names.
+## データの実情
 
-- **`isPlausibleReading` must strip `大字`/`字` from the kana as well as the kanji.** v2 spells the
-  prefix out in the reading (`大字三泊村` → `オオアザサンドマリムラ`). Stripping one side only made it
-  flag 23,193 entries — 3.65% of everything with a reading — as corrupt, all false positives, all
-  ordinary rural addresses the library then refused.
+同梱データセットは Geolonia **v2**（町エントリ 638,567 件、市区町村 1,899、zip 済み約 12 MB）。
+カバレッジは全国 99.55%、丁目を持つ都市部住所では 99.99%。
 
-- **The Kyoto street phrase must be split off *before* normalization.** Street names carry the same
-  kanji numerals as chome, so `烏丸通四条上ル笋町` fed in unchanged is read as chome 4 of an unrelated
-  town. See `packages/core/src/kyoto.ts`.
+取り違えやすい事実が2つ:
 
-- **The offline guarantee is enforced, not asserted.** The upstream normalizer defaults to a hosted
-  API. Tests replace `globalThis.fetch` with a throwing stub; if a conversion ever reaches the
-  network, CI fails. Never add a network fallback.
+- **ローマ字とかなは一緒には欠けない。** romaji フィールドを持つのは 89.51%、かなは 99.55%——
+  つまり約1割のエントリは、かなの翻字でローマ字化される。この経路は本番で使われている。
+- **旧 v1 データは別物**（カバレッジ 85%、`大字` 接頭辞付きは 3.6%、壊れたローマ字 2.5%）。
+  テストフィクスチャは v1 由来で意図的に疎——だからこそ拒否経路を今も検証できている。
+  フィクスチャのカバレッジを「直さない」こと。
 
-## Data
+`packages/data/data/` は生成物で、コミットしない。`prepublishOnly` はデータ無しの公開を拒否する。
 
-The shipped dataset is Geolonia **v2** (638,567 town entries, 1,899 municipalities, ~12 MB zipped).
-Coverage is 99.55% nationally, 99.99% for chome-bearing urban addresses.
+## 環境
 
-Two facts that are easy to get backwards:
+- **`japanese-addresses-v2.geoloniamaps.com` は制限付き開発環境から到達できないことがある。**
+  ABR・digital.go.jp・日本郵便・Actions のアーティファクト blob ストレージも同様。そうした
+  環境から実データに触るには **`Refresh address data and coverage`** ワークフローを回す——
+  GitHub のランナーはどこにも到達できる——ログとステップサマリを読むこと。
+- **pnpm のバージョンはルート `package.json` の `packageManager` だけに置く。**
+  `pnpm/action-setup` にも書くと、アクションが起動を拒否する。
 
-- **Romaji and kana do not go missing together.** 89.51% have a romaji field, 99.55% have kana — so
-  ~1 entry in 10 is romanized by transliterating kana. That path is load-bearing.
-- **The older v1 data is a different animal** (85% coverage, 3.6% for `大字`-prefixed, 2.5% corrupt
-  romaji). The test fixtures are v1-derived and deliberately sparse, which is why they still exercise
-  the refusal paths. Do not "fix" their coverage.
-
-`packages/data/data/` is generated, never committed. `prepublishOnly` refuses to publish without it.
-
-## Environment
-
-- **`japanese-addresses-v2.geoloniamaps.com` may be unreachable** from a restricted development
-  environment, as may ABR, digital.go.jp, Japan Post, and Actions artifact blob storage. To touch
-  real data from one, run the **`Refresh address data and coverage`** workflow — GitHub runners
-  reach all of them — and read its logs and step summary.
-- **pnpm version lives only in root `package.json` `packageManager`.** Setting it in
-  `pnpm/action-setup` too makes the action refuse to run.
-
-## Commands
+## コマンド
 
 ```sh
-pnpm test                                   # fixtures only; hermetic
-JP_ADDRESS_ROMAJI_DATA_DIR=./address-data pnpm test   # + real-data integration suite
+pnpm test                                   # フィクスチャのみ・外部要因なし
+JP_ADDRESS_ROMAJI_DATA_DIR=./address-data pnpm test   # + 実データ統合スイート
 pnpm typecheck && pnpm -r build             # -r だけでは test/scripts/vitest.config.ts が型検査されない
 npx tsx packages/data/src/build-data.ts --out ./address-data
-npx tsx scripts/verify-data-assumptions.ts --data ./address-data   # read the output
+npx tsx scripts/verify-data-assumptions.ts --data ./address-data   # 出力を読むこと
 npx tsx scripts/measure-coverage.ts --data ./address-data > docs/coverage.md
 ```
 
-`scripts/verify-data-assumptions.ts` is the check that caught the two landmines above. Every entry it
-lists under reading-plausibility is an address the library will refuse — read them, don't skim.
+`scripts/verify-data-assumptions.ts` は上の地雷2件を捕まえた検査。読みの妥当性の項に並ぶ
+エントリは、いずれもライブラリが拒否する住所——流し読みせず、読むこと。
 
-Release procedure: `docs/releasing.md`.
+リリース手順: `docs/releasing.md`。
 
 ## 引き継ぎ文書の場所
 
