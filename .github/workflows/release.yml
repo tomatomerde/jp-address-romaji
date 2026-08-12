@@ -563,8 +563,20 @@ jobs:
             } > release-notes.md
           fi
 
+      # An existing Release is left alone rather than failing the run, for the
+      # same reason the publish steps skip versions already on npm: re-running
+      # a tag has to be safe. Two ways to arrive here with the Release already
+      # in place — re-pushing a tag after a partial failure, and creating the
+      # Release from the GitHub UI (which creates the tag, so this workflow
+      # starts while the Release already exists). Neither is an error.
       - name: Create GitHub Release
         if: env.CREATE_RELEASE == 'true' && env.DRY_RUN != 'true'
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$TAG" --title "$RELEASE_TITLE" --notes-file release-notes.md
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "A GitHub Release for $TAG already exists; leaving it as is."
+          else
+            gh release create "$TAG" --title "$RELEASE_TITLE" --notes-file release-notes.md
+          fi

@@ -241,7 +241,20 @@ publish すると、`npm install jp-address-romaji` がすべての利用者に�
 
 ワークフロー実行時にパッケージ名/バージョンが既にレジストリにある場合 — たとえば部分失敗の後に
 タグを再 push した場合 — そのパッケージの publish ステップは `npm view` でそれを検出し、エラーに
-せずスキップするので、再実行は安全。
+せずスキップするので、再実行は安全。GitHub Release も同じで、そのタグの Release が既にあれば
+`gh release view` で検出してそのまま残す。
+
+### タグを GitHub の UI から作る場合（`git push` が使えないとき）
+
+セッションの資格情報ではタグを push できない（403）。**リリース画面からタグごと作れる**ので、
+ブラウザさえあれば代われる:
+`https://github.com/tomatomerde/jp-address-romaji/releases/new` →
+Choose a tag に `v<version>` を打って **Create new tag: … on publish** → Target は `main` →
+Publish release。
+
+タグができた時点でこのワークフローが起動する。**publish は既にレジストリにあるものをスキップし、
+Release も既に存在するのでそのまま残る**ので、公開済みバージョンに後からタグだけを付けたい
+ときにも使える（今回 `0.1.2` がその状態になった。経緯は `project-status.md`）。
 
 ### リリース候補と、それが守るもの・守らないもの
 

@@ -18,9 +18,13 @@ dist-tag で公開した — それが捉えた3件は CHANGELOG を参照。
 **`0.1.2` にはタグと GitHub Release がまだ無い（メンテナの操作待ち）。** publish 自体は
 `release.yml` の `workflow_dispatch`（dry_run: false、run `31616749939`）で完了しており、
 provenance も付いている。タグ push はセッションの資格情報では 403 になるため、メンテナが
-`git fetch origin main && git tag v0.1.2 52104b0 && git push origin v0.1.2` を実行すること。
-タグ push でワークフローが再度走るが、公開済みバージョンは `npm view` で検出されてスキップ
-され、GitHub Release だけが作られる（`releasing.md` に記載の再実行安全性のとおり）。
+`git fetch origin main && git tag v0.1.2 <0.1.2 を切ったコミット> && git push origin v0.1.2` を
+実行すること。手元に clone が無ければブラウザからでもよい — `releasing.md` の
+「タグを GitHub の UI から作る場合」を参照（リリース画面がタグごと作る）。
+
+どちらの経路でもタグ作成でワークフローが再度走るが、公開済みバージョンは `npm view` で、
+既存の GitHub Release は `gh release view` で検出してスキップするので、二重公開も失敗も
+起きない。
 
 完了済み:
 
