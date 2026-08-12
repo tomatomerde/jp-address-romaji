@@ -33,7 +33,10 @@ switch (command) {
 
 Usage:
   jp-address-romaji-data build [--out <dir>] [--endpoint <url>] [--concurrency <n>]
-      Download and generate the offline dataset.
+                              [--attempts <n>] [--retry-delay <ms>]
+      Download and generate the offline dataset. Municipalities that fail the
+      concurrent pass are retried afterwards one at a time; only what still
+      fails then is fatal.
   jp-address-romaji-data where
       Print the bundled dataset directory.
   jp-address-romaji-data status

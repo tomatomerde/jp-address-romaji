@@ -60,27 +60,34 @@ only while the same Node from the tool cache is reselected. The sibling projects
 only by coincidence of version. If a `setup-node` is ever added after the guard here, re-read the
 npm version at the publish step.
 
-### Not yet verified: no release has gone out through OIDC
+### Verified: `0.1.1` went out through OIDC
 
-`0.1.0` was published with a token on 2026-08-10, and this switch came afterwards. Dry runs never
-reach `npm publish`, so nothing short of a real publish can test the token exchange.
+`0.1.0` was published with a token on 2026-08-10 and the switch came afterwards, so the first real
+exercise of the token exchange had to wait for the next version bump — dry runs never reach
+`npm publish`, and re-pushing `v0.1.0` would have been skipped as already on the registry.
 
-**Re-pushing `v0.1.0` will not test it either.** The publish steps skip a version that is already on
-the registry — the dry run above printed `jp-address-romaji-data@0.1.0 is already on npm; skipping.`
-and the same for `jp-address-romaji`. The first real exercise of OIDC is therefore **the next version
-bump**, and it exercises it twice, once per package.
+That bump was **`v0.1.1`, published 2026-08-12** (run `31558139492`), and it exercised OIDC twice,
+once per package. Both publishes reported provenance minted on the OIDC path:
 
-**Keep the `NPM_TOKEN` secret in place until then.** It is unused by this workflow now, but it is the
-rollback if the exchange fails. Delete it (from both the repository secrets and npmjs.com) once a
-release has gone out without it.
+```text
+npm notice publish Signed provenance statement with source and build information from GitHub Actions
+npm notice publish Provenance statement published to transparency log: https://search.sigstore.dev/?logIndex=2430008797
+```
 
-## One-time setup: the npm token (superseded, kept as rollback)
+`npm 12.0.2` was in place at the publish step, and the job carried no npm credential: the workflow
+references no secret other than `github.token`, which is used to create the GitHub Release.
 
-Everything below describes the token path this workflow no longer uses. It is retained because the
-token is still the fallback until trusted publishing has been proven by a real release, and because
-the failure modes it documents are worth keeping.
+**`NPM_TOKEN` is no longer a rollback path** — a release has now gone out without it. Removing it
+from the repository secrets and from npmjs.com is tracked in `docs/project-status.md`.
 
-The workflow authenticated to npm with a token stored as a GitHub Actions secret. Create it once:
+## The npm token (superseded — kept for the failure modes it documents)
+
+Everything below describes the token path this workflow no longer uses, and no longer needs. It is
+kept because the failure modes are hard-won and still apply to a local publish (below), which does
+authenticate with an account. It is **not** a live rollback: re-introducing a token would mean
+re-introducing a long-lived publish credential that trusted publishing has made unnecessary.
+
+The workflow used to authenticate to npm with a token stored as a GitHub Actions secret:
 
 1. Log in to [npmjs.com](https://www.npmjs.com/) and go to **Access Tokens → Generate New Token**.
    npm has merged classic and granular token creation into a single form; the fields that matter:
@@ -296,6 +303,33 @@ want. The exact version(s) about to publish are always logged and written to the
 target package versions` step) precisely because this path skips the guard — check it before trusting
 a dispatch run.
 
+## When the dataset download hiccups
+
+The build fetches ~1,899 municipality files one HTTP request at a time, eight in flight. At that
+count a release that dies on any single failed request is a release decided by luck, so
+`build-data.ts` retries in two stages:
+
+1. **The bulk pass.** Each request gets `--attempts` tries (3 by default) with exponential backoff
+   from `--retry-delay` (500 ms, doubling).
+2. **The sweep.** Whatever still failed is retried afterwards **one at a time**, backing off four
+   times as long. A first-pass failure is usually congestion of our own making — seven sibling
+   requests are in flight — so the retry worth having is the slow, lonely one. Recovered
+   municipalities are named in the log.
+
+Only what survives the sweep fails the build, and those are listed by name, not just counted. A
+partial dataset must never publish, so the build also refuses to exit 0 unless it wrote exactly one
+file per municipality.
+
+`--concurrency`, `--attempts` and `--retry-delay` must each parse as a positive integer; anything
+else is rejected up front. This is not pedantry — a non-numeric `--concurrency` used to reach the
+worker pool as `NaN`, which starts **zero** workers, downloads nothing, and exited 0 with
+"Done. 0 towns".
+
+`packages/data/test/build-data.test.ts` drives the real script against a local HTTP server with an
+injectable failure policy, covering all three outcomes: clean run, recovered-in-the-sweep, and
+never-recovered. The upstream host is unreachable from a development environment, so that fixture
+server is the only way to exercise this path outside a GitHub runner.
+
 ## What the workflow enforces before it will publish anything
 
 (The reasoning for each is written inline in `release.yml`; this is just the checklist.)
@@ -318,9 +352,9 @@ a dispatch run.
   this pipeline should just trust going forward — see the `Assert data/core tarball contents` steps.
 - `@arethetypeswrong/cli --profile esm-only` is clean against each packed tarball.
 - The built `dist/index.js` of each package actually `import()`s successfully.
-- `NPM_TOKEN` is set, checked immediately before a real (non-dry-run) publish would need it — a dry
-  run never writes `.npmrc` at all, so a missing token can't surface as a confusing `npm view` 401
-  during a dry run.
+- npm is at least 11.5.1, re-checked immediately before publishing rather than only after the
+  upgrade step — trusted publishing's floor, and an older npm fails with an authentication error
+  that says nothing about versions.
 
 ## Refreshing the data between releases
 
