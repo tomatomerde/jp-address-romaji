@@ -9,10 +9,11 @@
 
 ## 現在の状態
 
-**公開済み。** `jp-address-romaji` と `jp-address-romaji-data` は両方とも npm に `0.1.0` として
-公開されている（2026-08-10 リリース、いずれも npm の provenance attestation 付き）。`0.1.0-rc.1` は
-その数時間前にリハーサルとして `next` dist-tag で公開した — それが捉えた3件は CHANGELOG を
-参照。
+**公開済み。** `jp-address-romaji` と `jp-address-romaji-data` は両方とも npm に公開されている。
+最新は `0.1.2`（2026-08-12、データセットビルドの耐障害化と `--concurrency` 検証の修正 — 内容は
+CHANGELOG を参照）。`0.1.0` は 2026-08-10、`0.1.1` は 2026-08-12 リリースで、いずれも npm の
+provenance attestation 付き。`0.1.0-rc.1` は `0.1.0` の数時間前にリハーサルとして `next`
+dist-tag で公開した — それが捉えた3件は CHANGELOG を参照。
 
 完了済み:
 
