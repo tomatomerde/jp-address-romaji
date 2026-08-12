@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A single transient download failure no longer fails the whole dataset build. The build fetches
+  ~1,899 municipality files with eight requests in flight; each one already retried three times,
+  but those retries happen within a few seconds while seven sibling requests compete, so one
+  unlucky municipality set `process.exitCode = 1` and took the release with it. Failures of the
+  concurrent pass are now retried afterwards **one at a time** with a longer backoff, and only
+  what survives that sweep fails the build — named individually rather than merely counted.
+- `--concurrency` no longer accepts a value that is not a positive integer. A non-numeric one
+  reached the worker pool as `NaN` and a zero reached it as zero; both start no workers, so the
+  build downloaded nothing, printed "Done. 0 towns", and **exited 0** — a silently empty dataset
+  reported as a success. `--attempts` and `--retry-delay` (both new) are validated the same way,
+  and the build now also refuses to exit 0 unless it wrote one file per municipality.
+
+### Added
+
+- `packages/data/test/build-data.test.ts` — the dataset builder had no tests at all. It runs the
+  real script as a subprocess against a local fixture server with an injectable failure policy,
+  covering a clean run, a municipality recovered by the sweep, and one that never recovers.
+
 ## 0.1.1 — 2026-08-11
 
 ### Fixed

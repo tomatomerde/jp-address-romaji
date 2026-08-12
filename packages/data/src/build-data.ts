@@ -52,10 +52,22 @@ interface SourceMachiAza {
   csv_ranges?: unknown;
 }
 
+/**
+ * The sweep waits this many times longer between attempts than the first pass.
+ * A first-pass failure is most often congestion of our own making — several
+ * requests are in flight — so the retry that matters is the slow, lonely one.
+ */
+const SWEEP_BACKOFF_FACTOR = 4;
+
+/** A bad command line, as opposed to a crash. Reported without a stack trace. */
+class UsageError extends Error {}
+
 interface Options {
   endpoint: string;
   outDir: string;
   concurrency: number;
+  attempts: number;
+  retryDelay: number;
 }
 
 function parseArgs(argv: string[]): Options {
@@ -63,14 +75,29 @@ function parseArgs(argv: string[]): Options {
     const i = argv.indexOf(`--${name}`);
     return i >= 0 && argv[i + 1] ? argv[i + 1]! : fallback;
   };
+  /**
+   * Reject junk rather than letting NaN through. `--concurrency nonsense` used
+   * to reach mapLimit as NaN, which starts zero workers, downloads nothing, and
+   * still exits 0 — a complete-looking dataset with no towns in it.
+   */
+  const positiveInt = (name: string, fallback: string): number => {
+    const raw = get(name, fallback);
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value < 1) {
+      throw new UsageError(`--${name} must be a positive integer, got ${JSON.stringify(raw)}`);
+    }
+    return value;
+  };
   return {
     endpoint: get('endpoint', DEFAULT_ENDPOINT).replace(/\/$/, ''),
     outDir: path.resolve(get('out', path.join(process.cwd(), 'data'))),
-    concurrency: Number.parseInt(get('concurrency', '8'), 10),
+    concurrency: positiveInt('concurrency', '8'),
+    attempts: positiveInt('attempts', '3'),
+    retryDelay: positiveInt('retry-delay', '500'),
   };
 }
 
-async function fetchJson<T>(url: string, attempts = 3): Promise<T> {
+async function fetchJson<T>(url: string, attempts: number, baseDelay: number): Promise<T> {
   let lastError: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -79,11 +106,18 @@ async function fetchJson<T>(url: string, attempts = 3): Promise<T> {
       return (await response.json()) as T;
     } catch (error) {
       lastError = error;
-      // Back off before retrying a transient network failure.
-      await new Promise((r) => setTimeout(r, 500 * 2 ** i));
+      // Back off before retrying a transient network failure. No point sleeping
+      // after the last attempt — nothing follows it.
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, baseDelay * 2 ** i));
     }
   }
   throw lastError;
+}
+
+/** One municipality to download. */
+interface Job {
+  pref: string;
+  city: SourceCity;
 }
 
 /** Municipality name as it appears in the dataset path. */
@@ -131,7 +165,11 @@ async function main(): Promise<void> {
   const meta = { updated: Math.floor(Date.now() / 1000) };
 
   console.log('Fetching prefecture index...');
-  const prefApi = await fetchJson<{ data: SourcePrefecture[] }>(`${options.endpoint}.json`);
+  const prefApi = await fetchJson<{ data: SourcePrefecture[] }>(
+    `${options.endpoint}.json`,
+    options.attempts,
+    options.retryDelay,
+  );
   const prefectures = prefApi.data;
 
   await fs.mkdir(options.outDir, { recursive: true });
@@ -140,42 +178,86 @@ async function main(): Promise<void> {
     JSON.stringify({ meta, data: prefectures }),
   );
 
-  const jobs = prefectures.flatMap((pref) =>
+  const jobs: Job[] = prefectures.flatMap((pref) =>
     pref.cities.map((city) => ({ pref: pref.pref, city })),
   );
   console.log(`Fetching ${jobs.length} municipalities...`);
 
   let done = 0;
-  let failed = 0;
+  let written = 0;
   let townCount = 0;
 
-  await mapLimit(jobs, options.concurrency, async ({ pref, city }) => {
+  /** Download one municipality and write its file. Throws on failure. */
+  const fetchCity = async (job: Job, baseDelay: number): Promise<void> => {
+    const { pref, city } = job;
     const name = cityPathName(city);
     const url = `${options.endpoint}/${encodeURIComponent(pref)}/${encodeURIComponent(name)}.json`;
+    const api = await fetchJson<{ data: SourceMachiAza[] }>(url, options.attempts, baseDelay);
+    const slim = api.data.map(slimMachiAza);
+    const dir = path.join(options.outDir, 'ja', pref);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, `${name}.json`), JSON.stringify({ meta, data: slim }));
+    townCount += slim.length;
+    written++;
+  };
+
+  // Pass 1: the bulk download, several requests in flight.
+  const failures: { job: Job; error: unknown }[] = [];
+  await mapLimit(jobs, options.concurrency, async (job) => {
     try {
-      const api = await fetchJson<{ data: SourceMachiAza[] }>(url);
-      const slim = api.data.map(slimMachiAza);
-      townCount += slim.length;
-      const dir = path.join(options.outDir, 'ja', pref);
-      await fs.mkdir(dir, { recursive: true });
-      await fs.writeFile(path.join(dir, `${name}.json`), JSON.stringify({ meta, data: slim }));
+      await fetchCity(job, options.retryDelay);
     } catch (error) {
-      failed++;
-      console.warn(`  ! ${pref}${name}: ${(error as Error).message}`);
+      failures.push({ job, error });
     }
     done++;
     if (done % 200 === 0) console.log(`  ${done}/${jobs.length}`);
   });
 
-  console.log(`\nDone. ${townCount} towns across ${jobs.length - failed} municipalities.`);
-  if (failed > 0) {
-    // Never let a partial dataset masquerade as a complete one.
-    console.error(`${failed} municipalities failed to download; the dataset is incomplete.`);
+  // Pass 2: sweep up what pass 1 dropped, one at a time and backing off harder.
+  //
+  // Losing the whole release to one municipality out of ~1,900 is the failure
+  // mode this guards: the first pass exhausts its attempts inside a few seconds
+  // while seven other requests compete with it, which is exactly when a
+  // transient error is most likely and least meaningful. Retrying alone, later,
+  // costs seconds and turns a coin-flip release into a reproducible one.
+  const unrecovered: { job: Job; error: unknown }[] = [];
+  if (failures.length > 0) {
+    console.log(`\n${failures.length} municipalities failed the first pass; retrying serially...`);
+    for (const { job } of failures) {
+      try {
+        await fetchCity(job, options.retryDelay * SWEEP_BACKOFF_FACTOR);
+        console.log(`  recovered ${job.pref}${cityPathName(job.city)}`);
+      } catch (error) {
+        unrecovered.push({ job, error });
+      }
+    }
+  }
+
+  console.log(`\nDone. ${townCount} towns across ${written} municipalities.`);
+
+  // Never let a partial dataset masquerade as a complete one.
+  if (unrecovered.length > 0) {
+    for (const { job, error } of unrecovered) {
+      console.error(`  ! ${job.pref}${cityPathName(job.city)}: ${(error as Error).message}`);
+    }
+    console.error(
+      `${unrecovered.length} municipalities failed to download; the dataset is incomplete.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  // Belt and braces: the counters above are only as honest as the loops that
+  // maintain them, and an empty dataset must never report success.
+  if (written !== jobs.length) {
+    console.error(
+      `Expected ${jobs.length} municipality files, wrote ${written}; the dataset is incomplete.`,
+    );
     process.exitCode = 1;
   }
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(error instanceof UsageError ? `Error: ${error.message}` : error);
   process.exit(1);
 });

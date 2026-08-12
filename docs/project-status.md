@@ -22,12 +22,31 @@ Done:
   verbatim, and never romanized
 - A `postalCodeIndex` hook on `fromRomaji`, so a caller's own postal data can narrow an ambiguity
 - The offline guarantee, enforced by a test that replaces `fetch` with a stub that throws
-- 95 tests passing; 5 more that run only when a real dataset is present
+- 100 tests passing; 5 more that run only when a real dataset is present
 - CI (lint, typecheck, build, test) and a data-refresh workflow
 - Both package READMEs, the CHANGELOG, and a `prepublishOnly` guard that refuses to publish the
   data package without a complete dataset
 
 `main` holds all of the above.
+
+## `NPM_TOKEN` has been deleted (2026-08-12)
+
+Trusted publishing was proven by a real release (`v0.1.1`, 2026-08-12), which removed the only
+reason to keep the token: it was the rollback if the OIDC exchange failed. Keeping an unused
+long-lived publish credential is worse than having none, so it went.
+
+**Done as reported by the maintainer**, who ran `gh secret delete NPM_TOKEN` across the three
+repositories and revoked the token itself on npmjs.com. A session cannot read or write the secret
+list, so this has not been confirmed against the real thing from here — the same caveat that
+applies to the `DEV_STANDARDS_TOKEN` removal recorded below.
+
+Nothing in `release.yml` references `NPM_TOKEN`, in any of the three repositories, so its removal
+cannot break a release. What it does close off is falling back to token auth without editing the
+workflow — deliberate, since that fallback is the thing being retired. **Publishing now depends
+entirely on the trusted publisher registration on npmjs.com** (publisher *GitHub Actions*, this
+repository, workflow filename `release.yml`, environment name empty); if that registration is ever
+removed or the workflow file renamed, there is no longer a credential to fall back on and releases
+stop until it is restored.
 
 ## This repository was recreated on 2026-08-07 — `#N` in the history is not this repository's
 
@@ -99,11 +118,11 @@ What is genuinely unfinished is the release path, not the library:
 - **The workflow moved to npm trusted publishing on 2026-08-10** and carries no token. Trusted
   publishers are registered for both packages (repository + `release.yml`, no environment). That
   could not have been done before `0.1.0` existed (npm/cli#8544).
-- **`NPM_TOKEN` is still set, deliberately.** No release has gone out through OIDC yet, and neither
-  a dry run nor a re-push of `v0.1.0` can produce one — dry runs stop before `npm publish`, and the
-  publish step skips a version already on the registry. **The next version bump is the first real
-  test; keep the secret until it passes.** The token expires 90 days from 2026-08-10, so if no
-  release has happened by then, decide consciously whether to renew it or drop the rollback.
+- **OIDC is proven, and `NPM_TOKEN` is gone.** `v0.1.1` (run `31558139492`, 2026-08-12) published
+  both packages through trusted publishing, each with a provenance statement signed from GitHub
+  Actions and no npm credential in the job. That was the first real exercise of the token exchange,
+  and it removed the only reason the secret was kept; the maintainer deleted it the same day. See
+  *`NPM_TOKEN` has been deleted* below — including what now has no fallback as a result.
 - The Geolonia host is unreachable from a network-restricted environment, so the dataset cannot be
   built locally. The `Refresh address data and coverage` workflow is the way to touch real data.
 
@@ -173,7 +192,8 @@ The advice this paragraph used to give — "`NPM_TOKEN` must be an **Automation*
 and is retracted. npm has merged classic and granular token creation into one form; there is no
 Automation type to pick. The field that decides whether a token can publish from CI is the **Bypass
 two-factor authentication (2FA)** checkbox, and regenerating an existing token does not change it.
-That only matters now for the rollback token.
+That now matters only for a local publish, which authenticates as an account rather than through
+CI — the workflow needs no token at all.
 
 `DEV_STANDARDS_TOKEN` is **no longer used** and should be deleted. It existed so a per-repository
 job could read the private template; the shared block is now verified against a hash committed
@@ -257,10 +277,35 @@ measured **npm 10.9.8** from `setup-node` — below trusted publishing's 11.5.1 
 after the upgrade. Without that step the pipeline would have reached `npm publish` and failed with
 an authentication error that names no version.
 
-**Still not verified: an OIDC publish.** Both publish steps printed `… is already on npm; skipping.`,
-which is also the answer to "can we just re-push `v0.1.0` to test it" — no. Dry runs stop before
-`npm publish`; the registry check stops a re-push. The first real exercise is the next version bump.
-`NPM_TOKEN` stays until then.
+**Now verified: the OIDC publish.** That dry run could not settle it — both publish steps printed
+`… is already on npm; skipping.`, which is also the answer to "can we just re-push `v0.1.0` to test
+it": no. The first real exercise was the next version bump, and it happened —
+**`v0.1.1` on 2026-08-12** (run
+[31558139492](https://github.com/tomatomerde/jp-address-romaji/actions/runs/31558139492)) published
+`jp-address-romaji-data` and then `jp-address-romaji`, each printing `Signed provenance statement
+with source and build information from GitHub Actions` and a sigstore transparency-log entry.
+`npm 12.0.2` was in place at the publish step.
+
+**The dataset download now survives a transient failure, and that is tested** (2026-08-12). It
+previously did not: one failed municipality out of ~1,899 set `process.exitCode = 1` and took the
+release with it. Reproduced before fixing, with a local server returning 503 three times for a
+single municipality — exit 1, that municipality's file absent. `build-data.ts` now retries the
+failures of the concurrent pass serially afterwards, with a longer backoff, and only what survives
+that sweep fails the build. `packages/data/test/build-data.test.ts` covers the clean run, the
+recovered-in-the-sweep run and the never-recovers run, driving the real script as a subprocess
+against a fixture server. Each assertion was checked by breaking the code it guards: disabling the
+sweep fails the recovery test, swallowing the survivors fails the exit-code test.
+
+Two things that fell out of writing it, both of which had been latent since the file was written:
+
+- **A non-numeric or zero `--concurrency` produced a silently empty dataset.** It reached the worker
+  pool as `NaN`, `Math.min(NaN, n)` sized the pool to zero, no municipality was ever fetched, and
+  the build printed "Done. 0 towns across 1899 municipalities" and **exited 0**. Confirmed by
+  running the pre-change script both ways. All three numeric options are now rejected unless they
+  parse as positive integers, and the build additionally refuses to exit 0 unless it wrote one file
+  per municipality.
+- **`build-data.ts` had no tests at all** — the script that produces the entire contents of the data
+  package. `packages/data/test/` did not exist.
 
 **The scoped tag shapes were exercised locally on 2026-08-11, short of the registry.** The
 `Determine release plan`, `Verify tag matches package versions` and CHANGELOG-guard blocks were
