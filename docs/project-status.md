@@ -1,152 +1,153 @@
-# Project status
+# プロジェクトの現状
 
-Where the project currently stands, what is left before the first release, and the things that
-have bitten people working on it. Kept current so that anyone picking the project up — a new
-contributor, or the maintainer after a gap — can start without reconstructing context.
+プロジェクトが今どこにあるか、最初のリリースまでに何が残っているか、そして作業した人が実際に
+つまずいた点は何か。新しい貢献者でも、間を置いて戻ってきたメンテナでも、文脈を再構築せずに
+着手できるよう、常に最新に保つ。
 
-For how to work on the code, see [`CONTRIBUTING.md`](../CONTRIBUTING.md). For the release
-procedure itself, see [`releasing.md`](./releasing.md).
+コードの触り方は [`CONTRIBUTING.md`](../CONTRIBUTING.md) を参照。リリース手順そのものは
+[`releasing.md`](./releasing.md) を参照。
 
-## Current state
+## 現在の状態
 
-**Published.** `jp-address-romaji` and `jp-address-romaji-data` are both on npm at `0.1.0`,
-released 2026-08-10, each carrying an npm provenance attestation. `0.1.0-rc.1` was published a few
-hours earlier under the `next` dist-tag as a rehearsal — see the CHANGELOG for the three things it
-caught.
+**公開済み。** `jp-address-romaji` と `jp-address-romaji-data` は両方とも npm に `0.1.0` として
+公開されている（2026-08-10 リリース、いずれも npm の provenance attestation 付き）。`0.1.0-rc.1` は
+その数時間前にリハーサルとして `next` dist-tag で公開した — それが捉えた3件は CHANGELOG を
+参照。
 
-Done:
+完了済み:
 
-- `toRomaji` / `fromRomaji` / `parse` / `toFormat`, with failures returned as typed values rather
-  than thrown
-- Kyoto street-name addresses: the street phrase is split off before normalization, preserved
-  verbatim, and never romanized
-- A `postalCodeIndex` hook on `fromRomaji`, so a caller's own postal data can narrow an ambiguity
-- The offline guarantee, enforced by a test that replaces `fetch` with a stub that throws
-- 100 tests passing; 5 more that run only when a real dataset is present
-- CI (lint, typecheck, build, test) and a data-refresh workflow
-- Both package READMEs, the CHANGELOG, and a `prepublishOnly` guard that refuses to publish the
-  data package without a complete dataset
+- `toRomaji` / `fromRomaji` / `parse` / `toFormat`。失敗は throw ではなく型付きの値として
+  返す
+- 京都の通り名住所: 通り名の句を正規化の前に切り出し、原文のまま保持し、決してローマ字化
+  しない
+- `fromRomaji` の `postalCodeIndex` フック。呼び出し側が自前の郵便番号データで曖昧さを絞り込める
+- オフライン保証。`fetch` を throw するスタブに置き換えるテストで強制している
+- テスト 100 件がパス。加えて実データセットがあるときだけ走るテストが 5 件
+- CI（lint・typecheck・build・test）とデータ更新ワークフロー
+- 両パッケージの README、CHANGELOG、そして完全なデータセットなしにデータパッケージの公開を
+  拒否する `prepublishOnly` ガード
 
-`main` holds all of the above.
+`main` は上記すべてを含む。
 
-## `NPM_TOKEN` has been deleted (2026-08-12)
+## `NPM_TOKEN` は削除済み（2026-08-12）
 
-Trusted publishing was proven by a real release (`v0.1.1`, 2026-08-12), which removed the only
-reason to keep the token: it was the rollback if the OIDC exchange failed. Keeping an unused
-long-lived publish credential is worse than having none, so it went.
+Trusted publishing は実リリース（`v0.1.1`、2026-08-12）で実証され、トークンを残す唯一の理由 —
+OIDC 交換が失敗したときのロールバック — が消えた。使われない長寿命の publish 資格情報を
+持ち続けるのは持たないより悪いので、消した。
 
-**Done as reported by the maintainer**, who ran `gh secret delete NPM_TOKEN` across the three
-repositories and revoked the token itself on npmjs.com. A session cannot read or write the secret
-list, so this has not been confirmed against the real thing from here — the same caveat that
-applies to the `DEV_STANDARDS_TOKEN` removal recorded below.
+**メンテナの報告として完了**。メンテナが3つのリポジトリで `gh secret delete NPM_TOKEN` を実行し、
+npmjs.com 上でトークン自体も失効させた。セッションは secret 一覧を読み書きできないため、
+ここから実物に対して確認したわけではない — 下に記録した `DEV_STANDARDS_TOKEN` の削除と
+同じ留保が付く。
 
-Nothing in `release.yml` references `NPM_TOKEN`, in any of the three repositories, so its removal
-cannot break a release. What it does close off is falling back to token auth without editing the
-workflow — deliberate, since that fallback is the thing being retired. **Publishing now depends
-entirely on the trusted publisher registration on npmjs.com** (publisher *GitHub Actions*, this
-repository, workflow filename `release.yml`, environment name empty); if that registration is ever
-removed or the workflow file renamed, there is no longer a credential to fall back on and releases
-stop until it is restored.
+3つのリポジトリのいずれでも `release.yml` は `NPM_TOKEN` を参照していないので、削除がリリースを
+壊すことはない。閉じられるのは、ワークフローを編集せずにトークン認証へフォールバックする道 —
+そのフォールバックこそ引退させる対象なので、意図どおり。**公開は今後、npmjs.com 上の trusted
+publisher 登録に全面的に依存する**（publisher は *GitHub Actions*、このリポジトリ、workflow
+ファイル名 `release.yml`、environment 名は空）。この登録が削除されるか workflow ファイルが
+リネームされると、フォールバックできる資格情報はもう存在せず、復旧するまでリリースは止まる。
 
-## This repository was recreated on 2026-08-07 — `#N` in the history is not this repository's
+## このリポジトリは 2026-08-07 に作り直された — 履歴中の `#N` はこのリポジトリのものではない
 
-Before going public, the history was cleaned of a personal email address on five commits. A force
-push cannot do that: GitHub keeps the old commits alive through `refs/pull/*/head`. So the old
-repository was deleted and an empty one created, and only the rewritten `main` was pushed. Not a
-byte of code changed — every one of the 31 commits has the same tree as before, and `HEAD`'s tree
-is still `ed79683`.
+公開前に、5つのコミットから個人のメールアドレスを除去するため履歴を整理した。force push では
+それはできない: GitHub は `refs/pull/*/head` を通じて古いコミットを生かし続ける。そこで旧
+リポジトリを削除して空のリポジトリを作り、書き換えた `main` だけを push した。コードは 1 バイトも
+変わっていない — 31 コミットすべてが以前と同じ tree を持ち、`HEAD` の tree は今も `ed79683` の
+まま。
 
-The side effect is that **the pull-request numbers quoted in commit messages (`#1` through `#4`,
-`#8`) belong to the repository that no longer exists.** This repository starts from zero pull
-requests. GitHub autolinks `#N` in commit messages, so those links 404 today — and the moment a
-pull request is opened here, the old `#1` will start resolving to an unrelated one. That is the
-worse failure: a 404 announces itself, a wrong link does not. Follow the history by commit subject,
-not by number. (References inside `.md` files are not autolinked, so prose here is only misleading
-to a reader who goes looking.)
+副作用として、**コミットメッセージに引用されている pull request 番号（`#1`〜`#4`、`#8`）は、
+もう存在しないリポジトリのもの**になった。このリポジトリの pull request はゼロから始まる。
+GitHub はコミットメッセージ中の `#N` を自動リンクするため、それらのリンクは今日 404 になる —
+そしてこのリポジトリで pull request が開かれた瞬間、旧 `#1` は無関係な PR を指し始める。
+そちらのほうが悪い失敗だ: 404 は自分から名乗るが、間違ったリンクは名乗らない。履歴は番号では
+なくコミットの件名で辿ること。（`.md` ファイル内の参照は自動リンクされないので、ここの文章が
+惑わせるのは、わざわざ探しに行った読者だけで済む。）
 
-## Where work stopped (2026-08-07)
+## 作業を止めた地点（2026-08-07）
 
-Work on this repository is paused. Nothing is in flight: `main`, the working branch, and their
-remotes all point at the same commit, there is no stash and no uncommitted change, and CI on `main`
-is green. The project sits between "feature-complete" and "released", and everything still
-outstanding needs credentials or repository-admin rights that a working session does not have — so
-the pause costs nothing.
+このリポジトリの作業は一時停止中。仕掛かりは何もない: `main`、作業ブランチ、それぞれのリモートは
+すべて同じコミットを指し、stash も未コミットの変更もなく、`main` の CI は緑。プロジェクトは
+「機能完成」と「リリース済み」の間にあり、残っているものはすべて、作業セッションが持たない
+資格情報かリポジトリ管理権限を必要とする — だからこの停止にコストはない。
 
-Re-verified on 2026-08-07 by running the commands rather than reading them, on Node 22.22.2:
-`pnpm lint`, `pnpm typecheck`, `pnpm -r build`, `pnpm test` — all clean, 95 passed and 5 skipped,
-matching what "Verified, and not" records below.
+2026-08-07 に、読むのではなくコマンドを実行して再検証した（Node 22.22.2）: `pnpm lint`、
+`pnpm typecheck`、`pnpm -r build`、`pnpm test` — すべてクリーン、95 passed / 5 skipped で、
+下の「検証したこと・していないこと」の記録と一致する。
 
-**`CLAUDE.md` carries project-technical content only (since 2026-08-12).** It used to have a
-second half — a shared working-style section synced automatically from a private template
-repository, verified by a hash check (`check-common-integrity.yml`). That distribution was
-retired: working-style instructions are tooling configuration for the maintainer, not project
-documentation, and they now live only in the private repository. The sync marker block, the hash
-files under `.claude/`, and the integrity workflow are all gone; there is nothing to keep in sync
-any more. (The historical chain before that — a hand-copied block compared through a
-per-repository token, `DEV_STANDARDS_TOKEN` — is likewise long gone.)
+**`CLAUDE.md` はプロジェクト技術の内容だけを載せる（2026-08-12 以降）。** かつては後半に
+もう一つの部分 — private のテンプレートリポジトリから自動同期され、ハッシュ検査
+（`check-common-integrity.yml`）で検証される共通の作業方針セクション — があった。この配布は
+廃止した: 作業方針の指示はメンテナ向けのツーリング設定であってプロジェクトのドキュメントでは
+なく、今は private リポジトリだけに置かれている。同期マーカーのブロック、`.claude/` 配下の
+ハッシュファイル、整合性検査ワークフローはすべて撤去済みで、同期しておくべきものはもう何もない。
+（それ以前の歴史的経緯 — 手作業でコピーしたブロックを、リポジトリごとのトークン
+`DEV_STANDARDS_TOKEN` 経由で比較する仕組み — も同様にとうの昔に無い。）
 
-What is genuinely unfinished is the release path, not the library:
+本当に未完なのはライブラリではなくリリースの道筋:
 
-- The repository **went public on 2026-08-10**, which also enabled npm provenance — it had been
-  switched off only because npm requires a public source repository. `release.yml` asks for
-  `id-token: write`; the `--provenance` flag is gone, because trusted publishing mints the
-  attestation on its own.
-- **Branch protection is on** (2026-08-10). Direct pushes to `main` are refused; changes go through
-  a pull request whose `test` check must pass. `enforce_admins` is on, so that applies to the owner
-  too — unblocking yourself is a settings change, not a `--force`. `required_approving_review_count`
-  is 0 because a solo maintainer cannot approve their own pull request and 1 would make every one of
-  them permanently unmergeable.
+- リポジトリは **2026-08-10 に public 化**され、それに伴い npm provenance も有効になった —
+  無効にしてあったのは、npm が public なソースリポジトリを要求するという理由だけ。
+  `release.yml` は `id-token: write` を要求する。`--provenance` フラグは無くなった。trusted
+  publishing が attestation を自前で発行するため。
+- **Branch protection は有効**（2026-08-10）。`main` への直接 push は拒否され、変更は `test`
+  チェックの通過が必要な pull request を経由する。`enforce_admins` が有効なので、これはオーナー
+  にも適用される — 自分のブロックを外すのは `--force` ではなく設定変更になる。
+  `required_approving_review_count` が 0 なのは、ソロメンテナは自分の pull request を承認できず、
+  1 にするとすべての PR が永久にマージ不能になるため。
 
-  Two settings that were chosen against the obvious default:
+  自明なデフォルトに逆らって選んだ設定が2つ:
 
-  - **`strict: false`** (a branch need not be up to date with `main` to merge). With `strict: true`,
-    merging any pull request forces every other open one in the repository to be updated first.
-    `ci.yml` also runs on pushes to `main`, so a semantic conflict still turns something red.
-  - **Only `test` is required, and it has no `paths:` filter.** The now-removed `integrity`
-    check was deliberately never required: it was path-filtered, and a required check that does
-    not start leaves a pull request stuck on "Expected — waiting for status" forever. The rule
-    survives the check that motivated it — never require a path-filtered workflow.
+  - **`strict: false`**（マージにあたりブランチが `main` に追随している必要はない）。
+    `strict: true` だと、どれか1つの pull request をマージするたびに、リポジトリ内の他のすべての
+    open な PR を先に更新させられる。`ci.yml` は `main` への push でも走るので、意味的な衝突が
+    あれば何かが赤くなる。
+  - **required は `test` のみで、`test` に `paths:` フィルタはない。** 撤去済みの `integrity`
+    チェックは意図的に一度も required にしなかった: あれは path フィルタ付きで、開始しない
+    required チェックは pull request を「Expected — waiting for status」のまま永久に固まらせる。
+    動機となったチェックは消えてもルールは生きている — path フィルタ付きのワークフローを
+    required にしない。
 
-  The `Refresh address data and coverage` workflow was already built for this: when its push of
-  `docs/coverage.md` is refused, it degrades to a warning pointing at the run's artifact.
-- **The workflow moved to npm trusted publishing on 2026-08-10** and carries no token. Trusted
-  publishers are registered for both packages (repository + `release.yml`, no environment). That
-  could not have been done before `0.1.0` existed (npm/cli#8544).
-- **OIDC is proven, and `NPM_TOKEN` is gone.** `v0.1.1` (run `31558139492`, 2026-08-12) published
-  both packages through trusted publishing, each with a provenance statement signed from GitHub
-  Actions and no npm credential in the job. That was the first real exercise of the token exchange,
-  and it removed the only reason the secret was kept; the maintainer deleted it the same day. See
-  *`NPM_TOKEN` has been deleted* below — including what now has no fallback as a result.
-- The Geolonia host is unreachable from a network-restricted environment, so the dataset cannot be
-  built locally. The `Refresh address data and coverage` workflow is the way to touch real data.
+  `Refresh address data and coverage` ワークフローはこのために既に作り込まれている:
+  `docs/coverage.md` の push が拒否されると、その実行の artifact を指す警告に格下げされる。
+- **ワークフローは 2026-08-10 に npm trusted publishing へ移行**し、トークンを一切持たない。
+  両パッケージに trusted publisher を登録済み（リポジトリ + `release.yml`、environment なし）。
+  これは `0.1.0` が存在する前にはできなかった（npm/cli#8544）。
+- **OIDC は実証済みで、`NPM_TOKEN` は消えた。** `v0.1.1`（run `31558139492`、2026-08-12）は
+  trusted publishing 経由で両パッケージを公開した。それぞれ GitHub Actions から署名された
+  provenance statement を伴い、ジョブに npm の資格情報は無かった。これがトークン交換の最初の
+  実地行使で、secret を残す唯一の理由を消した。メンテナは同日にそれを削除した。上の
+  *`NPM_TOKEN` は削除済み* の節を参照 — その結果としてフォールバックが無くなったものも含めて。
+- Geolonia のホストはネットワーク制限された環境から到達できないため、データセットをローカルで
+  ビルドすることはできない。実データに触る手段は `Refresh address data and coverage`
+  ワークフロー。
 
-  **Verified on 2026-08-09** by dispatching it: the dataset built (12,026,285 bytes, 1,899 files),
-  the assumption check passed, and the suite ran green against real data — 6 files, **100 tests
-  passed**, including the 5 in `realdata.test.ts` that are skipped everywhere else. The round-trip
-  test reported `mismatched: 0` over 4,303 real addresses: nothing came back as a *different*
-  address. The 2,213 that did not round-trip were all typed refusals (2,206 `NO_ROMAJI_DATA`,
-  1 `CORRUPT_ROMAJI_DATA`, 6 `AMBIGUOUS`), which is the designed behaviour.
+  **2026-08-09 に dispatch して検証済み**: データセットはビルドされ（12,026,285 バイト、1,899
+  ファイル）、前提チェックは通り、スイートは実データに対して緑 — 6 ファイル、**100 tests
+  passed**、他所ではスキップされる `realdata.test.ts` の 5 件を含む。ラウンドトリップテストは
+  実住所 4,303 件に対して `mismatched: 0` を報告した: *別の*住所として返ってきたものは皆無。
+  ラウンドトリップしなかった 2,213 件はすべて型付きの拒否（2,206 `NO_ROMAJI_DATA`、
+  1 `CORRUPT_ROMAJI_DATA`、6 `AMBIGUOUS`）で、これは設計どおりの挙動。
 
-## Release tagging
+## リリースのタグ付け
 
-`.github/workflows/release.yml` publishes to npm. It is tag-driven, with `workflow_dispatch`
-available for dry runs and for recovering a release that published one package but not the other.
+`.github/workflows/release.yml` が npm へ公開する。タグ駆動で、`workflow_dispatch` も使える。
+dry run 用と、片方のパッケージだけ公開して止まったリリースの復旧用。
 
-| Tag | Publishes |
+| タグ | 公開対象 |
 | --- | --- |
-| `v1.2.3` | both packages, data first |
-| `data-v1.2.3` | `jp-address-romaji-data` only |
-| `core-v1.2.3` | `jp-address-romaji` only |
+| `v1.2.3` | 両パッケージ、data が先 |
+| `data-v1.2.3` | `jp-address-romaji-data` のみ |
+| `core-v1.2.3` | `jp-address-romaji` のみ |
 
-Scoped tags exist because the dataset's correctness changes when the upstream data changes, even
-when the library itself has not. The version guard checks only the package or packages a tag
-selects, so a `data-v*` release does not fail merely because core sits at a different version.
+スコープ付きタグがあるのは、ライブラリ本体が変わらなくても、上流データが変わればデータセットの
+正しさが変わるから。バージョンガードはタグが選ぶパッケージだけを検査するので、`data-v*` の
+リリースが、core のバージョンが違うというだけの理由で落ちることはない。
 
-## Maintainer runbook: one-time repository setup
+## メンテナ向け runbook: 一度きりのリポジトリセットアップ
 
-These require repository-admin rights. Order matters: on a free plan, branch protection is only
-available on public repositories, so visibility has to change before the protection call will
-succeed.
+これらにはリポジトリの管理者権限が要る。順序が重要: 無料プランでは branch protection は
+public リポジトリでしか使えないため、protection の呼び出しが成功するには先に可視性を変えて
+おく必要がある。
 
 ```sh
 gh repo edit tomatomerde/jp-address-romaji \
@@ -168,225 +169,228 @@ JSON
 gh secret delete DEV_STANDARDS_TOKEN --repo tomatomerde/jp-address-romaji
 ```
 
-The reasoning behind each field is above, under the release-path list. The one thing to re-derive
-rather than copy if this is ever applied to a different repository: **`contexts` must list only
-checks that run on every pull request.** Here that is `test` alone — a path-filtered check
-(such as the since-removed `integrity`) would hang any pull request that does not touch its paths.
+各フィールドの根拠は上の「リリースの道筋」の一覧にある。これを別のリポジトリに適用することが
+あるなら、コピーではなく導出し直すべき点が一つ: **`contexts` に列挙してよいのは、すべての
+pull request で走るチェックだけ。** ここではそれは `test` 単独 — path フィルタ付きのチェック
+（撤去済みの `integrity` のような）は、その paths に触れない pull request を固まらせる。
 
-Both `gh repo edit` calls and the protection call have already been made, so this block is a no-op
-today; it is kept because the ordering it encodes still matters if the repository is ever recreated
-(on a free plan, branch protection is only available on public repositories).
+2つの `gh repo edit` と protection の呼び出しはすでに実施済みなので、このブロックは今日では
+no-op。それでも残すのは、リポジトリをいつか作り直す場合に、ここに符号化された順序が今も
+意味を持つから（無料プランでは branch protection は public リポジトリでしか使えない）。
 
-`NPM_TOKEN` is no longer part of setup — the workflow authenticates through trusted publishing, so
-a fresh clone of this repository needs no npm secret at all. What it needs instead is a **trusted
-publisher registered on npmjs.com for each package**: publisher *GitHub Actions*, this repository,
-workflow filename `release.yml`, environment name left empty. `docs/releasing.md` has the table.
+`NPM_TOKEN` はもうセットアップの一部ではない — ワークフローは trusted publishing で認証する
+ので、このリポジトリを新しく clone しても npm の secret は一切要らない。代わりに必要なのは
+**各パッケージについて npmjs.com に登録された trusted publisher**: publisher は *GitHub
+Actions*、このリポジトリ、workflow ファイル名 `release.yml`、environment 名は空。表は
+`docs/releasing.md` にある。
 
-The advice this paragraph used to give — "`NPM_TOKEN` must be an **Automation** token" — was wrong
-and is retracted. npm has merged classic and granular token creation into one form; there is no
-Automation type to pick. The field that decides whether a token can publish from CI is the **Bypass
-two-factor authentication (2FA)** checkbox, and regenerating an existing token does not change it.
-That now matters only for a local publish, which authenticates as an account rather than through
-CI — the workflow needs no token at all.
+この段落がかつて与えていた助言 — 「`NPM_TOKEN` は **Automation** トークンでなければならない」—
+は誤りだったので撤回する。npm は classic と granular のトークン作成を1つのフォームに統合して
+おり、選ぶべき Automation という種別は存在しない。トークンが CI から publish できるかを決める
+フィールドは **Bypass two-factor authentication (2FA)** チェックボックスで、既存トークンの
+再生成ではこれは変わらない。これが今も関係するのはローカルからの publish だけ — それは CI
+経由ではなくアカウントとして認証する。ワークフローはトークンを一切必要としない。
 
-`DEV_STANDARDS_TOKEN` is **no longer used** and should be deleted. It existed so a per-repository
-job could read the private template; the shared block is now verified against a hash committed
-here, which needs neither a secret nor the network. The token it replaced expired on a schedule and
-took a project's CI red with it — that failure mode is gone rather than deferred.
+`DEV_STANDARDS_TOKEN` は**もう使われていない**ので、削除すべき。これはリポジトリごとのジョブが
+private のテンプレートを読むために存在したが、共通ブロックは今やここにコミットされたハッシュに
+対して検証され、secret もネットワークも要らない。これが置き換えたトークンはスケジュールどおり
+失効して、あるプロジェクトの CI を巻き添えで赤にした — その故障モードは先送りではなく消滅した。
 
-One consequence of protecting `main` to be aware of: required status checks reject **direct**
-pushes whose commits haven't passed them, and on a free personal plan no actor can be exempted.
-The `Refresh address data and coverage` workflow commits `docs/coverage.md` back with exactly such
-a push, so once protection is on, that step degrades to a warning pointing at the run's `reports`
-artifact — commit the regenerated report via a pull request instead. The build, assumption check,
-and artifacts are unaffected.
+`main` を保護したことの帰結として意識しておくこと: required status checks は、チェックを通って
+いないコミットの**直接** push を拒否し、無料の個人プランではどのアクターも除外できない。
+`Refresh address data and coverage` ワークフローはまさにそういう push で `docs/coverage.md` を
+コミットし返すので、protection が有効になって以降、そのステップは実行の `reports` artifact を
+指す警告に格下げされる — 再生成したレポートは代わりに pull request 経由でコミットすること。
+ビルド、前提チェック、artifact には影響しない。
 
-## Releasing
+## リリース
 
-`0.1.0-rc.1` was published on 2026-08-10 and `0.1.0` followed the same day. Both packages are on
-npm. For the procedure and for what a release candidate does and does not protect, see
-[`releasing.md`](./releasing.md) — in particular that **the first version published to a name
-becomes `latest` regardless of `--tag`**, which is why the rc did not keep `npm install` clean and
-0.1.0 had to follow immediately.
+`0.1.0-rc.1` は 2026-08-10 に公開され、`0.1.0` が同日後を追った。両パッケージとも npm 上にある。
+手順と、release candidate が守ってくれること・くれないことは [`releasing.md`](./releasing.md)
+を参照 — 特に、**ある名前へ最初に公開されたバージョンは `--tag` に関係なく `latest` になる**
+こと。rc が `npm install` をクリーンに保てず、0.1.0 を即座に続けなければならなかった理由が
+これ。
 
-For a subsequent release: bump the version(s), date the CHANGELOG heading, push the tag. The
-workflow refuses to publish while the heading still says `unreleased`. Run a `dry_run: true`
-dispatch first and read it — the first real dry run of this workflow failed (see the SIGPIPE entry
-under Traps), so a previous green run is not evidence about the current commit.
+次のリリースでは: バージョンを上げ、CHANGELOG の見出しに日付を入れ、タグを push する。見出しが
+`unreleased` のままだとワークフローは公開を拒否する。まず `dry_run: true` で dispatch して
+結果を読むこと — このワークフローの最初の実 dry run は失敗した（「落とし穴」の SIGPIPE の項を
+参照）。過去の緑の実行は、現在のコミットについての証拠にはならない。
 
-## Verified, and not
+## 検証したこと・していないこと
 
-Verified by running it rather than by reading it:
+読むのではなく実行して検証済み:
 
-- `pnpm pack` rewrites `workspace:*` to a real version and strips `prepublishOnly` from the packed
-  manifest — so `npm publish <tarball>` runs **no** lifecycle scripts, which is why
-  `check:publishable` is an explicit workflow step
-- `files` overrides `.gitignore`, so the gitignored `dist/` and `data/` do reach the tarball. This
-  was the biggest suspected failure mode and it is not real — the workflow asserts it against the
-  packed bytes anyway, because it is a property of today's configuration
-- `@arethetypeswrong/cli --profile esm-only` exits 0
-- Tag parsing accepts `v0.1.0` / `data-v0.2.0` / `core-v0.3.0` / `v1.2.3-beta.1` and rejects
-  `garbage` / `vNext` / `data-vX` / `v-`
-- The CHANGELOG guard fails on an `unreleased` heading and passes on a dated one
-- The tarball assertion fails when the municipality-file count drops below its threshold
-- ESLint catches an unused variable in a `.ts` file and an undefined reference in a `.mjs` file,
-  and passes once both are reverted
-- `pnpm lint && pnpm typecheck && pnpm -r build && pnpm test` — 95 passed, 5 skipped (last re-run
-  2026-08-07, Node 22.22.2). The root `pnpm typecheck` is the one that matters: `pnpm -r typecheck`
-  alone skips the test files, `scripts/`, and `vitest.config.ts` — see Traps below
+- `pnpm pack` は `workspace:*` を実バージョンに書き換え、pack された manifest から
+  `prepublishOnly` を剥がす — したがって `npm publish <tarball>` はライフサイクルスクリプトを
+  **一切**実行しない。`check:publishable` が明示的なワークフローステップである理由がこれ
+- `files` は `.gitignore` に優先するので、gitignore されている `dist/` と `data/` は tarball に
+  ちゃんと入る。これが最大の懸念だった故障モードで、実在しない — それでもワークフローは pack
+  されたバイトに対して assert する。今日の構成が持つ性質にすぎないから
+- `@arethetypeswrong/cli --profile esm-only` は 0 で exit する
+- タグ解析は `v0.1.0` / `data-v0.2.0` / `core-v0.3.0` / `v1.2.3-beta.1` を受理し、
+  `garbage` / `vNext` / `data-vX` / `v-` を拒否する
+- CHANGELOG ガードは `unreleased` 見出しで落ち、日付入りの見出しで通る
+- tarball の assert は municipality ファイル数が閾値を下回ると落ちる
+- ESLint は `.ts` ファイルの未使用変数と `.mjs` ファイルの未定義参照を捕まえ、両方を戻すと通る
+- `pnpm lint && pnpm typecheck && pnpm -r build && pnpm test` — 95 passed, 5 skipped（最終
+  再実行 2026-08-07、Node 22.22.2）。重要なのはルートの `pnpm typecheck` のほう:
+  `pnpm -r typecheck` だけではテストファイル・`scripts/`・`vitest.config.ts` が検査されない —
+  下の「落とし穴」を参照
 
-**`release.yml` has now run on GitHub Actions.** Two `workflow_dispatch` dry runs on 2026-08-10,
-`packages: both`:
+**`release.yml` は GitHub Actions 上で実行済み。** 2026-08-10 に `workflow_dispatch` の dry run
+を 2 回、`packages: both` で:
 
-- The **first failed**, at `Assert data tarball contents`, and the failure was in the check rather
-  than in the package — see the SIGPIPE entry under Traps. Everything before it passed: the dataset
-  built, assumptions held, typecheck, build, `check:publishable`, the full suite against real data,
-  and both `pnpm pack`s.
-- The **second, after the fix, was green end to end** — including
-  `@arethetypeswrong/cli --profile esm-only` on both packed tarballs, the import smoke test, and
-  the dry-run publish path. Run
-  [31372054290](https://github.com/tomatomerde/jp-address-romaji/actions/runs/31372054290).
+- **1回目は失敗**。場所は `Assert data tarball contents` で、失敗していたのはパッケージではなく
+  チェックの側 — 「落とし穴」の SIGPIPE の項を参照。それより前はすべて通った: データセットの
+  ビルド、前提の維持、typecheck、build、`check:publishable`、実データに対するフルスイート、
+  両方の `pnpm pack`。
+- **修正後の2回目は最初から最後まで緑** — 両方の packed tarball への
+  `@arethetypeswrong/cli --profile esm-only`、import のスモークテスト、dry-run の publish 経路を
+  含む。Run
+  [31372054290](https://github.com/tomatomerde/jp-address-romaji/actions/runs/31372054290)。
 
-That is the first time the packing path has been exercised against a real dataset, which matters
-more here than for an ordinary package: the dataset *is* the data package's contents.
+これは packing 経路が実データセットに対して行使された最初の機会で、普通のパッケージ以上に
+ここでは重要: データセット*こそ*が data パッケージの中身だから。
 
-**The tag-driven path has now run for real** (`v0.1.0-rc.1` then `v0.1.0`, 2026-08-10). That
-covers `npm publish`, the provenance attestation, the GitHub Release, the tag-shape version guard
-and the CHANGELOG date guard — everything a `workflow_dispatch` run skips by design.
+**タグ駆動の経路も実運用で実行済み**（`v0.1.0-rc.1`、続いて `v0.1.0`、2026-08-10）。これで
+`npm publish`、provenance attestation、GitHub Release、タグ形状のバージョンガード、CHANGELOG の
+日付ガード — `workflow_dispatch` 実行が設計上スキップするものすべて — がカバーされた。
 
-Verified from outside the workflow afterwards, against the registry rather than the run log:
+その後、ワークフローの外側から、実行ログではなくレジストリに対して検証済み:
 
-- `https://registry.npmjs.org/-/npm/v1/attestations/<pkg>@0.1.0-rc.1` lists `publish` and
-  `provenance` for both packages
-- the GitHub Release body for `v0.1.0-rc.1` was the rc section only, 12 lines, with no bleed from
-  the `0.1.0` section — the whole-field CHANGELOG matcher doing its job
-- `npm view <pkg> dist-tags` — this is where two assumptions broke; see the CHANGELOG's
-  `0.1.0-rc.1` entry and *Release candidates* in `releasing.md`
+- `https://registry.npmjs.org/-/npm/v1/attestations/<pkg>@0.1.0-rc.1` が両パッケージについて
+  `publish` と `provenance` を列挙する
+- `v0.1.0-rc.1` の GitHub Release 本文は rc セクションのみ 12 行で、`0.1.0` セクションからの
+  混入なし — フィールド全体で照合する CHANGELOG マッチャが仕事をした
+- `npm view <pkg> dist-tags` — ここで2つの想定が壊れた。CHANGELOG の `0.1.0-rc.1` の項と
+  `releasing.md` の *Release candidates* を参照
 
-**A third dry run followed the switch to trusted publishing** (run
-[31402994984](https://github.com/tomatomerde/jp-address-romaji/actions/runs/31402994984),
-2026-08-10, on the merge commit). Green end to end. What it actually proves is narrow but was the
-point of running it: the `Ensure npm supports trusted publishing` guard works on a real runner. It
-measured **npm 10.9.8** from `setup-node` — below trusted publishing's 11.5.1 floor — and 12.0.2
-after the upgrade. Without that step the pipeline would have reached `npm publish` and failed with
-an authentication error that names no version.
+**Trusted publishing への切り替え後に3回目の dry run を実施**（run
+[31402994984](https://github.com/tomatomerde/jp-address-romaji/actions/runs/31402994984)、
+2026-08-10、マージコミット上）。最初から最後まで緑。これが実際に証明するものは狭いが、それこそ
+走らせた目的だった: `Ensure npm supports trusted publishing` ガードが実 runner 上で機能する
+こと。`setup-node` 由来の **npm 10.9.8** — trusted publishing の下限 11.5.1 未満 — を計測し、
+アップグレード後は 12.0.2 だった。このステップがなければパイプラインは `npm publish` まで到達
+し、バージョンを名指ししない認証エラーで落ちていた。
 
-**Now verified: the OIDC publish.** That dry run could not settle it — both publish steps printed
-`… is already on npm; skipping.`, which is also the answer to "can we just re-push `v0.1.0` to test
-it": no. The first real exercise was the next version bump, and it happened —
-**`v0.1.1` on 2026-08-12** (run
-[31558139492](https://github.com/tomatomerde/jp-address-romaji/actions/runs/31558139492)) published
-`jp-address-romaji-data` and then `jp-address-romaji`, each printing `Signed provenance statement
-with source and build information from GitHub Actions` and a sigstore transparency-log entry.
-`npm 12.0.2` was in place at the publish step.
+**今や検証済み: OIDC での publish。** あの dry run では決着できなかった — 両方の publish
+ステップが `… is already on npm; skipping.` と印字したからで、これは「テストのために `v0.1.0`
+を push し直せばいいのでは」への答えでもある: 駄目。最初の実地行使は次のバージョンアップで、
+それは起きた — **`v0.1.1`、2026-08-12**（run
+[31558139492](https://github.com/tomatomerde/jp-address-romaji/actions/runs/31558139492)）が
+`jp-address-romaji-data`、続いて `jp-address-romaji` を公開し、それぞれ `Signed provenance statement
+with source and build information from GitHub Actions` と sigstore の transparency-log エントリを
+印字した。publish ステップの時点で `npm 12.0.2` が入っていた。
 
-**The dataset download now survives a transient failure, and that is tested** (2026-08-12). It
-previously did not: one failed municipality out of ~1,899 set `process.exitCode = 1` and took the
-release with it. Reproduced before fixing, with a local server returning 503 three times for a
-single municipality — exit 1, that municipality's file absent. `build-data.ts` now retries the
-failures of the concurrent pass serially afterwards, with a longer backoff, and only what survives
-that sweep fails the build. `packages/data/test/build-data.test.ts` covers the clean run, the
-recovered-in-the-sweep run and the never-recovers run, driving the real script as a subprocess
-against a fixture server. Each assertion was checked by breaking the code it guards: disabling the
-sweep fails the recovery test, swallowing the survivors fails the exit-code test.
+**データセットのダウンロードは一過性の失敗に耐えるようになり、それはテストされている**
+（2026-08-12）。以前は耐えられなかった: 約 1,899 のうち 1 municipality の失敗が
+`process.exitCode = 1` を立て、リリースを道連れにした。修正の前に再現した。単一の municipality
+に 503 を 3 回返すローカルサーバで — exit 1、その municipality のファイルは欠落。`build-data.ts`
+は今、並行パスで失敗した分を後から直列に、より長い backoff で再試行し、その掃討を生き残った
+ものだけがビルドを落とす。`packages/data/test/build-data.test.ts` がクリーンな実行・掃討で回復
+する実行・回復しない実行をカバーし、実スクリプトを fixture サーバに対してサブプロセスとして
+駆動する。各 assert は、それが守るコードを壊して確かめた: 掃討を無効にすると回復テストが落ち、
+生き残りを握りつぶすと exit code のテストが落ちる。
 
-Two things that fell out of writing it, both of which had been latent since the file was written:
+これを書いたことで出てきたものが2つ。どちらもファイルが書かれて以来ずっと潜伏していた:
 
-- **A non-numeric or zero `--concurrency` produced a silently empty dataset.** It reached the worker
-  pool as `NaN`, `Math.min(NaN, n)` sized the pool to zero, no municipality was ever fetched, and
-  the build printed "Done. 0 towns across 1899 municipalities" and **exited 0**. Confirmed by
-  running the pre-change script both ways. All three numeric options are now rejected unless they
-  parse as positive integers, and the build additionally refuses to exit 0 unless it wrote one file
-  per municipality.
-- **`build-data.ts` had no tests at all** — the script that produces the entire contents of the data
-  package. `packages/data/test/` did not exist.
+- **数値でない、またはゼロの `--concurrency` は、黙って空のデータセットを生んでいた。** worker
+  プールに `NaN` のまま届き、`Math.min(NaN, n)` がプールサイズをゼロにし、municipality は一つも
+  取得されず、ビルドは "Done. 0 towns across 1899 municipalities" と印字して **exit 0** した。
+  変更前のスクリプトを両方の与え方で実行して確認済み。数値オプション3つはすべて、正の整数と
+  して解釈できなければ拒否されるようになり、さらにビルドは municipality ごとに1ファイル書けて
+  いなければ exit 0 を拒否する。
+- **`build-data.ts` にはテストが一つも無かった** — data パッケージの中身全体を生み出す
+  スクリプトなのに。`packages/data/test/` は存在しなかった。
 
-**The scoped tag shapes were exercised locally on 2026-08-11, short of the registry.** The
-`Determine release plan`, `Verify tag matches package versions` and CHANGELOG-guard blocks were
-extracted from `release.yml` with `yq` and run verbatim against this working tree for seven tags:
-`v0.1.0`, `data-v0.1.0` and `core-v0.1.0` select the right scope and pass; `data-v0.2.0` and
-`core-v0.1.1` fail on the version guard naming only the package the tag selects; `vgarbage` and
-`data-vX` are rejected as unrecognized shapes. What that does **not** cover is the rest of a
-`data-v*` run — packing, the tarball assertions, and a publish where only one of the two packages
-moves. Those still wait for a real scoped release.
+**スコープ付きタグの形状は 2026-08-11 にローカルで、レジストリの手前まで行使済み。**
+`Determine release plan`、`Verify tag matches package versions`、CHANGELOG ガードの各ブロックを
+`yq` で `release.yml` から抽出し、この working tree に対して 7 つのタグでそのまま実行した:
+`v0.1.0`・`data-v0.1.0`・`core-v0.1.0` は正しいスコープを選んで通る。`data-v0.2.0` と
+`core-v0.1.1` は、タグが選ぶパッケージだけを名指しするバージョンガードで落ちる。`vgarbage` と
+`data-vX` は認識されない形状として拒否される。これがカバー**しない**のは `data-v*` 実行の残り —
+packing、tarball の assert、そして2パッケージの片方だけが動く publish。それらは実際のスコープ
+付きリリースを待っている。
 
-**A second npm-version assertion now runs immediately before publishing**
-(`scripts/assert-npm-version.sh`, shared byte-identically with the sibling repositories). This
-workflow does not re-run `actions/setup-node` after the upgrade, so it is a guard against that
-changing rather than a fix for a live defect — the sibling workflows, which do switch Node for a
-smoke test on the oldest supported runtime, are where it earns its keep. The script was checked on
-both sides of the 11.5.1 boundary with a stub `npm` (11.5.0 fails, 11.5.1 passes).
+**publish の直前に2つ目の npm バージョン assert が走るようになった**
+（`scripts/assert-npm-version.sh`、姉妹リポジトリとバイト単位で同一の共有）。このワークフローは
+アップグレード後に `actions/setup-node` を再実行しないので、これは現存する欠陥の修正ではなく、
+それが変わることへのガード — 最古のサポートランタイムでのスモークテストのために Node を切り
+替える姉妹ワークフローこそ、これが本領を発揮する場所。スクリプトは 11.5.1 境界の両側をスタブの
+`npm` で確認した（11.5.0 は落ち、11.5.1 は通る）。
 
-## Resolved (2026-08-11): the two ambiguity figures disagreed, and both were stale
+## 解決済み（2026-08-11）: 2つの曖昧さの数値が食い違い、どちらも古かった
 
-The README used to quote 0.95% and 1.23% for the same quantity. Neither could be traced to a
-method, and neither reproduces against the shipped dataset with the shipping matcher. Settled by
-downloading `jp-address-romaji-data@0.1.0` from the npm registry and measuring with the matcher's
-own key functions — `scripts/measure-ambiguity.ts`, added for exactly this, so the numbers are
-reproducible instead of archaeological:
+README は同じ量に対して 0.95% と 1.23% を掲げていた。どちらも手法まで遡れず、どちらも出荷中の
+データセットと出荷中のマッチャに対して再現しない。`jp-address-romaji-data@0.1.0` を npm
+レジストリからダウンロードし、マッチャ自身のキー関数で測定して決着した — まさにこのために
+追加した `scripts/measure-ambiguity.ts` により、数値は考古学ではなく再現可能になった:
 
-- **1.10%** of the romanization keys `fromRomaji` indexes (2,778/252,587, full forms plus stemmed
-  short forms) map to ≥2 distinct towns in one municipality; 4,869 towns (3.74%) are involved.
-- **0.69%** of full-form keys (1,404/204,671; 2,620 towns) — the residue a full town name cannot
-  resolve, which is the figure the KEN_ALL trade-off actually rests on.
+- `fromRomaji` がインデックスするローマ字化キー（完全形と stem 化した短縮形）の **1.10%**
+  （2,778/252,587）が、同一 municipality 内の 2 つ以上の異なる town に対応する。関与する town は
+  4,869（3.74%）。
+- 完全形キーでは **0.69%**（1,404/204,671、town 2,620）— 完全な town 名でも解決できない残余で、
+  KEN_ALL のトレードオフが実際に依拠しているのはこちらの数値。
 
-A method matrix (dedupe by name/record × plausibility filter on/off × vowel styles × stems) was
-run to see whether any variant reproduces the historical 0.95/1.23; none does — the closest are
-0.91% and 1.40%, so both old figures belonged to earlier versions of the key logic. The
-transcription risk is closed structurally: `candidateKeys`/`stemKey` are exported from
-`fromRomaji.ts` and the script imports them rather than copying them.
+手法のマトリクス（name/record での dedupe × plausibility フィルタ on/off × 母音スタイル ×
+stem）を回して、歴史的な 0.95/1.23 を再現する変種があるか確かめた。無かった — 最も近くて
+0.91% と 1.40% で、つまり古い数値は両方ともキーのロジックの旧版に属していた。転記ミスのリスクは
+構造的に閉じた: `candidateKeys`/`stemKey` を `fromRomaji.ts` から export し、スクリプトは
+コピーではなく import する。
 
-## Known gaps
+## 既知のギャップ
 
-Each of these was considered and deliberately deferred, not overlooked — so a change that closes
-one should say why the trade-off moved rather than just adding the machinery. Contributions
-welcome:
+これらはいずれも検討のうえ意図的に先送りしたもので、見落としではない — したがってどれかを
+閉じる変更は、機構を足すだけでなく、トレードオフがなぜ動いたかを述べるべき。貢献歓迎:
 
-- **CI tests only Node 22, while `engines` says `>=18`.** "Runs on Node 18" is currently an
-  unverified promise that ships with the package. A build matrix would settle it.
-- CI has no `permissions:` block, so `GITHUB_TOKEN` runs with default scope
-- CI runs twice on a branch in a pull request (`push: ['**']` and `pull_request` both fire)
-- No issue or pull-request templates, no `SECURITY.md`, no `CODEOWNERS`, no dependency-update
-  automation
+- **CI は Node 22 しかテストしていないのに、`engines` は `>=18` と言っている。**
+  「Node 18 で動く」は現状、パッケージと一緒に出荷される未検証の約束。build matrix で決着する。
+- CI に `permissions:` ブロックがなく、`GITHUB_TOKEN` はデフォルトスコープで走る
+- pull request 中のブランチでは CI が二重に走る（`push: ['**']` と `pull_request` の両方が
+  発火する）
+- issue・pull-request のテンプレート、`SECURITY.md`、`CODEOWNERS`、依存更新の自動化がない
 
-## Traps
+## 落とし穴
 
-`CONTRIBUTING.md` covers the invariants that must not be broken. These are the operational ones
-that have actually cost time:
+壊してはならない不変条件は `CONTRIBUTING.md` が扱う。ここにあるのは、実際に時間を奪った運用上の
+もの:
 
-- **`npm publish` moves the `latest` dist-tag even for a semver prerelease.** npm does not
-  special-case them, so `0.1.0-rc.1` published without `--tag next` becomes what everyone installs.
-  Both publish steps derive the tag from the version (`*-*` → `next`), and the run summary prints
-  it, because a wrong dist-tag looks exactly like a successful release until someone installs.
-- **CHANGELOG headings are matched on the version as a whole field, not as a line prefix.** The
-  prefix form made `## 0.1.0` match `## 0.1.0-rc.1 — …` as well; because both headings matched, the
-  "stop at the next heading" rule never fired and the extracted section ran to the end of the file.
-  Adding a prerelease section is what exposed it. Verified against a fixture with `0.1.0-rc.1`,
-  `0.1.0` and `0.0.9` sections: each version now selects only its own, and a missing version yields
-  empty so the guard still fails.
-- **GitHub Actions runs `shell: bash` with `-eo pipefail`.** `count=$(... | grep -c ...)` aborts
-  the step when the count is zero — exactly the case an assertion like that exists to report.
-  `|| true` on the assignment is what keeps the error message reachable. This was a real defect in
-  `release.yml`, found by running it rather than by reading it.
-- **Never pipe `tar -tzf` into `grep -q` under `pipefail`.** `grep -q` exits at its first match,
-  which closes the pipe and kills `tar` with SIGPIPE; `pipefail` then makes that the pipeline's
-  status. The data-tarball assertion therefore reported `package/data/ja.json` **missing because it
-  was present** — npm sorts `data/ja.json` ahead of `data/ja/...` (`.` is 0x2E, `/` is 0x2F), so it
-  matched on line 1 of a ~124 KB listing and `tar` never got to finish. A genuinely absent entry
-  failed it too, with the same message, so the check could not pass and could not discriminate.
-  Redirect the listing to a file and `grep` that. Found by the first real dry run of `release.yml`
-  (2026-08-10) — the code had been read many times and looked correct. This is the sibling of the
-  `grep -c` trap above, and it hid in the same file next to a comment explaining the `-c` case.
-  Note the size dependence: the core-tarball assertion had the identical shape and never failed,
-  because its listing fits in the 64 KB pipe buffer. Both are fixed.
-- **`typescript-eslint`'s recommended preset disables `no-undef`.** That is correct where `tsc`
-  backs it up and silently fatal where it does not, which is why `eslint.config.js` keeps `.ts`
-  and plain-JS files in separate blocks — and why `tsconfig.tests.json` exists: the package
-  tsconfigs check only `src/`, so the test files, `scripts/`, and `vitest.config.ts` need their
-  own `tsc` run (part of the root `pnpm typecheck`) for that assumption to hold.
-- **`pnpm pack` accepts neither `--filter` nor `-r`.** Pack each package with `working-directory`.
-- **pnpm's version belongs only in the root `package.json`'s `packageManager` field.** Repeating it
-  in `pnpm/action-setup` makes the action refuse to start.
-- **`packages/data/data/` is generated and gitignored.** Never commit it. A release that skips
-  building it produces a package that installs fine and then fails every conversion with
-  `DATA_NOT_CONFIGURED`.
+- **`npm publish` は semver のプレリリースでも `latest` dist-tag を動かす。** npm はプレリリース
+  を特別扱いしないので、`--tag next` なしで公開された `0.1.0-rc.1` は全員がインストールする
+  ものになる。両方の publish ステップはバージョンから tag を導出し（`*-*` → `next`）、run
+  summary にそれを印字する。間違った dist-tag は、誰かがインストールするまで成功したリリースと
+  見分けがつかないから。
+- **CHANGELOG の見出しは、バージョンを行頭一致ではなくフィールド全体として照合する。** 前方
+  一致の形式では `## 0.1.0` が `## 0.1.0-rc.1 — …` にも一致した。両方の見出しが一致したため
+  「次の見出しで止まる」規則が一度も発火せず、抽出されたセクションはファイル末尾まで走った。
+  プレリリースのセクションを足したことで露呈した。`0.1.0-rc.1`・`0.1.0`・`0.0.9` のセクションを
+  持つ fixture で検証済み: 各バージョンは自分のセクションだけを選び、存在しないバージョンは
+  空を返すのでガードはちゃんと落ちる。
+- **GitHub Actions は `shell: bash` を `-eo pipefail` で実行する。** `count=$(... | grep -c ...)`
+  はカウントがゼロのときステップを中断する — まさに、その種の assert が報告するために存在する
+  ケースで。代入に `|| true` を付けることで、エラーメッセージに到達可能になる。これは
+  `release.yml` に実在した欠陥で、読むのではなく実行して見つかった。
+- **`pipefail` 下で `tar -tzf` を `grep -q` にパイプしてはならない。** `grep -q` は最初の
+  マッチで exit し、それがパイプを閉じて `tar` を SIGPIPE で殺す。`pipefail` はそれをパイプ
+  ライン全体のステータスにする。その結果、data tarball の assert は `package/data/ja.json` を
+  **存在していたがゆえに欠落**と報告した — npm は `data/ja.json` を `data/ja/...` より前に
+  ソートするので（`.` は 0x2E、`/` は 0x2F）、約 124 KB のリストの 1 行目でマッチし、`tar` は
+  最後まで走れなかった。本当に無いエントリでも同じメッセージで落ちるので、このチェックは通る
+  ことも判別することもできなかった。リストをファイルにリダイレクトして、それを `grep` する
+  こと。`release.yml` の最初の実 dry run（2026-08-10）で発見 — コードは何度も読まれ、正しく
+  見えていた。これは上の `grep -c` の罠の兄弟で、同じファイルの、`-c` のケースを説明する
+  コメントのすぐ隣に潜んでいた。サイズ依存性に注意: core tarball の assert は同一の形をして
+  いて一度も落ちなかった。そのリストは 64 KB のパイプバッファに収まるからだ。両方とも修正済み。
+- **`typescript-eslint` の recommended プリセットは `no-undef` を無効化する。** これは `tsc` が
+  背後にいる場所では正しく、いない場所では静かに致命的 — `eslint.config.js` が `.ts` と
+  プレーン JS のファイルを別ブロックに分けている理由であり、`tsconfig.tests.json` が存在する
+  理由でもある: パッケージの tsconfig は `src/` しか検査しないので、テストファイル・
+  `scripts/`・`vitest.config.ts` には（ルートの `pnpm typecheck` の一部として）独自の `tsc`
+  実行が要る。あの前提が成り立つのはそのおかげ。
+- **`pnpm pack` は `--filter` も `-r` も受け付けない。** 各パッケージを `working-directory` で
+  pack すること。
+- **pnpm のバージョンはルート `package.json` の `packageManager` フィールドだけに置く。**
+  `pnpm/action-setup` にも繰り返すと、アクションが起動を拒否する。
+- **`packages/data/data/` は生成物で、gitignore されている。** 決してコミットしないこと。
+  これのビルドを飛ばしたリリースは、インストールは普通に成功し、その後すべての変換が
+  `DATA_NOT_CONFIGURED` で失敗するパッケージを生む。
