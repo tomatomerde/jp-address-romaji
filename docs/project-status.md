@@ -76,20 +76,14 @@ Re-verified on 2026-08-07 by running the commands rather than reading them, on N
 `pnpm lint`, `pnpm typecheck`, `pnpm -r build`, `pnpm test` — all clean, 95 passed and 5 skipped,
 matching what "Verified, and not" records below.
 
-**The shared half of `CLAUDE.md` is delivered automatically; do not edit it and do not sync it by
-hand.** It sits between `<!-- BEGIN dev-standards common -->` and `<!-- END dev-standards common -->`,
-and it arrives from the template repository as an automated pull request whenever that repository
-changes. `.github/workflows/check-common-integrity.yml` hashes the block and fails if it was
-hand-edited — no secret and no network involved, so it also runs on pull requests from forks.
-
-If a rule in that block is wrong, change it in the template repository; the fix comes back here on
-its own. Opening a pull request that edits the block directly will turn the check red and be
-reverted by the next sync.
-
-This replaced an older arrangement where the block was copied by hand and a warning-only job
-compared it against the private template through a per-repository token. That token is gone —
-`DEV_STANDARDS_TOKEN` is no longer used here — and so is the freeze that existed because syncing
-by hand was expensive enough that the projects could never catch up.
+**`CLAUDE.md` carries project-technical content only (since 2026-08-12).** It used to have a
+second half — a shared working-style section synced automatically from a private template
+repository, verified by a hash check (`check-common-integrity.yml`). That distribution was
+retired: working-style instructions are tooling configuration for the maintainer, not project
+documentation, and they now live only in the private repository. The sync marker block, the hash
+files under `.claude/`, and the integrity workflow are all gone; there is nothing to keep in sync
+any more. (The historical chain before that — a hand-copied block compared through a
+per-repository token, `DEV_STANDARDS_TOKEN` — is likewise long gone.)
 
 What is genuinely unfinished is the release path, not the library:
 
@@ -108,10 +102,10 @@ What is genuinely unfinished is the release path, not the library:
   - **`strict: false`** (a branch need not be up to date with `main` to merge). With `strict: true`,
     merging any pull request forces every other open one in the repository to be updated first.
     `ci.yml` also runs on pushes to `main`, so a semantic conflict still turns something red.
-  - **`integrity` is deliberately not a required check.** `check-common-integrity.yml` is
-    path-filtered to `CLAUDE.md` and friends, so it does not start on a pull request that touches
-    nothing else — and a required check that never reports leaves the pull request stuck on
-    "Expected — waiting for status" forever. Only `test` is required, and it has no `paths:` filter.
+  - **Only `test` is required, and it has no `paths:` filter.** The now-removed `integrity`
+    check was deliberately never required: it was path-filtered, and a required check that does
+    not start leaves a pull request stuck on "Expected — waiting for status" forever. The rule
+    survives the check that motivated it — never require a path-filtered workflow.
 
   The `Refresh address data and coverage` workflow was already built for this: when its push of
   `docs/coverage.md` is refused, it degrades to a warning pointing at the run's artifact.
@@ -176,8 +170,8 @@ gh secret delete DEV_STANDARDS_TOKEN --repo tomatomerde/jp-address-romaji
 
 The reasoning behind each field is above, under the release-path list. The one thing to re-derive
 rather than copy if this is ever applied to a different repository: **`contexts` must list only
-checks that run on every pull request.** Here that is `test` alone — `integrity` is path-filtered
-and would hang any pull request that does not touch `CLAUDE.md`.
+checks that run on every pull request.** Here that is `test` alone — a path-filtered check
+(such as the since-removed `integrity`) would hang any pull request that does not touch its paths.
 
 Both `gh repo edit` calls and the protection call have already been made, so this block is a no-op
 today; it is kept because the ordering it encodes still matters if the repository is ever recreated
