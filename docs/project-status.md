@@ -29,45 +29,24 @@ Done:
 
 `main` holds all of the above.
 
-## Waiting on a human: delete `NPM_TOKEN`
+## `NPM_TOKEN` has been deleted (2026-08-12)
 
-This is the only item currently blocked on someone with account access. Trusted publishing has now
-been proven by a real release (`v0.1.1`, 2026-08-12), so the secret is no longer a rollback path —
-it is an unused long-lived publish credential, which is worse than having none.
+Trusted publishing was proven by a real release (`v0.1.1`, 2026-08-12), which removed the only
+reason to keep the token: it was the rollback if the OIDC exchange failed. Keeping an unused
+long-lived publish credential is worse than having none, so it went.
 
-Two deletions, in this order (the Actions secret first, so nothing can consume the token between
-the two steps):
+**Done as reported by the maintainer**, who ran `gh secret delete NPM_TOKEN` across the three
+repositories and revoked the token itself on npmjs.com. A session cannot read or write the secret
+list, so this has not been confirmed against the real thing from here — the same caveat that
+applies to the `DEV_STANDARDS_TOKEN` removal recorded below.
 
-```sh
-gh secret delete NPM_TOKEN --repo tomatomerde/jp-address-romaji
-```
-
-Then revoke the token itself at <https://www.npmjs.com/settings/~/tokens>. Deleting the Actions
-secret alone leaves a live publish credential on the npm account; deleting the npm token alone
-leaves a secret here that silently stops working. Both, or neither.
-
-The same secret exists in `tomatomerde/itaiji-normalize` and `tomatomerde/japan-calendar`, and all
-four packages published through OIDC in the same batch on 2026-08-12. One npm token covered all of
-them, so it is revoked once, after all three Actions secrets are gone:
-
-```sh
-gh secret delete NPM_TOKEN --repo tomatomerde/itaiji-normalize
-```
-
-```sh
-gh secret delete NPM_TOKEN --repo tomatomerde/japan-calendar
-```
-
-To see what is actually there first — a session cannot read the secret list, so this has not been
-verified from here:
-
-```sh
-gh secret list --repo tomatomerde/jp-address-romaji
-```
-
-Nothing in `release.yml` references `NPM_TOKEN` any more, in any of the three repositories, so
-deleting it cannot break a release. What it does close off is the option of falling back to token
-auth without editing the workflow — deliberate, since the fallback is the thing being retired.
+Nothing in `release.yml` references `NPM_TOKEN`, in any of the three repositories, so its removal
+cannot break a release. What it does close off is falling back to token auth without editing the
+workflow — deliberate, since that fallback is the thing being retired. **Publishing now depends
+entirely on the trusted publisher registration on npmjs.com** (publisher *GitHub Actions*, this
+repository, workflow filename `release.yml`, environment name empty); if that registration is ever
+removed or the workflow file renamed, there is no longer a credential to fall back on and releases
+stop until it is restored.
 
 ## This repository was recreated on 2026-08-07 — `#N` in the history is not this repository's
 
@@ -139,14 +118,11 @@ What is genuinely unfinished is the release path, not the library:
 - **The workflow moved to npm trusted publishing on 2026-08-10** and carries no token. Trusted
   publishers are registered for both packages (repository + `release.yml`, no environment). That
   could not have been done before `0.1.0` existed (npm/cli#8544).
-- **OIDC is proven, and `NPM_TOKEN` is now waiting on a human to delete it.** `v0.1.1`
-  (run `31558139492`, 2026-08-12) published both packages through trusted publishing, each with a
-  provenance statement signed from GitHub Actions and no npm credential in the job. That was the
-  first real exercise of the token exchange, and it removes the only reason the secret was kept.
-  **Deleting it — the Actions secret here and the token itself on npmjs.com — is a human action a
-  session cannot perform**; there is no API for it in this environment. See *Waiting on a human*
-  below for the commands. Until it is deleted it is an unused long-lived publish credential, which
-  is strictly worse than none.
+- **OIDC is proven, and `NPM_TOKEN` is gone.** `v0.1.1` (run `31558139492`, 2026-08-12) published
+  both packages through trusted publishing, each with a provenance statement signed from GitHub
+  Actions and no npm credential in the job. That was the first real exercise of the token exchange,
+  and it removed the only reason the secret was kept; the maintainer deleted it the same day. See
+  *`NPM_TOKEN` has been deleted* below — including what now has no fallback as a result.
 - The Geolonia host is unreachable from a network-restricted environment, so the dataset cannot be
   built locally. The `Refresh address data and coverage` workflow is the way to touch real data.
 
