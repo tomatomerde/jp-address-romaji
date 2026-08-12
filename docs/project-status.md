@@ -15,6 +15,13 @@ CHANGELOG を参照）。`0.1.0` は 2026-08-10、`0.1.1` は 2026-08-12 リリ�
 provenance attestation 付き。`0.1.0-rc.1` は `0.1.0` の数時間前にリハーサルとして `next`
 dist-tag で公開した — それが捉えた3件は CHANGELOG を参照。
 
+**`0.1.2` にはタグと GitHub Release がまだ無い（メンテナの操作待ち）。** publish 自体は
+`release.yml` の `workflow_dispatch`（dry_run: false、run `31616749939`）で完了しており、
+provenance も付いている。タグ push はセッションの資格情報では 403 になるため、メンテナが
+`git fetch origin main && git tag v0.1.2 52104b0 && git push origin v0.1.2` を実行すること。
+タグ push でワークフローが再度走るが、公開済みバージョンは `npm view` で検出されてスキップ
+され、GitHub Release だけが作られる（`releasing.md` に記載の再実行安全性のとおり）。
+
 完了済み:
 
 - `toRomaji` / `fromRomaji` / `parse` / `toFormat`。失敗は throw ではなく型付きの値として
