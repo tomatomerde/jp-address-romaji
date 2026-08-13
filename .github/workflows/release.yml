@@ -258,8 +258,26 @@ jobs:
           problem=""
           if [ -z "$section" ]; then
             problem="No '$heading' section found in CHANGELOG.md."
-          elif echo "$section" | grep -qi 'unreleased'; then
-            problem="CHANGELOG.md's '$heading' section still says 'unreleased'."
+          else
+            # Case-insensitive check done entirely in bash, not
+            # `echo "$section" | grep -qi …`: `grep -q` exits at its first
+            # match, closing the pipe while `echo` may still be writing —
+            # under `pipefail` that SIGPIPE fails the pipeline, so this
+            # check reported "no 'unreleased'" precisely BECAUSE the word
+            # was present and matched early. Same family of bug as the
+            # tarball-listing steps below (search this file for SIGPIPE),
+            # but inverted: those fail-closed once their input passes 64KB,
+            # this one failed OPEN — a large section let an "unreleased"
+            # release through instead of rejecting a present one. Confirmed
+            # with a ~96KB `unreleased` section: piped form exited 0
+            # ("has a dated section"), this form exits 1 as it should.
+            # `nocasematch` + `[[ ]]` needs no subprocess and no pipe, so
+            # there's nothing here for SIGPIPE to hit.
+            shopt -s nocasematch
+            if [[ "$section" == *unreleased* ]]; then
+              problem="CHANGELOG.md's '$heading' section still says 'unreleased'."
+            fi
+            shopt -u nocasematch
           fi
 
           if [ -n "$problem" ]; then
@@ -543,9 +561,14 @@ jobs:
       # (and why the CHANGELOG guard step above fails the run if that never
       # happened). If extraction still comes up empty, fall back to a
       # generic body rather than failing an otherwise-good release over
-      # release-notes formatting. `index($0, heading) == 1` is a fixed-string
-      # prefix match, not `~`/regex — EXPECTED_VERSION contains literal `.`
-      # characters that a regex would treat as "any character".
+      # release-notes formatting. `$2 == want` matches the version as a
+      # whole field, not a line prefix — same awk as the CHANGELOG guard
+      # above, and for the same reason: a prefix match makes "## 0.1.0"
+      # also match "## 0.1.0-rc.1 — …", so once a prerelease section
+      # exists the real release's notes would extract the rc section (or,
+      # once both match, everything through EOF) instead of stopping at
+      # the next heading. See the guard step's comment above for the
+      # fixture this was verified against.
       # -----------------------------------------------------------------
       - name: Extract changelog section
         if: env.CREATE_RELEASE == 'true' && env.DRY_RUN != 'true'
