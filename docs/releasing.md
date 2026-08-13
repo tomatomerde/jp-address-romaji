@@ -231,14 +231,32 @@ publish すると、`npm install jp-address-romaji` がすべての利用者に�
    | `core-v1.2.3` | `## core-<version>` | `## core-0.3.0 — 2026-08-05` |
 
    リリースワークフローは、見出しのバージョンフィールドがこの値に完全一致するセクションから
-   GitHub Release の本文を抽出するので、これはタグ付け前に済ませる必要がある — ワークフロー
+   GitHub Release の本文を抽出するので、これはリリースを切る前に済ませる必要がある — ワークフロー
    自身の CHANGELOG ガードステップは、セクションが欠けているかまだ `unreleased` のままだと run
-   を失敗させる。tag push のみ（`workflow_dispatch` は警告どまり）。両方の変更をコミットする。
+   を失敗させる。実際に publish する run（tag push と `cut_release`）では失敗、dry run では
+   警告どまり。両方の変更をコミットする。
+
+   **`unreleased` かどうかは見出し行だけで判定する。** 本文で `unreleased` という語に言及しても
+   落ちない（このガード自体の修正を CHANGELOG に書いたら、その説明文で落ちた）。
 
    既存の `## 0.1.2` のような無印見出しは書き換えない — 過去のリリースはすべて `v*` タグで
    出ているので、そのままの形で正しい。無印見出しが使われるのは `v*` タグのときだけで、
    `data-v*` / `core-v*` は必ずスコープ付きの見出しを要求する。
-3. タグを付けて push する:
+3. リリースを切る。**セッションから切るときは `Release` ワークフローを `cut_release: true` で
+   dispatch する**（`packages` でスコープを選ぶ。`dry_run` は指定しても上書きされ、その旨が
+   notice に出る）:
+
+   ```sh
+   gh workflow run release.yml -f packages=both -f cut_release=true
+   ```
+
+   タグはディスク上の `package.json` から導出され（`both` → `v<version>`、`data-only` →
+   `data-v<version>`、`core-only` → `core-v<version>`）、**publish が通った後に**
+   `gh release create --target <commit>` がタグと GitHub Release をまとめて作る。
+   `packages=both` で2つの `package.json` のバージョンが食い違っていたら、run は publish の
+   前に止まる。
+
+   **手でタグを push してもよい**（挙動は同じ。ワークフローはタグの形からスコープを決める）:
 
    ```sh
    git tag v0.1.0            # both packages
@@ -247,10 +265,15 @@ publish すると、`npm install jp-address-romaji` がすべての利用者に�
    git push origin v0.1.0
    ```
 
-   tag push でワークフローが自動起動する: `dry_run` は強制的にオフになり、タグのスコープがどの
-   パッケージを publish するかを決め（両方のときは data が core より先）、CHANGELOG のセクション
-   から GitHub Release が作られる。タイトルはスコープに合わせて付く
-   （例: `jp-address-romaji-data data-v0.2.0`）。
+   どちらの経路でも `dry_run` はオフになり、CHANGELOG のセクションから GitHub Release が
+   作られ、タイトルはスコープに合わせて付く（例: `jp-address-romaji-data data-v0.2.0`）。
+
+   **タグ push は「公開の承認」ではない。** セッションの資格情報ではタグを push できない
+   （403）ので、それを必須にすると毎回のリリースに人間が挟まる。承認は依頼の時点で済んで
+   いるという前提に立ち、公開前の検査はワークフロー自身が持つ（バージョン一致・CHANGELOG・
+   tarball の中身・型解決・スモークテスト）。
+   なお `GITHUB_TOKEN` が作ったタグは新しい run を起動しない（GitHub の再帰防止）ので、
+   dispatch から切っても run は1本で完結する。
 4. run を見守る（`gh run watch`、または Actions タブ）。ステップサマリーにはリリース計画
    （トリガー、dry_run、これから publish される正確なバージョン）、pack した tarball の内容、
    pack 済み tarball の内容 assertion、データセット前提レポートが載る。green でも読むこと。
@@ -260,12 +283,9 @@ publish すると、`npm install jp-address-romaji` がすべての利用者に�
 せずスキップするので、再実行は安全。GitHub Release も同じで、そのタグの Release が既にあれば
 `gh release view` で検出してそのまま残す。
 
-### タグを GitHub の UI から作る場合（`git push` が使えないとき）
+### タグを GitHub の UI から作る場合
 
-セッションの資格情報ではタグを push できない（403）。**リリース画面からタグごと作れる**ので、
-ブラウザさえあれば代われる。ただし `git tag` / `git push` 経路が使えるならそちらを優先すること
-——UI 経路には下の2つの手作業が付きまとう。
-
+`git` が手元に無いとき（スマホなど）は、リリース画面からタグごと作れる:
 `https://github.com/tomatomerde/jp-address-romaji/releases/new` →
 Choose a tag に `v<version>` を打って **Create new tag: … on publish** → **Target には `main` では
 なく、公開物を実際にビルドしたコミットを指定する**（Target ドロップダウンはブランチだけでなく
@@ -276,12 +296,21 @@ Choose a tag に `v<version>` を打って **Create new tag: … on publish** �
 
 タグができた時点でこのワークフローが起動する。**publish は既にレジストリにあるものをスキップし、
 Release も既に存在するのでそのまま残る**ので、公開済みバージョンに後からタグだけを付けたい
-ときにも使える（今回 `0.1.2` がその状態になった。経緯は `project-status.md`）。ただし Release が
-既に存在する場合、その本文は CHANGELOG から自動生成されない（ワークフローの「Create GitHub
-Release」ステップは既存 Release を残すだけで上書きしない）。UI で新規に Release を作る場合も
-本文は入力した内容がそのまま使われ、CHANGELOG からは生成されない。どちらの場合も、該当バージョンの
-CHANGELOG の節を**手動でコピーして本文に貼ること**——`v0.1.0` / `v0.1.1` の Release と体裁を
-揃えるため。
+ときにも使える（`0.1.2` が実際にその状態になり、この経路で解消した。経緯は
+`project-status.md`）。
+
+ただし UI 経路では **Release 本文が CHANGELOG から生成されない**。ワークフローの「Create GitHub
+Release」ステップは、既に Release があればそのまま残すだけで上書きしないし、UI で新規に作る場合も
+本文は入力した内容がそのまま使われる。該当バージョンの CHANGELOG の節を**手動でコピーして本文に
+貼ること**——`v0.1.0` / `v0.1.1` の Release と体裁を揃えるため。`cut_release` の dispatch なら
+本文は CHANGELOG から自動で作られるので、この手作業は要らない。
+
+### provenance の source ref は経路で変わる
+
+publish が走った run の ref がそのまま provenance に載る。タグ push なら
+`refs/tags/v0.1.2`、`cut_release` の dispatch なら `refs/heads/main`。**指しているコミットは
+同じ**で、どちらも GitHub Actions が署名した本物の attestation だが、`npm view <pkg> --json` の
+attestation を追う人には見え方が違うので、経路を変えたことを知らないと食い違いに見える。
 
 ### リリース候補と、それが守るもの・守らないもの
 
