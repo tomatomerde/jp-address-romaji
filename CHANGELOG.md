@@ -38,22 +38,44 @@ move.
 
 ### Changed
 
-Three groups of output move. All three were wrong before, but they move in different directions,
-so check the ones that apply to you:
+Four groups of output move, in different directions, so check the ones that apply to you:
 
-- **Some conversions that returned `ok` now return `AMBIGUOUS`.** These are the inputs that
-  genuinely have more than one reading: the 13 colliding municipalities, and bare
-  `"<number>-<number> <Town>"` forms in the 2,027 towns that exist both with and without chome.
-  The candidates are returned, so you can choose; a postal code, a county name, or writing the
-  chome explicitly resolves them as before.
+- **Some conversions that returned `ok` now return `AMBIGUOUS`.** These are inputs that genuinely
+  have more than one reading, and the candidates come back with the failure so you can choose.
+  Three sources:
+  - Municipality names that romanize identically. Of the 13 municipalities that used to resolve to
+    the wrong one, 11 now resolve correctly; the remaining two pairs are indistinguishable —
+    江差町/枝幸町 (both `Esashi-cho`) and 古宇郡泊村/国後郡泊村 (both `Tomari-mura`).
+    **Adding the county** (`"…, Fuchu-cho, Aki-gun, Hiroshima"`) resolves these.
+  - Bare `"<number>-<number> <Town>"` in the 2,027 towns that exist both with and without chome.
+    **There is nothing you can add to the string to disambiguate these** — `fromRomaji` reads a
+    leading number as a chome and has no literal chome syntax, and a postal code cannot help
+    because both candidates are the same town. Pick from `candidates` instead. Note this means
+    **the library can no longer read back its own output** for these towns: `toRomaji` renders
+    北ノ沢二丁目5 and 北ノ沢2-5 identically as `"2-5 Kitanosawa"`.
+  - One town pair reachable only because digits are now accepted (below): 東神楽町's
+    `ひじり野南一条` and `ひじりの南一条`, whose readings are identical.
 - **Some conversions that were refused now succeed.** `isTransliterableKana` now accepts digits,
   because in the v2 dataset a digit inside a reading is part of the name (`キタ１０ジョウニシ` →
   `Kita10Jonishi`), not an untranslatable character. 5,576 entries that carry only a kana reading
   now convert instead of returning `NO_ROMAJI_DATA`. Four entries whose readings contain
   full-width hyphens or Latin letters are still refused, under every style.
+- **Some conversions that returned `ok` now return `CITY_NOT_FOUND`.** A suffix naming the wrong
+  *kind* of administrative unit no longer resolves: `"Hakodate-machi"` for 函館**市** used to
+  return 函館市 and now fails. Suffixes that are a plausible reading of the same kanji still work
+  (`-cho` and `-machi` are both readings of 町), and the library's own output is unaffected — it
+  always writes the right one.
 - **Some conversions return a different, correct string.** The koaza fix above restores a block
   number that used to be dropped: `青笹町青笹2-3` now romanizes as `"2-3 Aozasacho Aozasa"`,
   not `"3 Aozasacho Aozasa"`.
+
+Measured over the whole dataset, on the shipped 0.1.2 versus this release:
+
+| Sweep | 0.1.2 | 0.1.3 |
+| --- | --- | --- |
+| All 1,898 municipalities, written the way the dataset spells them | 1,885 correct, **13 wrong** | 1,894 correct, 4 `AMBIGUOUS`, **0 wrong** |
+| 4,152 wrong-but-plausible suffix spellings | 4,117 correct, **35 wrong** | 4,121 correct, 31 `AMBIGUOUS`, **0 wrong** |
+| 23,486 addresses, ja → romaji → ja | — | **0 came back as a different address** |
 
 `AMBIGUOUS` candidates from the municipality level now carry `blockNumbers` and `unparsed`, as the
 town-level ones already did — picking a candidate no longer silently loses the block number and
