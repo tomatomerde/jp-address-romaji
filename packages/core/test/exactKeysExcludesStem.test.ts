@@ -7,9 +7,7 @@
  * `matchMunicipality`'s exact-vs-stem tiebreaker relies on: an exact-reading
  * match ("Fuchu-cho" against 府中町's own `Fuchu-cho`) must be preferred over
  * one that only exists once both sides are stemmed down to "fuchu" ("Fuchu-cho"
- * against 府中市's `Fuchu-shi`, stemmed). The same distinction is what the
- * romaji-field-vs-kana-only town-collision preference in `fromRomaji` relies
- * on too (see townRomajiPrecedence.test.ts).
+ * against 府中市's `Fuchu-shi`, stemmed).
  *
  * Nothing about the two functions' *shapes* stops a future "these are
  * basically duplicated, let's unify them" refactor from making `exactKeys`

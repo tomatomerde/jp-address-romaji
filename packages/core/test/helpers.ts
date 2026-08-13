@@ -71,22 +71,22 @@ export function useKoazaNumberAmbiguityFixtureData(): void {
 }
 
 /**
- * A sixth, separate fixture dataset holding a real municipality (北海道上川郡
- *東神楽町) with a town-name collision between a romaji-field-backed town and
- * a kana-only-backed town that share the same romanized key
- * (`ひじり野南一条` / `ひじりの南一条`). See
- * fixtures-town-romaji-precedence/README.md.
+ * A sixth, separate fixture dataset holding the one real municipality
+ * (北海道上川郡東神楽町) where accepting digits in a kana reading creates a
+ * new romanized-key collision: `ひじり野南一条` (romaji field) and
+ * `ひじりの南一条` (kana only) index the same key. See
+ * fixtures-kana-digit-collision/README.md.
  */
-export const TOWN_ROMAJI_PRECEDENCE_FIXTURE_DATA_DIR = path.join(
+export const KANA_DIGIT_COLLISION_FIXTURE_DATA_DIR = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
-  'fixtures-town-romaji-precedence',
+  'fixtures-kana-digit-collision',
   'data',
 );
 
-/** Point the library at the town romaji-field-precedence fixture dataset. */
-export function useTownRomajiPrecedenceFixtureData(): void {
+/** Point the library at the kana-digit collision fixture dataset. */
+export function useKanaDigitCollisionFixtureData(): void {
   clearDataCache();
-  configureDataSource({ dataDir: TOWN_ROMAJI_PRECEDENCE_FIXTURE_DATA_DIR });
+  configureDataSource({ dataDir: KANA_DIGIT_COLLISION_FIXTURE_DATA_DIR });
 }
 
 /**
