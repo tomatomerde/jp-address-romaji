@@ -19,6 +19,12 @@
  *   hit — `fromRomaji` returns AMBIGUOUS with candidates for these.
  * - "full-form keys" excludes the stems, so it is the residue that writing
  *   the full town name cannot resolve (夷町 vs 恵比須町, both `Ebisucho`).
+ *
+ * Not to be confused with the "assumption 5" percentage printed by
+ * `scripts/verify-data-assumptions.ts`: that one is a cheap naive proxy
+ * (raw `oaza_cho_r` field only, no kana fallback, no stemming) meant as a
+ * quick smoke-test signal, not the figure this script measures. The numbers
+ * this script prints are the ones quoted in the README and CLAUDE.md.
  */
 
 import fs from 'node:fs';
