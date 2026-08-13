@@ -15,12 +15,19 @@ name: Release
 #                          checked)
 #     Any other tag shape fails the run explicitly rather than guessing.
 #     See docs/releasing.md for the full table.
-#   - workflow_dispatch: for testing the whole pipeline (dry_run defaults to
-#     true) or for re-running a release that failed partway — e.g. the data
-#     package published but core didn't — without cutting a new tag. No
-#     GitHub Release is created from a dispatch run, and — because there is
-#     no tag — no version check runs either; it publishes whatever version
-#     is currently on disk for the selected package(s). The version(s) about
+#   - workflow_dispatch with cut_release: true: the other normal release
+#     path, and the one an agent session has to use — sessions cannot push
+#     tags (403), so requiring a tag push would put a human in the middle of
+#     every release. The tag is derived from the package.json version(s) of
+#     the selected scope, the same CHANGELOG guard runs, and the tag itself
+#     is created by `gh release create --target` at the end, after publish
+#     succeeded. Tags created with GITHUB_TOKEN do not start another run.
+#   - workflow_dispatch with cut_release: false (the default): for testing
+#     the whole pipeline (dry_run defaults to true) or for re-running a
+#     release that failed partway — e.g. the data package published but core
+#     didn't — without cutting a new tag. No tag and no GitHub Release are
+#     created, and no version check runs; it publishes whatever version is
+#     currently on disk for the selected package(s). The version(s) about
 #     to be published are always logged and written to the step summary so
 #     that's not silent.
 #
@@ -44,6 +51,10 @@ on:
         description: 'Run every check but skip the actual npm publish'
         type: boolean
         default: true
+      cut_release:
+        description: 'Cut a release: tag + GitHub Release from the package.json version (overrides dry_run)'
+        type: boolean
+        default: false
       concurrency:
         description: 'Parallel downloads for the dataset build (matches the refresh workflow)'
         type: string
@@ -142,10 +153,58 @@ jobs:
             echo "CREATE_RELEASE=true" >> "$GITHUB_ENV"
             PACKAGES_INPUT="$SCOPE"
           else
-            echo "CHECK_VERSION=false" >> "$GITHUB_ENV"
-            echo "DRY_RUN=${{ github.event.inputs.dry_run }}" >> "$GITHUB_ENV"
-            echo "CREATE_RELEASE=false" >> "$GITHUB_ENV"
+            DRY_RUN="${{ github.event.inputs.dry_run }}"
             PACKAGES_INPUT="${{ github.event.inputs.packages }}"
+            if [ "${{ github.event.inputs.cut_release }}" = "true" ]; then
+              # Same plan as a tag push, except the tag does not exist yet:
+              # it is derived from what is on disk, and created at the end.
+              # "Cut a release" and "skip the publish" cannot both be true,
+              # so cut_release wins — loudly, not silently.
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "::notice::cut_release=true overrides dry_run=true — this run will publish."
+                DRY_RUN=false
+              fi
+              case "$PACKAGES_INPUT" in
+                both)
+                  dv=$(node -p "require('./packages/data/package.json').version")
+                  cv=$(node -p "require('./packages/core/package.json').version")
+                  if [ "$dv" != "$cv" ]; then
+                    echo "::error::packages=both cuts a v<version> tag, which requires both package.json versions to match (data=$dv, core=$cv). Align them, or cut data-only/core-only — see docs/releasing.md." >&2
+                    exit 1
+                  fi
+                  EXPECTED_VERSION="$dv"
+                  TAG="v$EXPECTED_VERSION"
+                  RELEASE_TITLE="$TAG"
+                  ;;
+                data-only)
+                  EXPECTED_VERSION=$(node -p "require('./packages/data/package.json').version")
+                  TAG="data-v$EXPECTED_VERSION"
+                  RELEASE_TITLE="jp-address-romaji-data $TAG"
+                  ;;
+                core-only)
+                  EXPECTED_VERSION=$(node -p "require('./packages/core/package.json').version")
+                  TAG="core-v$EXPECTED_VERSION"
+                  RELEASE_TITLE="jp-address-romaji $TAG"
+                  ;;
+                *)
+                  echo "::error::Unknown packages input: '$PACKAGES_INPUT'" >&2
+                  exit 1
+                  ;;
+              esac
+              echo "TAG=$TAG" >> "$GITHUB_ENV"
+              echo "EXPECTED_VERSION=$EXPECTED_VERSION" >> "$GITHUB_ENV"
+              echo "RELEASE_TITLE=$RELEASE_TITLE" >> "$GITHUB_ENV"
+              # The tag-vs-package check below is a tautology on this path
+              # (the tag came from package.json), but the CHANGELOG guard
+              # rides the same flag and is not: it still refuses to cut a
+              # release whose section is missing or still says "unreleased".
+              echo "CHECK_VERSION=true" >> "$GITHUB_ENV"
+              echo "CREATE_RELEASE=true" >> "$GITHUB_ENV"
+            else
+              echo "CHECK_VERSION=false" >> "$GITHUB_ENV"
+              echo "CREATE_RELEASE=false" >> "$GITHUB_ENV"
+            fi
+            echo "DRY_RUN=$DRY_RUN" >> "$GITHUB_ENV"
           fi
 
           case "$PACKAGES_INPUT" in
@@ -172,6 +231,9 @@ jobs:
             echo ""
             echo "- Trigger: \`${{ github.event_name }}\`"
             echo "- dry_run: \`$DRY_RUN\`"
+            if [ "$CREATE_RELEASE" = "true" ]; then
+              echo "- Tag / GitHub Release: \`$TAG\`"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
           # The dist-tag is shown here because it is the one field whose
           # wrong value is silent and public: an rc landing on `latest`
@@ -192,9 +254,12 @@ jobs:
 
       # -----------------------------------------------------------------
       # Version guard: publishing the wrong version is worse than not
-      # publishing at all. Only meaningful for a tag push — workflow_dispatch
-      # has no tag to check against, and publishes whatever version is
-      # currently on disk (that's the "re-run a stuck release" use case).
+      # publishing at all. Meaningful for a tag push, where the tag is an
+      # independent statement of intent. A plain dispatch has no tag to check
+      # against and publishes whatever version is on disk (that's the "re-run
+      # a stuck release" use case); a cut_release dispatch derives the tag
+      # from that same package.json, so this check cannot fail there — the
+      # CHANGELOG guard below is the one that bites on that path.
       #
       # Scoped to the package(s) this tag is actually publishing: a
       # `data-v*` tag only checks packages/data/package.json. Checking core's
@@ -563,12 +628,19 @@ jobs:
             } > release-notes.md
           fi
 
+      # `--target` is what makes the cut_release path work: when the tag does
+      # not exist yet, `gh release create` creates it at that commit, so the
+      # release is cut without anyone pushing a tag. On a tag push the tag
+      # already exists and github.sha is the commit it points at, so passing
+      # it changes nothing.
+      #
       # An existing Release is left alone rather than failing the run, for the
       # same reason the publish steps skip versions already on npm: re-running
-      # a tag has to be safe. Two ways to arrive here with the Release already
-      # in place — re-pushing a tag after a partial failure, and creating the
-      # Release from the GitHub UI (which creates the tag, so this workflow
-      # starts while the Release already exists). Neither is an error.
+      # a release has to be safe. Three ways to arrive here with the Release
+      # already in place — re-pushing a tag after a partial failure, creating
+      # the Release from the GitHub UI (which creates the tag, so this workflow
+      # starts while the Release already exists), and re-dispatching a
+      # cut_release run. None of them is an error.
       - name: Create GitHub Release
         if: env.CREATE_RELEASE == 'true' && env.DRY_RUN != 'true'
         shell: bash
@@ -578,5 +650,6 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "A GitHub Release for $TAG already exists; leaving it as is."
           else
-            gh release create "$TAG" --title "$RELEASE_TITLE" --notes-file release-notes.md
+            gh release create "$TAG" --target "$GITHUB_SHA" \
+              --title "$RELEASE_TITLE" --notes-file release-notes.md
           fi
