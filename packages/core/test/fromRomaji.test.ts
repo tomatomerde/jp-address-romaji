@@ -92,6 +92,24 @@ describe('fromRomaji: reconstructs Japanese', () => {
   });
 });
 
+describe('fromRomaji: postal code extraction requires a digit boundary', () => {
+  // Same regression as toRomaji's splitPostalCode (see toRomaji.test.ts):
+  // tokenize()'s NNN-NNNN pattern had no boundary against an adjacent digit,
+  // so "1123-4567 Nishishinjuku, ..." was silently read as postal code
+  // 123-4567 plus chome 1, instead of the 4-digit block number 1123-4567 it
+  // actually is. The fix makes the address correctly fail to resolve — chome
+  // 1123 does not exist — rather than resolving to a wrong, plausible-looking
+  // town.
+  it('does not carve a postal code out of a 4-digit block number, and refuses instead of guessing', async () => {
+    const result = await fromRomaji('1123-4567 Nishishinjuku, Shinjuku-ku, Tokyo');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('TOWN_NOT_FOUND');
+    expect(result.partial?.postalCode).toBeUndefined();
+    expect(result.message).toContain('1123');
+  });
+});
+
 describe('fromRomaji: building names', () => {
   // Regression: only Japanese-script building names were separated out, so a
   // romaji one — the common case for a western-order address typed by hand —

@@ -381,7 +381,21 @@ function tokenize(input: string): { postalCode?: string; segments: string[] } {
   text = text.replace(/[,\s]+(japan|nippon|nihon)\s*$/i, '');
 
   let postalCode: string | undefined;
-  const postal = text.match(/〒?\s*(\d{3})\s*-\s*(\d{4})(?!\d)/);
+  // Keep this pattern identical to splitPostalCode's in toRomaji.ts — see the
+  // comment there for why both sides need a boundary against digits *and*
+  // dash-like characters, not just digits (a phone number such as
+  // `090-1234-5678` still matches `NNN-NNNN` with a digit-only boundary).
+  //
+  // The dash class also matches toRomaji's on purpose, even though a
+  // western-order romaji address is unlikely to be typed with a full-width
+  // `ー` in practice: toRomaji's own postal-code suffix is always rendered
+  // with an ASCII `-` (see render()), but nothing stops a caller from pasting
+  // in a code copied from a Japanese source that used one of the other dash
+  // variants, and there's no reason for the two directions to disagree on
+  // what counts as a separator.
+  const postal = text.match(
+    /(?<![\d\-‐‑−ー－])〒?\s*(\d{3})\s*[-‐‑−ー－]\s*(\d{4})(?![\d\-‐‑−ー－])/,
+  );
   if (postal) {
     postalCode = `${postal[1]}-${postal[2]}`;
     text = text.replace(postal[0], ' ');
