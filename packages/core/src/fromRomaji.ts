@@ -546,8 +546,19 @@ type MatchQuality = 'exact' | 'stem';
  * administrative-suffix stemming applied. Used to tell an exact-reading
  * match apart from one that only worked after stemming — see
  * {@link matchMunicipality}.
+ *
+ * Deliberately NOT stem-inclusive, unlike the very similarly-shaped
+ * {@link candidateKeys}: `matchMunicipality`'s exact-vs-stem tiebreaker (and
+ * the town-collision preference in `fromRomaji` that similarly needs "did
+ * this match without stemming") only works because the two are kept
+ * distinct. The two functions look like an obvious "de-duplicate this"
+ * refactor target, but merging them silently changes national resolution
+ * behavior (see exactKeysExcludesStem.test.ts's comment for detail) while
+ * every existing test still passes — that combination is exactly why this
+ * function is exported: so a test can pin the difference directly, rather
+ * than relying on a national sweep no unit test runs.
  */
-function exactKeys(kana?: string, romajiField?: string): Set<string> {
+export function exactKeys(kana?: string, romajiField?: string): Set<string> {
   const keys = new Set<string>();
   const add = (v: string | undefined) => {
     if (v) keys.add(normalizeRomajiKey(v));
