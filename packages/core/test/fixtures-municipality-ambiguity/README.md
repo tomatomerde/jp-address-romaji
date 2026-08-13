@@ -20,9 +20,15 @@ that fixing the bug is testable without needing the full ~12MB real dataset:
 | 高知県 | 四万十市 (`Shimanto-shi`) / 高岡郡四万十町 (`Shimanto-cho`), both containing a `中村` town | End-to-end reproduction of the reported bug (`1-1 Nakamura, Shimanto-cho, Kochi` resolving into the wrong municipality), not just the municipality-matching unit behaviour. |
 
 `ja.json` is a trimmed copy of the real `ja.json` (only these three
-prefectures, only these two cities per prefecture, otherwise byte-identical
-records). The two `中村` town files under 高知県 are similarly trimmed to the
-single record needed by the round-trip test.
+prefectures, only these two cities per prefecture) with each prefecture's
+`code` replaced by a placeholder (e.g. 広島県 is `34001` here vs. `340006` in
+the real dataset), the same convention the general `fixtures/` data uses —
+city/town-level fields are otherwise byte-identical to the real dataset. The
+two `中村` town files under 高知県 are similarly trimmed to the single record
+needed by the round-trip test, and carry `oaza_cho_r` exactly as the real
+dataset does: present for 高岡郡四万十町's `中村` (`"Nakamura"`), absent for
+四万十市's `中村` (which is why that record resolves via the kana
+transliteration path instead).
 
 Regenerating: extract the relevant `pref`/`cities` entries from a real
 built dataset (`JP_ADDRESS_ROMAJI_DATA_DIR`) for the municipalities in the

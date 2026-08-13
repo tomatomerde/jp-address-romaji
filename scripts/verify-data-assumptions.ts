@@ -171,7 +171,7 @@ function main(): void {
   console.log('  (naive proxy metric — raw oaza_cho_r keys only, no kana fallback, no');
   console.log('   candidateKeys stemming. NOT the user-facing ambiguity rate: that figure');
   console.log('   is measured by `scripts/measure-ambiguity.ts` and is what the README and');
-  console.log('   CLAUDE.md quote (1.10% / 0.69%). This is a cheaper smoke-test signal.)');
+  console.log('   CLAUDE.md quote (1.07% / 0.67%). This is a cheaper smoke-test signal.)');
   console.log(`  distinct romaji-field keys (naive): ${distinctKeys}`);
   console.log(`  ambiguous keys (naive)             : ${ambiguousKeys} (${pct(ambiguousKeys, distinctKeys)})`);
   console.log('');

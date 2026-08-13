@@ -1,10 +1,11 @@
 /**
  * Romanized, western-order address -> structured address + Japanese text.
  *
- * Ambiguity is the central problem here. Measured over the national dataset,
- * a town's romanized name is unique within a known municipality 98.77% of the
- * time, far less often than that nationwide, and 13 municipality names collide
- * across prefectures ("Date-shi" is both 北海道伊達市 and 福島県伊達市).
+ * Ambiguity is the central problem here. Measured over the national dataset
+ * (scripts/measure-ambiguity.ts), a town's full-form romanization key is
+ * unique within a known municipality 97.99% of the time, far less often than
+ * that nationwide, and 13 municipality names collide across prefectures
+ * ("Date-shi" is both 北海道伊達市 and 福島県伊達市).
  *
  * So resolution is strictly outside-in: prefecture, then municipality, then
  * town. When more than one reading survives, we return AMBIGUOUS with the
@@ -33,8 +34,8 @@ export interface FromRomajiOptions {
    * Resolve a postal code to the town names (in Japanese) it covers, so that
    * an otherwise ambiguous romanization can be narrowed to one.
    *
-   * Genuine ambiguity is rare — 0.69% of full-form romanization keys match more
-   * than one distinct town in the same municipality (1.10% once the indexed
+   * Genuine ambiguity is rare — 0.67% of full-form romanization keys match more
+   * than one distinct town in the same municipality (1.07% once the indexed
    * short forms are included; measured by scripts/measure-ambiguity.ts on the
    * shipped dataset) — and roughly half of the indexed collisions disappear
    * when the caller writes the full town name. Bundling Japan Post's KEN_ALL to close
