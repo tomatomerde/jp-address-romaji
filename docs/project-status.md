@@ -15,16 +15,16 @@ CHANGELOG を参照）。`0.1.0` は 2026-08-10、`0.1.1` は 2026-08-12 リリ�
 provenance attestation 付き。`0.1.0-rc.1` は `0.1.0` の数時間前にリハーサルとして `next`
 dist-tag で公開した — それが捉えた3件は CHANGELOG を参照。
 
-**`0.1.2` にはタグと GitHub Release がまだ無い（メンテナの操作待ち）。** publish 自体は
-`release.yml` の `workflow_dispatch`（dry_run: false、run `31616749939`）で完了しており、
-provenance も付いている。タグ push はセッションの資格情報では 403 になるため、メンテナが
-`git fetch origin main && git tag v0.1.2 <0.1.2 を切ったコミット> && git push origin v0.1.2` を
-実行すること。手元に clone が無ければブラウザからでもよい — `releasing.md` の
-「タグを GitHub の UI から作る場合」を参照（リリース画面がタグごと作る）。
+`v0.1.2` のタグと GitHub Release も揃っている（2026-08-12）。ここは一度ちぐはぐになった:
+publish は `workflow_dispatch`（run `31616749939`）で通ったのに、**タグ push がセッションの
+資格情報では 403 になる**ため、publish 済みなのにタグだけ無い状態で数時間残った。
+メンテナがリリース画面からタグごと作って解消し、そのとき走った run（`31652490400`）は
+公開済みバージョンを `npm view` で、既存 Release を `gh release view` でスキップして緑で
+終わっている。
 
-どちらの経路でもタグ作成でワークフローが再度走るが、公開済みバージョンは `npm view` で、
-既存の GitHub Release は `gh release view` で検出してスキップするので、二重公開も失敗も
-起きない。
+**この 403 は毎回のリリースで必ず起きるので、タグ push はリリースの必須手順から外した。**
+`release.yml` を `cut_release: true` で dispatch すれば、タグと GitHub Release まで
+ワークフローが作る（`releasing.md`「リリースを切る」）。タグ push も従来どおり使える。
 
 完了済み:
 
