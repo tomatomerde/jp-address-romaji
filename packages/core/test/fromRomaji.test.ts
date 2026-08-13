@@ -153,6 +153,20 @@ describe('fromRomaji: town matching does not accept an arbitrary suffix', () => 
   });
 });
 
+describe('fromRomaji: designated-city ward cannot be inferred from one segment', () => {
+  it('refuses a bare city name for a city whose records are all per-ward', async () => {
+    // 札幌市 has no ward-less record in the dataset — every row is one
+    // specific ward. Without the "a single segment can't match a
+    // ward-bearing record" guard, "Sapporo-shi" alone matches 中央区's row
+    // via its city field (which really is "Sapporo-shi"), silently
+    // attributing a ward the caller never wrote.
+    const result = await fromRomaji('Sapporo-shi, Hokkaido');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('CITY_NOT_FOUND');
+  });
+});
+
 describe('fromRomaji: refuses rather than guesses', () => {
   it('reports an unknown prefecture', async () => {
     const result = await fromRomaji('1-2-3 Somewhere, Nowhere-ku, Atlantis');
@@ -180,6 +194,19 @@ describe('fromRomaji: refuses rather than guesses', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('EMPTY_INPUT');
+  });
+
+  it('rejects a chome that does not exist for a town that has no chome-less entry', async () => {
+    // 西新宿 (fixture data) only has chome 1 through 8, and no plain
+    // (chome-less) entry. Without the "no such chome" guard, "99-1" would
+    // silently be accepted against some arbitrary chome record, with the
+    // chome dropped and 99 folded into blockNumbers instead — a fabricated
+    // address rather than a refusal.
+    const result = await fromRomaji('99-1 Nishishinjuku, Shinjuku-ku, Tokyo');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('TOWN_NOT_FOUND');
+    expect(result.message).toContain('no chome 99');
   });
 });
 

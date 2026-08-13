@@ -183,6 +183,28 @@ export async function fromRomaji(
       partial,
     );
   }
+
+  if (municipality.kind === 'ambiguous') {
+    // Mirrors the town-level ambiguity handling below: when more than one
+    // municipality survives matching, we do not guess which one the caller
+    // meant. There is no postal-code-style narrowing hook at this level (a
+    // postal code narrows a town within one municipality, not a choice of
+    // municipality), so this always surfaces as AMBIGUOUS.
+    const matchedText = remaining.slice(remaining.length - municipality.consumed).join(', ');
+    const candidates: ParsedAddress[] = municipality.records.map((record) =>
+      buildMunicipalityCandidate(partial, record, postalCode),
+    );
+    return {
+      ok: false,
+      reason: 'AMBIGUOUS',
+      message:
+        `"${matchedText}" matches ${municipality.records.length} municipalities in ${prefEntry.romaji}: ` +
+        `${municipality.records.map((r) => cityPathName(r)).join(', ')}. Choose one of the returned candidates.`,
+      partial,
+      candidates,
+    };
+  }
+
   remaining = remaining.slice(0, remaining.length - municipality.consumed);
 
   const record = municipality.record;
@@ -372,58 +394,145 @@ function tokenize(input: string): { postalCode?: string; segments: string[] } {
   return postalCode ? { postalCode, segments } : { segments };
 }
 
+/** Result of {@link matchMunicipality}. */
+type MunicipalityMatch =
+  | { kind: 'match'; record: CityRecord; consumed: number }
+  | { kind: 'ambiguous'; records: CityRecord[]; consumed: number };
+
 /**
  * Match trailing segments against a municipality.
  *
  * Handles both `"Chuo-ku, Sapporo-shi"` (ward and city as separate segments)
  * and a single combined segment.
  */
-function matchMunicipality(
-  cities: CityRecord[],
-  segments: string[],
-): { record: CityRecord; consumed: number } | undefined {
+function matchMunicipality(cities: CityRecord[], segments: string[]): MunicipalityMatch | undefined {
   // Try two trailing segments first (ward + city, or city + county).
   for (const consumed of [2, 1]) {
     if (segments.length < consumed) continue;
     const tail = segments.slice(segments.length - consumed);
+
+    const hits: { record: CityRecord; quality: MatchQuality }[] = [];
     for (const record of cities) {
-      if (matchesMunicipality(record, tail)) return { record, consumed };
+      const quality = matchesMunicipality(record, tail);
+      if (quality) hits.push({ record, quality });
     }
+    if (hits.length === 0) continue;
+
+    // Prefer a record whose OWN reading matches the query verbatim over one
+    // that only matches once an administrative suffix is stemmed away on
+    // both sides. "Fuchu-cho" is 府中町's actual reading (exact); it also
+    // collides with 府中市 ("Fuchu-shi") once both are reduced to the stem
+    // "fuchu" (stem-only). The exact hit must win rather than whichever
+    // record happens to come first in the dataset.
+    const best = hits.some((h) => h.quality === 'exact') ? 'exact' : 'stem';
+    const winners = hits.filter((h) => h.quality === best).map((h) => h.record);
+
+    if (winners.length === 1) {
+      return { kind: 'match', record: winners[0]!, consumed };
+    }
+    // More than one municipality survives even after preferring exact
+    // matches over stemmed ones — e.g. 檜山郡江差町 and 枝幸郡枝幸町 both
+    // romanize to exactly "Esashi-cho". Genuine ambiguity, not a tie to
+    // break arbitrarily.
+    return { kind: 'ambiguous', records: winners, consumed };
   }
   return undefined;
 }
 
-function matchesMunicipality(record: CityRecord, tail: string[]): boolean {
-  const cityKeys = candidateKeys(record.city_k, record.city_r);
-  const wardKeys = record.ward
-    ? candidateKeys(record.ward_k, record.ward_r)
-    : undefined;
-  const countyKeys = record.county
-    ? candidateKeys(record.county_k, record.county_r)
-    : undefined;
+/** How closely a query segment matched a dataset field. */
+type MatchQuality = 'exact' | 'stem';
 
-  const keyOf = (s: string) => [normalizeRomajiKey(s), stemKey(s)];
-  const hits = (keys: Set<string>, s: string) => keyOf(s).some((k) => k && keys.has(k));
+/**
+ * Keys built only from a field's own accepted spelling(s), with no
+ * administrative-suffix stemming applied. Used to tell an exact-reading
+ * match apart from one that only worked after stemming — see
+ * {@link matchMunicipality}.
+ */
+function exactKeys(kana?: string, romajiField?: string): Set<string> {
+  const keys = new Set<string>();
+  const add = (v: string | undefined) => {
+    if (v) keys.add(normalizeRomajiKey(v));
+  };
+  add(romajiField);
+  if (kana) {
+    add(kanaToRomaji(kana, 'none'));
+    add(kanaToRomaji(kana, 'macron'));
+    add(kanaToRomaji(kana, 'oh'));
+  }
+  keys.delete('');
+  return keys;
+}
+
+/**
+ * Quality of a single query segment against one field, worst-case combined
+ * across the two segments of a ward+city or city+county pair (a pair is only
+ * as good as its weaker half).
+ */
+function segmentQuality(exact: Set<string>, all: Set<string>, s: string): MatchQuality | undefined {
+  const key = normalizeRomajiKey(s);
+  if (exact.has(key)) return 'exact';
+  // Falling back to a stem match on either side is what lets a query with
+  // the "wrong" but plausible administrative-suffix reading still resolve
+  // (a 町 can genuinely be read "-cho" or "-machi"; the dataset only records
+  // the one that's actually correct for that municipality).
+  if (all.has(key) || all.has(stemKey(s))) return 'stem';
+  return undefined;
+}
+
+function combine(a: MatchQuality, b: MatchQuality): MatchQuality {
+  return a === 'stem' || b === 'stem' ? 'stem' : 'exact';
+}
+
+function matchesMunicipality(record: CityRecord, tail: string[]): MatchQuality | undefined {
+  const cityExact = exactKeys(record.city_k, record.city_r);
+  const cityAll = candidateKeys(record.city_k, record.city_r);
 
   if (tail.length === 1) {
     const only = tail[0]!;
     // A designated city's ward cannot be identified from one segment: "Chuo-ku"
     // alone is ambiguous across Sapporo, Osaka, Kobe and others, so we require
     // the city segment too and let the two-segment branch handle it.
-    if (record.ward) return false;
-    return hits(cityKeys, only);
+    if (record.ward) return undefined;
+    return segmentQuality(cityExact, cityAll, only);
   }
 
   const [first, second] = tail as [string, string];
-  if (record.ward && wardKeys) {
+  if (record.ward) {
     // Western order puts the smaller unit first: "Chuo-ku, Sapporo-shi".
-    if (hits(wardKeys, first) && hits(cityKeys, second)) return true;
+    const wardExact = exactKeys(record.ward_k, record.ward_r);
+    const wardAll = candidateKeys(record.ward_k, record.ward_r);
+    const wardQ = segmentQuality(wardExact, wardAll, first);
+    const cityQ = segmentQuality(cityExact, cityAll, second);
+    if (wardQ && cityQ) return combine(wardQ, cityQ);
   }
-  if (record.county && countyKeys) {
+  if (record.county) {
     // "Izumozaki-machi, Santo-gun"
-    if (hits(cityKeys, first) && hits(countyKeys, second)) return true;
+    const countyExact = exactKeys(record.county_k, record.county_r);
+    const countyAll = candidateKeys(record.county_k, record.county_r);
+    const cityQ = segmentQuality(cityExact, cityAll, first);
+    const countyQ = segmentQuality(countyExact, countyAll, second);
+    if (cityQ && countyQ) return combine(cityQ, countyQ);
   }
-  return false;
+  return undefined;
+}
+
+/** Build an AMBIGUOUS candidate for a municipality-level collision — the town
+ * has not been located yet, so this stops at level 2 (like the TOWN_NOT_FOUND
+ * partial for a resolved-but-town-less address). */
+function buildMunicipalityCandidate(
+  partial: Partial<ParsedAddress>,
+  record: CityRecord,
+  postalCode: string | undefined,
+): ParsedAddress {
+  return {
+    ...(postalCode ? { postalCode } : {}),
+    ...(partial.prefecture ? { prefecture: partial.prefecture } : {}),
+    ...(record.county ? { county: { ja: record.county, kana: record.county_k, romaji: record.county_r } } : {}),
+    city: { ja: record.city, kana: record.city_k, romaji: record.city_r },
+    ...(record.ward ? { ward: { ja: record.ward, kana: record.ward_k, romaji: record.ward_r } } : {}),
+    blockNumbers: [],
+    level: 2,
+  };
 }
 
 /** A town located inside one address segment. */

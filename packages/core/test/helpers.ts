@@ -17,6 +17,25 @@ export function useFixtureData(): void {
 }
 
 /**
+ * A second, separate fixture dataset holding real municipality-name
+ * collisions (府中市/府中町, 江差町/枝幸町, 四万十市/四万十町). Kept apart
+ * from `FIXTURE_DATA_DIR` because that one is deliberately sparse v1-derived
+ * data used to exercise refusal paths, and its coverage is not meant to be
+ * "fixed" by adding records to it. See fixtures-municipality-ambiguity/README.md.
+ */
+export const MUNICIPALITY_AMBIGUITY_FIXTURE_DATA_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'fixtures-municipality-ambiguity',
+  'data',
+);
+
+/** Point the library at the municipality-collision fixture dataset. */
+export function useMunicipalityAmbiguityFixtureData(): void {
+  clearDataCache();
+  configureDataSource({ dataDir: MUNICIPALITY_AMBIGUITY_FIXTURE_DATA_DIR });
+}
+
+/**
  * Run `fn` with `fetch` replaced by a stub that throws.
  *
  * Any network access — by our code or by the upstream normalizer — fails the
