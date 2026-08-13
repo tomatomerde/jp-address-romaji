@@ -117,16 +117,29 @@ jobs:
               v[0-9]*)
                 SCOPE="both"
                 EXPECTED_VERSION="${TAG#v}"
+                # Both-package releases keep the CHANGELOG heading shape
+                # every past release already uses (`## 1.2.3 — …`) — no
+                # scope prefix needed since there is only one version in
+                # play.
+                CHANGELOG_VERSION="$EXPECTED_VERSION"
                 RELEASE_TITLE="$TAG"
                 ;;
               data-v[0-9]*)
                 SCOPE="data-only"
                 EXPECTED_VERSION="${TAG#data-v}"
+                # CHANGELOG.md is one shared file for both packages (there
+                # is no packages/data/CHANGELOG.md), so a scoped tag must
+                # match a scoped heading (`## data-1.2.3 — …`) rather than
+                # a bare version number. Otherwise data-v0.2.0 and a
+                # future core-v0.2.0 would both bind to the same
+                # unscoped `## 0.2.0` section — see the guard step below.
+                CHANGELOG_VERSION="data-$EXPECTED_VERSION"
                 RELEASE_TITLE="jp-address-romaji-data $TAG"
                 ;;
               core-v[0-9]*)
                 SCOPE="core-only"
                 EXPECTED_VERSION="${TAG#core-v}"
+                CHANGELOG_VERSION="core-$EXPECTED_VERSION"
                 RELEASE_TITLE="jp-address-romaji $TAG"
                 ;;
               *)
@@ -136,6 +149,7 @@ jobs:
             esac
             echo "TAG=$TAG" >> "$GITHUB_ENV"
             echo "EXPECTED_VERSION=$EXPECTED_VERSION" >> "$GITHUB_ENV"
+            echo "CHANGELOG_VERSION=$CHANGELOG_VERSION" >> "$GITHUB_ENV"
             echo "RELEASE_TITLE=$RELEASE_TITLE" >> "$GITHUB_ENV"
             echo "CHECK_VERSION=true" >> "$GITHUB_ENV"
             echo "DRY_RUN=false" >> "$GITHUB_ENV"
@@ -233,6 +247,15 @@ jobs:
       # placeholder text in its body. Catch that mechanically instead of
       # relying on whoever cuts the tag to have followed docs/releasing.md.
       #
+      # Matches CHANGELOG_VERSION, not the bare EXPECTED_VERSION: CHANGELOG.md
+      # is one shared file (there is no per-package CHANGELOG), so scoped
+      # tags need a scoped heading. Without the scope prefix, `data-v0.2.0`
+      # and `core-v0.2.0` would both bind to the same unscoped "## 0.2.0"
+      # section — silently picking up whichever package happened to write
+      # its notes there first, or the other package's notes entirely, with
+      # this guard reporting success either way. `v1.2.3` releases keep the
+      # unscoped heading, matching every release to date.
+      #
       # Tag-push only (CHECK_VERSION mirrors that), and hard-fails there
       # since tag pushes always run with DRY_RUN=false. The dry_run branch
       # exists so the same check degrades to a warning rather than a hard
@@ -249,8 +272,8 @@ jobs:
           # `exit` rule never fires and the "section" becomes the rest of
           # the file. Verified against a fixture with rc.1, 0.1.0 and
           # 0.0.9 sections: each version now selects only its own.
-          heading="## $EXPECTED_VERSION"
-          section=$(awk -v want="$EXPECTED_VERSION" '
+          heading="## $CHANGELOG_VERSION"
+          section=$(awk -v want="$CHANGELOG_VERSION" '
             /^## / { if ($2 == want) { found=1; print; next } else if (found) exit }
             found { print }
           ' CHANGELOG.md)
@@ -288,7 +311,7 @@ jobs:
               exit 1
             fi
           else
-            echo "CHANGELOG.md has a dated section for $EXPECTED_VERSION."
+            echo "CHANGELOG.md has a dated section for $CHANGELOG_VERSION."
           fi
 
       # -----------------------------------------------------------------
@@ -556,12 +579,12 @@ jobs:
       # -----------------------------------------------------------------
       # GitHub Release, tag pushes only. Best-effort notes extraction from
       # CHANGELOG.md: pulls the section under the heading that starts with
-      # "## <version>", which is why docs/releasing.md asks you to replace
-      # the "unreleased" heading with "<version> — <date>" before tagging
-      # (and why the CHANGELOG guard step above fails the run if that never
-      # happened). If extraction still comes up empty, fall back to a
-      # generic body rather than failing an otherwise-good release over
-      # release-notes formatting. `$2 == want` matches the version as a
+      # "## <CHANGELOG_VERSION>", which is why docs/releasing.md asks you to
+      # replace the "unreleased" heading with "<CHANGELOG_VERSION> — <date>"
+      # before tagging (and why the CHANGELOG guard step above fails the run
+      # if that never happened). If extraction still comes up empty, fall
+      # back to a generic body rather than failing an otherwise-good release
+      # over release-notes formatting. `$2 == want` matches the version as a
       # whole field, not a line prefix — same awk as the CHANGELOG guard
       # above, and for the same reason: a prefix match makes "## 0.1.0"
       # also match "## 0.1.0-rc.1 — …", so once a prerelease section
@@ -569,12 +592,19 @@ jobs:
       # once both match, everything through EOF) instead of stopping at
       # the next heading. See the guard step's comment above for the
       # fixture this was verified against.
+      #
+      # CHANGELOG_VERSION rather than EXPECTED_VERSION for the same reason
+      # as the guard step: `data-v0.2.0` and `core-v0.2.0` must not both
+      # resolve to the same unscoped "## 0.2.0" heading. Fixing only this
+      # step and not the guard (or vice versa) would leave a run where the
+      # guard passes but the Release body comes out empty or wrong — both
+      # had to move together.
       # -----------------------------------------------------------------
       - name: Extract changelog section
         if: env.CREATE_RELEASE == 'true' && env.DRY_RUN != 'true'
         shell: bash
         run: |
-          awk -v want="$EXPECTED_VERSION" '
+          awk -v want="$CHANGELOG_VERSION" '
             /^## / { if ($2 == want) { found=1; print; next } else if (found) exit }
             found { print }
           ' CHANGELOG.md > release-notes.md
