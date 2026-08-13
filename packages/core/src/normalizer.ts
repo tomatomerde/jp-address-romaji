@@ -88,6 +88,36 @@ export function isDataConfigured(): boolean {
   return false;
 }
 
+/**
+ * Suffixes the upstream normalizer treats as a "numbered" koaza (small-area)
+ * name — the same list it matches internally when deciding whether a leading
+ * digit run in the input is a koaza number rather than a plain block number.
+ * `地割` ("chiwari", a land-lot numbering used in rural Iwate towns) and `号`
+ * ("gou") are the ones seen in the shipped dataset; the rest come from the
+ * same upstream pattern and are kept for parity, on towns that don't have a
+ * `chome`.
+ */
+const NUMBERED_KOAZA = /^([0-9]+)(丁目|番町|番丁|条|軒|線|の町|ノ町|地割|号)$/;
+
+/**
+ * A koaza row whose name is just a number plus one of the suffixes above
+ * consumes the leading digit of a hyphenated input (`2-3` -> koaza `２地割`
+ * + block `3`) even though the town has no `chome`. Unlike chome, this
+ * package has nowhere to put that number — there is no separate "koaza"
+ * output field, and we do not invent a romanization for the koaza name
+ * itself (no `koaza_r` in most of these rows; guessing one is exactly what
+ * this library refuses to do). Recovering the digit here, as the new first
+ * block number, keeps it from silently vanishing: `2-3` still comes out as
+ * `2-3`, matching what the `番`/`号` notation of the same address already
+ * produces (see toRomaji.test.ts and the real-world examples in
+ * fixtures-koaza-number-ambiguity/README.md).
+ */
+function recoverKoazaNumber(koaza: string | undefined, chomeN: number | undefined): string | undefined {
+  if (!koaza || chomeN !== undefined) return undefined;
+  const match = koaza.normalize('NFKC').match(NUMBERED_KOAZA);
+  return match?.[1];
+}
+
 /** Structured view of a normalization result, with readings attached. */
 export interface NormalizedAddress {
   pref?: { ja: string; kana?: string; romaji?: string };
@@ -114,8 +144,17 @@ export async function normalizeJapanese(input: string): Promise<NormalizedAddres
   const machiAza = meta.machiAza;
   const cityMeta = meta.city;
 
+  let rest = [result.addr, result.other].filter(Boolean).join(' ').trim();
+  const recoveredKoazaNumber = recoverKoazaNumber(machiAza?.koaza, machiAza?.chome_n);
+  if (recoveredKoazaNumber !== undefined) {
+    // Re-attach with a hyphen so splitBlockNumbers (toRomaji.ts) parses it as
+    // an additional leading block number, exactly as if the koaza number had
+    // never been split off.
+    rest = rest ? `${recoveredKoazaNumber}-${rest}` : recoveredKoazaNumber;
+  }
+
   const out: NormalizedAddress = {
-    rest: [result.addr, result.other].filter(Boolean).join(' ').trim(),
+    rest,
     level: result.level as NormalizedAddress['level'],
     raw: result,
   };

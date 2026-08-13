@@ -92,6 +92,22 @@ export function toKatakana(input: string): string {
 /**
  * Does this kana string contain anything we cannot transliterate?
  * Used to refuse rather than emit a partially-spelled name.
+ *
+ * ASCII digits (after NFKC folds full-width `０`-`９` to `0`-`9`) are
+ * accepted: in the v2 dataset a digit inside a reading is part of the name
+ * itself, not an untranslatable character — e.g. Sapporo's numbered blocks
+ * (`キタ１０ジョウニシ` -> `Kita10Jonishi`, matching the town's own romaji
+ * field `Kita10-Jonishi`). Measured on the full dataset, 16,918 of 635,698
+ * `oaza_cho_k` readings fail this check; 16,914 of those contain nothing but
+ * digits beyond ordinary kana, and rejecting them would wrongly refuse a
+ * large slice of Sapporo. The remaining 4 are genuine corruption (a
+ * full-width hyphen where a choonpu belongs, or full-width Latin letters)
+ * and are correctly refused.
+ *
+ * This is the single source of truth for "can this reading be
+ * transliterated" — both the `'none'` style (via {@link kanaToRomaji}) and
+ * the long-vowel styles (via `romanizeStem` in `format.ts`) run through it,
+ * so the styles cannot disagree on what counts as a valid reading.
  */
 export function isTransliterableKana(input: string): boolean {
   const kana = toKatakana(input).replace(/[\s\u3000]/g, '');
@@ -100,7 +116,7 @@ export function isTransliterableKana(input: string): boolean {
     const two = kana.slice(i, i + 2);
     if (DIGRAPHS[two]) { i++; continue; }
     const one = kana[i]!;
-    if (MONOGRAPHS[one] || one === 'ッ' || one === 'ン' || one === 'ー') continue;
+    if (MONOGRAPHS[one] || one === 'ッ' || one === 'ン' || one === 'ー' || /[0-9]/.test(one)) continue;
     return false;
   }
   return true;

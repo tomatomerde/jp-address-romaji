@@ -12,6 +12,7 @@
     "coverage:measure": "tsx scripts/measure-coverage.ts"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.0",
     "eslint": "^10.8.0",

@@ -50,15 +50,49 @@ describe('fromRomaji: reconstructs Japanese', () => {
     expect(result.partial?.city?.ja).toBe('出雲崎町');
   });
 
+  it('still resolves the "wrong" but plausible suffix reading for the same 町', async () => {
+    // 出雲崎町's own reading is "Izumozaki-machi" (see the fixture's
+    // IZUMOZAKI MACHI). "-cho" is a different, but equally legitimate,
+    // reading of 町 — the leniency that lets it stem-match here must survive
+    // the fix (see suffixCategory.test.ts) that stops a suffix naming the
+    // wrong KIND of unit (e.g. "-mura", "-gun") from doing the same.
+    const result = await fromRomaji('Izumozaki-cho, Santo-gun, Niigata');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.partial?.county?.ja).toBe('三島郡');
+    expect(result.partial?.city?.ja).toBe('出雲崎町');
+  });
+
   it('excludes a corrupt dataset entry from candidates instead of manufacturing ambiguity', async () => {
     // 円山's own kana/romaji are corrupt copies of 円山西町's (see
     // isPlausibleReading). Before that check was applied here too, this
     // input matched BOTH entries and returned AMBIGUOUS for an address that
-    // genuinely has only one real match.
-    const result = await fromRomaji('1-1 Maruyamanishimachi, Chuo-ku, Sapporo-shi, Hokkaido');
+    // genuinely has only one real town match.
+    //
+    // The leading number is deliberately not a valid chome (円山西町 only has
+    // chome 1 through 10) so this exercises only the corrupt-entry exclusion,
+    // not the separate chome-vs-chome-less ambiguity that a real chome number
+    // would trigger here (円山西町 genuinely has both a chome-less row and
+    // chome rows — see chomeAmbiguity.test.ts).
+    const result = await fromRomaji('99-1 Maruyamanishimachi, Chuo-ku, Sapporo-shi, Hokkaido');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.parsed.town?.ja).toBe('円山西町');
+    expect(result.value.parsed.chome).toBeUndefined();
+  });
+
+  it('reports AMBIGUOUS for chome vs chome-less even once the corrupt dataset entry is excluded', async () => {
+    // 円山西町 genuinely has both a chome-less row and chome rows 1-10 in the
+    // real dataset (see chomeAmbiguity.test.ts for the general case). This
+    // confirms the corrupt-entry exclusion above and the chome ambiguity
+    // handling compose correctly: candidates are exactly the two genuine
+    // 円山西町 readings, with no leak of the corrupt 円山 entry.
+    const result = await fromRomaji('1-1 Maruyamanishimachi, Chuo-ku, Sapporo-shi, Hokkaido');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('AMBIGUOUS');
+    expect(result.candidates).toHaveLength(2);
+    expect(result.candidates?.every((c) => c.town?.ja === '円山西町')).toBe(true);
   });
 
   it('uses a supplied postal-code index to resolve an ambiguity', async () => {
@@ -89,6 +123,24 @@ describe('fromRomaji: reconstructs Japanese', () => {
     if (result.ok) return;
     expect(result.reason).toBe('AMBIGUOUS');
     expect(result.candidates?.map((c) => c.town?.ja).sort()).toEqual(['恵比須町', '夷町'].sort());
+  });
+});
+
+describe('fromRomaji: postal code extraction requires a digit boundary', () => {
+  // Same regression as toRomaji's splitPostalCode (see toRomaji.test.ts):
+  // tokenize()'s NNN-NNNN pattern had no boundary against an adjacent digit,
+  // so "1123-4567 Nishishinjuku, ..." was silently read as postal code
+  // 123-4567 plus chome 1, instead of the 4-digit block number 1123-4567 it
+  // actually is. The fix makes the address correctly fail to resolve — chome
+  // 1123 does not exist — rather than resolving to a wrong, plausible-looking
+  // town.
+  it('does not carve a postal code out of a 4-digit block number, and refuses instead of guessing', async () => {
+    const result = await fromRomaji('1123-4567 Nishishinjuku, Shinjuku-ku, Tokyo');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('TOWN_NOT_FOUND');
+    expect(result.partial?.postalCode).toBeUndefined();
+    expect(result.message).toContain('1123');
   });
 });
 
@@ -153,6 +205,20 @@ describe('fromRomaji: town matching does not accept an arbitrary suffix', () => 
   });
 });
 
+describe('fromRomaji: designated-city ward cannot be inferred from one segment', () => {
+  it('refuses a bare city name for a city whose records are all per-ward', async () => {
+    // 札幌市 has no ward-less record in the dataset — every row is one
+    // specific ward. Without the "a single segment can't match a
+    // ward-bearing record" guard, "Sapporo-shi" alone matches 中央区's row
+    // via its city field (which really is "Sapporo-shi"), silently
+    // attributing a ward the caller never wrote.
+    const result = await fromRomaji('Sapporo-shi, Hokkaido');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('CITY_NOT_FOUND');
+  });
+});
+
 describe('fromRomaji: refuses rather than guesses', () => {
   it('reports an unknown prefecture', async () => {
     const result = await fromRomaji('1-2-3 Somewhere, Nowhere-ku, Atlantis');
@@ -180,6 +246,19 @@ describe('fromRomaji: refuses rather than guesses', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('EMPTY_INPUT');
+  });
+
+  it('rejects a chome that does not exist for a town that has no chome-less entry', async () => {
+    // 西新宿 (fixture data) only has chome 1 through 8, and no plain
+    // (chome-less) entry. Without the "no such chome" guard, "99-1" would
+    // silently be accepted against some arbitrary chome record, with the
+    // chome dropped and 99 folded into blockNumbers instead — a fabricated
+    // address rather than a refusal.
+    const result = await fromRomaji('99-1 Nishishinjuku, Shinjuku-ku, Tokyo');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('TOWN_NOT_FOUND');
+    expect(result.message).toContain('no chome 99');
   });
 });
 

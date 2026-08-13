@@ -10,11 +10,18 @@
  */
 
 import type { LongVowelStyle } from '../types.js';
-import { analyzeKana, renderSyllables, kanaToRomaji } from './hepburn.js';
+import { analyzeKana, renderSyllables, kanaToRomaji, isTransliterableKana } from './hepburn.js';
 import { isUsableRomajiField } from './validate.js';
 
-/** Administrative suffixes, with their possible readings. */
-const SUFFIXES: Record<string, { kana: string[]; romaji: string[] }> = {
+/**
+ * Administrative suffixes, with their possible readings.
+ *
+ * Exported for fromRomaji.ts's `segmentQuality`, which uses this same table
+ * to decide whether a suffix stripped off a QUERY token is a plausible
+ * reading for the kanji suffix the matched record actually has — see the
+ * comment there for why.
+ */
+export const SUFFIXES: Record<string, { kana: string[]; romaji: string[] }> = {
   都: { kana: ['ト'], romaji: ['to'] },
   道: { kana: ['ドウ'], romaji: ['do'] },
   府: { kana: ['フ'], romaji: ['fu'] },
@@ -120,6 +127,16 @@ export function splitAdministrativeSuffix(
  *  - Any long-vowel style: the dataset field cannot express vowel length, so
  *    the kana reading is required. Returns undefined when it is absent, and
  *    the caller turns that into an explicit failure.
+ *
+ * Both branches gate the kana on {@link isTransliterableKana}. Previously
+ * only the `'none'` branch did (via `kanaToRomaji`, which checks internally);
+ * the long-vowel branch called `analyzeKana`/`renderSyllables` directly,
+ * which pass unmapped characters through verbatim instead of refusing them.
+ * That let untranslatable readings (e.g. a full-width hyphen standing in for
+ * a choonpu) produce a plausible-looking `ok: true` result under `macron` /
+ * `circumflex` / `oh` while the same input correctly failed with
+ * `NO_ROMAJI_DATA` under `'none'` — the opposite of the intended relationship,
+ * since the long-vowel styles are documented as *requiring* the kana source.
  */
 export function romanizeStem(
   stemKana: string | undefined,
@@ -130,7 +147,7 @@ export function romanizeStem(
     if (isUsableRomajiField(stemRomaji)) return stemRomaji.toLowerCase();
     return stemKana ? kanaToRomaji(stemKana, 'none') : undefined;
   }
-  if (!stemKana) return undefined;
+  if (!stemKana || !isTransliterableKana(stemKana)) return undefined;
   const syllables = analyzeKana(stemKana);
   if (syllables.length === 0) return undefined;
   return renderSyllables(syllables, style) || undefined;

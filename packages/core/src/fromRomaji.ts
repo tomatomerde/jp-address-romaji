@@ -1,10 +1,11 @@
 /**
  * Romanized, western-order address -> structured address + Japanese text.
  *
- * Ambiguity is the central problem here. Measured over the national dataset,
- * a town's romanized name is unique within a known municipality 98.77% of the
- * time, far less often than that nationwide, and 13 municipality names collide
- * across prefectures ("Date-shi" is both 北海道伊達市 and 福島県伊達市).
+ * Ambiguity is the central problem here. Measured over the national dataset
+ * (scripts/measure-ambiguity.ts), a town's full-form romanization key is
+ * unique within a known municipality 97.99% of the time, far less often than
+ * that nationwide, and 13 municipality names collide across prefectures
+ * ("Date-shi" is both 北海道伊達市 and 福島県伊達市).
  *
  * So resolution is strictly outside-in: prefecture, then municipality, then
  * town. When more than one reading survives, we return AMBIGUOUS with the
@@ -23,6 +24,7 @@ import {
 } from './dataAccess.js';
 import { kanaToRomaji } from './romaji/hepburn.js';
 import { isPlausibleReading } from './romaji/validate.js';
+import { SUFFIXES } from './romaji/format.js';
 import { numberToKanji } from './kanjiNumbers.js';
 import { containsJapanese } from './script.js';
 
@@ -32,8 +34,8 @@ export interface FromRomajiOptions {
    * Resolve a postal code to the town names (in Japanese) it covers, so that
    * an otherwise ambiguous romanization can be narrowed to one.
    *
-   * Genuine ambiguity is rare — 0.69% of full-form romanization keys match more
-   * than one distinct town in the same municipality (1.10% once the indexed
+   * Genuine ambiguity is rare — 0.67% of full-form romanization keys match more
+   * than one distinct town in the same municipality (1.07% once the indexed
    * short forms are included; measured by scripts/measure-ambiguity.ts on the
    * shipped dataset) — and roughly half of the indexed collisions disappear
    * when the caller writes the full town name. Bundling Japan Post's KEN_ALL to close
@@ -183,6 +185,50 @@ export async function fromRomaji(
       partial,
     );
   }
+
+  if (municipality.kind === 'ambiguous') {
+    // Mirrors the town-level ambiguity handling below: when more than one
+    // municipality survives matching, we do not guess which one the caller
+    // meant. There is no postal-code-style narrowing hook at this level (a
+    // postal code narrows a town within one municipality, not a choice of
+    // municipality), so this always surfaces as AMBIGUOUS.
+    const matchedText = remaining.slice(remaining.length - municipality.consumed).join(', ');
+
+    // Whatever precedes the municipality segments (typically "<numbers>
+    // <town>" in western order) cannot be resolved into a town here — which
+    // municipality's town list to even search is exactly what's ambiguous —
+    // but it must not be silently dropped from the candidates a caller picks
+    // from and renders. Numbers are carried as blockNumbers (the same shape
+    // a chome-less town-level candidate uses) and the rest — the
+    // unresolved town text, plus the building name already split out before
+    // matching — is carried as unparsed, mirroring how the town-level
+    // ambiguity branch below builds `unparsed` for its own candidates.
+    const leftoverSegments = remaining.slice(0, remaining.length - municipality.consumed);
+    const leftoverNumbers: number[] = [];
+    const leftoverText: string[] = [];
+    for (const segment of leftoverSegments) {
+      const { numbers: segNumbers, name, unparsed: segExtra } = splitNumbersAndName(segment);
+      leftoverNumbers.push(...segNumbers);
+      if (name) leftoverText.push(name);
+      if (segExtra) leftoverText.push(segExtra);
+    }
+    const blockNumbers = leftoverNumbers;
+    const unparsed = [buildingName, ...leftoverText].filter(Boolean).join(', ') || undefined;
+
+    const candidates: ParsedAddress[] = municipality.records.map((record) =>
+      buildMunicipalityCandidate(partial, record, postalCode, blockNumbers, unparsed),
+    );
+    return {
+      ok: false,
+      reason: 'AMBIGUOUS',
+      message:
+        `"${matchedText}" matches ${municipality.records.length} municipalities in ${prefEntry.romaji}: ` +
+        `${municipality.records.map((r) => cityPathName(r)).join(', ')}. Choose one of the returned candidates.`,
+      partial,
+      candidates,
+    };
+  }
+
   remaining = remaining.slice(0, remaining.length - municipality.consumed);
 
   const record = municipality.record;
@@ -308,6 +354,38 @@ export async function fromRomaji(
   if (chomeEntries.length > 0 && numbers.length > 0) {
     const hit = chomeEntries.find((m) => m.chome_n === numbers[0]);
     if (hit) {
+      if (plainEntry) {
+        // Both readings exist for this exact leading number: 浅岸 has both a
+        // chome 1 and a chome-less entry, so "1-1 Asagishi" is either
+        // 浅岸一丁目1 (chome 1, block [1]) or 浅岸1番1号 (chome-less, block
+        // [1, 1]). There is nothing in the input to tell them apart, so
+        // filtering by chome here — as the branch below does when only one
+        // reading is possible — would silently pick one of two equally valid
+        // readings. That is exactly the shortcut the distinct-town-name
+        // ambiguity above refuses to take, so this mirrors it: AMBIGUOUS with
+        // both readings as candidates.
+        //
+        // Note this is a genuinely different ambiguity from the one above:
+        // there the SAME leading number picks between two DIFFERENT towns
+        // sharing a romanization; here it picks between two readings of the
+        // SAME town. `postalCodeIndex` cannot help here even in principle —
+        // it narrows by town name (see its doc comment), and both candidates
+        // report the same town name.
+        const chomeCandidate = buildParsed(partial, hit, numbers[0], numbers.slice(1), unparsed, postalCode);
+        const plainCandidate = buildParsed(partial, plainEntry, undefined, numbers, unparsed, postalCode);
+        const candidates = [chomeCandidate, plainCandidate];
+        return {
+          ok: false,
+          reason: 'AMBIGUOUS',
+          message:
+            `"${numbers.join('-')} ${name}" is ambiguous in ${prefRecord.pref}${cityPathName(record)}: ` +
+            `${name} has both a chome ${numbers[0]} and a chome-less entry, so this could be ` +
+            `${renderJapanese(chomeCandidate)} (chome ${numbers[0]}) or ${renderJapanese(plainCandidate)} ` +
+            `(chome-less). Choose one of the returned candidates.`,
+          partial,
+          candidates,
+        };
+      }
       chome = numbers[0];
       blockNumbers = numbers.slice(1);
       resolved = hit;
@@ -319,6 +397,10 @@ export async function fromRomaji(
         { ...partial, level: 2 },
       );
     }
+    // else: numbers[0] is not a valid chome for this town, but a chome-less
+    // entry exists — not ambiguous, just not readable as a chome. Falls
+    // through with the chome-less reading (resolved/blockNumbers as set
+    // above), the same way it already did before this branch was added.
   }
 
   const parsed = buildParsed(partial, resolved, chome, blockNumbers, unparsed, postalCode);
@@ -359,7 +441,21 @@ function tokenize(input: string): { postalCode?: string; segments: string[] } {
   text = text.replace(/[,\s]+(japan|nippon|nihon)\s*$/i, '');
 
   let postalCode: string | undefined;
-  const postal = text.match(/〒?\s*(\d{3})\s*-\s*(\d{4})(?!\d)/);
+  // Keep this pattern identical to splitPostalCode's in toRomaji.ts — see the
+  // comment there for why both sides need a boundary against digits *and*
+  // dash-like characters, not just digits (a phone number such as
+  // `090-1234-5678` still matches `NNN-NNNN` with a digit-only boundary).
+  //
+  // The dash class also matches toRomaji's on purpose, even though a
+  // western-order romaji address is unlikely to be typed with a full-width
+  // `ー` in practice: toRomaji's own postal-code suffix is always rendered
+  // with an ASCII `-` (see render()), but nothing stops a caller from pasting
+  // in a code copied from a Japanese source that used one of the other dash
+  // variants, and there's no reason for the two directions to disagree on
+  // what counts as a separator.
+  const postal = text.match(
+    /(?<![\d\-‐‑−ー－])〒?\s*(\d{3})\s*[-‐‑−ー－]\s*(\d{4})(?![\d\-‐‑−ー－])/,
+  );
   if (postal) {
     postalCode = `${postal[1]}-${postal[2]}`;
     text = text.replace(postal[0], ' ');
@@ -372,58 +468,221 @@ function tokenize(input: string): { postalCode?: string; segments: string[] } {
   return postalCode ? { postalCode, segments } : { segments };
 }
 
+/** Result of {@link matchMunicipality}. */
+type MunicipalityMatch =
+  | { kind: 'match'; record: CityRecord; consumed: number }
+  | { kind: 'ambiguous'; records: CityRecord[]; consumed: number };
+
 /**
  * Match trailing segments against a municipality.
  *
  * Handles both `"Chuo-ku, Sapporo-shi"` (ward and city as separate segments)
  * and a single combined segment.
  */
-function matchMunicipality(
-  cities: CityRecord[],
-  segments: string[],
-): { record: CityRecord; consumed: number } | undefined {
+function matchMunicipality(cities: CityRecord[], segments: string[]): MunicipalityMatch | undefined {
   // Try two trailing segments first (ward + city, or city + county).
   for (const consumed of [2, 1]) {
     if (segments.length < consumed) continue;
     const tail = segments.slice(segments.length - consumed);
+
+    const hits: { record: CityRecord; quality: MatchQuality }[] = [];
     for (const record of cities) {
-      if (matchesMunicipality(record, tail)) return { record, consumed };
+      const quality = matchesMunicipality(record, tail);
+      if (quality) hits.push({ record, quality });
     }
+    if (hits.length === 0) continue;
+
+    // Prefer a record whose OWN reading matches the query verbatim over one
+    // that only matches once an administrative suffix is stemmed away on
+    // both sides. "Fuchu-cho" is 府中町's actual reading (exact); it also
+    // collides with 府中市 ("Fuchu-shi") once both are reduced to the stem
+    // "fuchu" (stem-only). The exact hit must win rather than whichever
+    // record happens to come first in the dataset.
+    const best = hits.some((h) => h.quality === 'exact') ? 'exact' : 'stem';
+    const winners = hits.filter((h) => h.quality === best).map((h) => h.record);
+
+    if (winners.length === 1) {
+      return { kind: 'match', record: winners[0]!, consumed };
+    }
+    // More than one municipality survives even after preferring exact
+    // matches over stemmed ones — e.g. 檜山郡江差町 and 枝幸郡枝幸町 both
+    // romanize to exactly "Esashi-cho". Genuine ambiguity, not a tie to
+    // break arbitrarily.
+    return { kind: 'ambiguous', records: winners, consumed };
   }
   return undefined;
 }
 
-function matchesMunicipality(record: CityRecord, tail: string[]): boolean {
-  const cityKeys = candidateKeys(record.city_k, record.city_r);
-  const wardKeys = record.ward
-    ? candidateKeys(record.ward_k, record.ward_r)
-    : undefined;
-  const countyKeys = record.county
-    ? candidateKeys(record.county_k, record.county_r)
-    : undefined;
+/** How closely a query segment matched a dataset field. */
+type MatchQuality = 'exact' | 'stem';
 
-  const keyOf = (s: string) => [normalizeRomajiKey(s), stemKey(s)];
-  const hits = (keys: Set<string>, s: string) => keyOf(s).some((k) => k && keys.has(k));
+/**
+ * Keys built only from a field's own accepted spelling(s), with no
+ * administrative-suffix stemming applied. Used to tell an exact-reading
+ * match apart from one that only worked after stemming — see
+ * {@link matchMunicipality}.
+ *
+ * Deliberately NOT stem-inclusive, unlike the very similarly-shaped
+ * {@link candidateKeys}: `matchMunicipality`'s exact-vs-stem tiebreaker only
+ * works because the two are kept distinct. The two functions look like an
+ * obvious "de-duplicate this" refactor target, but merging them silently
+ * changes national resolution behavior (see exactKeysExcludesStem.test.ts's
+ * comment for detail) while every existing test still passes — that
+ * combination is exactly why this function is exported: so a test can pin
+ * the difference directly, rather than relying on a national sweep no unit
+ * test runs.
+ */
+export function exactKeys(kana?: string, romajiField?: string): Set<string> {
+  const keys = new Set<string>();
+  const add = (v: string | undefined) => {
+    if (v) keys.add(normalizeRomajiKey(v));
+  };
+  add(romajiField);
+  if (kana) {
+    add(kanaToRomaji(kana, 'none'));
+    add(kanaToRomaji(kana, 'macron'));
+    add(kanaToRomaji(kana, 'oh'));
+  }
+  keys.delete('');
+  return keys;
+}
+
+/**
+ * Which kanji administrative suffix each token `SUFFIX_PATTERN` can capture
+ * denotes — e.g. `mura`/`son` both mean 村, `cho`/`chou`/`machi` all mean 町.
+ *
+ * Built from `SUFFIXES` (`romaji/format.ts`, the table of which *readings*
+ * are possible for which kanji suffix) so the two tables cannot drift on the
+ * readings they agree about, plus three tokens `SUFFIXES` has no entry for
+ * because the render side never emits them, even though `SUFFIX_PATTERN`
+ * accepts them as query input: `chou` (an alternate romanization of `cho`,
+ * both meaning 町), and the English `city`/`ward` (meaning 市/区
+ * respectively, the same units `shi`/`ku` denote).
+ */
+const SUFFIX_TOKEN_KANJI: Record<string, string> = { chou: '町', city: '市', ward: '区' };
+for (const [kanji, spec] of Object.entries(SUFFIXES)) {
+  for (const romaji of spec.romaji) SUFFIX_TOKEN_KANJI[romaji] = kanji;
+}
+
+/**
+ * Is the administrative suffix `stemKey` strips off a query token plausibly
+ * naming the same KIND of unit as `ja`'s actual kanji suffix?
+ *
+ * `stemKey` strips ANY of `shi/ku/cho/chou/machi/mura/son/gun/city/ward` off
+ * the end of a token regardless of what kind of unit it is actually being
+ * matched against — that pattern doesn't know whether the record it will be
+ * compared to is a 市, a 区, a 町, or a 郡. Left unchecked, that lets a query
+ * suffix for the wrong KIND of unit still produce a stem match, e.g.
+ * "Nakamura" (naka + village-style "-mura") stemming to "naka" and
+ * colliding with 中区's own stem "naka" (city-style "-ku") — a nonsense
+ * suffix accepted as if the real one had been typed, the exact same class of
+ * bug `matchTowns`'s comment above already warns about for query stemming.
+ *
+ * This only checks the KIND of unit ("mura" and "son" are both plausible for
+ * any 村, regardless of which one that particular 村's own romaji field
+ * actually uses) — it does not require the token to be the SPECIFIC reading
+ * this record uses. That specific-reading leniency is exactly what the
+ * stem-match fallback exists to provide: a 町 can genuinely be read "-cho"
+ * or "-machi", and the dataset only records the one that's actually correct
+ * for that municipality.
+ */
+function suffixIsPlausibleFor(ja: string, s: string): boolean {
+  const suffixMatch = s.match(SUFFIX_PATTERN);
+  if (!suffixMatch) return false;
+  const token = suffixMatch[1]!.toLowerCase();
+  return SUFFIX_TOKEN_KANJI[token] === ja.slice(-1);
+}
+
+/**
+ * Quality of a single query segment against one field, worst-case combined
+ * across the two segments of a ward+city or city+county pair (a pair is only
+ * as good as its weaker half).
+ *
+ * `ja` is the dataset's Japanese name for the field being matched (the
+ * record's `ward`, `city`, or `county`) — needed only to gate the
+ * suffix-stemmed fallback below via {@link suffixIsPlausibleFor}.
+ */
+function segmentQuality(exact: Set<string>, all: Set<string>, s: string, ja: string): MatchQuality | undefined {
+  const key = normalizeRomajiKey(s);
+  if (exact.has(key)) return 'exact';
+  if (all.has(key)) return 'stem';
+  // Falling back to a stem match on the QUERY side is what lets a query with
+  // the "wrong" but plausible administrative-suffix reading still resolve
+  // (a 町 can genuinely be read "-cho" or "-machi"; the dataset only records
+  // the one that's actually correct for that municipality) — but only when
+  // the suffix being stripped is actually a possible reading of THIS
+  // record's own suffix kanji. Without that check, stripping "-mura" off a
+  // query meant for a 区 still produces a stem that can coincidentally equal
+  // the 区's own stem, letting a nonsense suffix resolve as if it had been
+  // typed correctly.
+  if (suffixIsPlausibleFor(ja, s) && all.has(stemKey(s))) return 'stem';
+  return undefined;
+}
+
+function combine(a: MatchQuality, b: MatchQuality): MatchQuality {
+  return a === 'stem' || b === 'stem' ? 'stem' : 'exact';
+}
+
+function matchesMunicipality(record: CityRecord, tail: string[]): MatchQuality | undefined {
+  const cityExact = exactKeys(record.city_k, record.city_r);
+  const cityAll = candidateKeys(record.city_k, record.city_r);
 
   if (tail.length === 1) {
     const only = tail[0]!;
     // A designated city's ward cannot be identified from one segment: "Chuo-ku"
     // alone is ambiguous across Sapporo, Osaka, Kobe and others, so we require
     // the city segment too and let the two-segment branch handle it.
-    if (record.ward) return false;
-    return hits(cityKeys, only);
+    if (record.ward) return undefined;
+    return segmentQuality(cityExact, cityAll, only, record.city);
   }
 
   const [first, second] = tail as [string, string];
-  if (record.ward && wardKeys) {
+  if (record.ward) {
     // Western order puts the smaller unit first: "Chuo-ku, Sapporo-shi".
-    if (hits(wardKeys, first) && hits(cityKeys, second)) return true;
+    const wardExact = exactKeys(record.ward_k, record.ward_r);
+    const wardAll = candidateKeys(record.ward_k, record.ward_r);
+    const wardQ = segmentQuality(wardExact, wardAll, first, record.ward);
+    const cityQ = segmentQuality(cityExact, cityAll, second, record.city);
+    if (wardQ && cityQ) return combine(wardQ, cityQ);
   }
-  if (record.county && countyKeys) {
+  if (record.county) {
     // "Izumozaki-machi, Santo-gun"
-    if (hits(cityKeys, first) && hits(countyKeys, second)) return true;
+    const countyExact = exactKeys(record.county_k, record.county_r);
+    const countyAll = candidateKeys(record.county_k, record.county_r);
+    const cityQ = segmentQuality(cityExact, cityAll, first, record.city);
+    const countyQ = segmentQuality(countyExact, countyAll, second, record.county);
+    if (cityQ && countyQ) return combine(cityQ, countyQ);
   }
-  return false;
+  return undefined;
+}
+
+/**
+ * Build an AMBIGUOUS candidate for a municipality-level collision — the town
+ * has not been located yet, so this stops at level 2 (like the TOWN_NOT_FOUND
+ * partial for a resolved-but-town-less address).
+ *
+ * `blockNumbers` and `unparsed` are whatever the caller wrote before the
+ * (ambiguous) municipality segments — see the comment at the call site.
+ * They carry through unchanged across candidates, since which municipality
+ * the caller picks does not change what was written there.
+ */
+function buildMunicipalityCandidate(
+  partial: Partial<ParsedAddress>,
+  record: CityRecord,
+  postalCode: string | undefined,
+  blockNumbers: number[],
+  unparsed: string | undefined,
+): ParsedAddress {
+  return {
+    ...(postalCode ? { postalCode } : {}),
+    ...(partial.prefecture ? { prefecture: partial.prefecture } : {}),
+    ...(record.county ? { county: { ja: record.county, kana: record.county_k, romaji: record.county_r } } : {}),
+    city: { ja: record.city, kana: record.city_k, romaji: record.city_r },
+    ...(record.ward ? { ward: { ja: record.ward, kana: record.ward_k, romaji: record.ward_r } } : {}),
+    blockNumbers,
+    ...(unparsed ? { unparsed } : {}),
+    level: 2,
+  };
 }
 
 /** A town located inside one address segment. */

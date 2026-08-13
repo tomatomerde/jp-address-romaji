@@ -47,7 +47,7 @@ npm install jp-address-romaji jp-address-romaji-data
 ```
 
 > **Node.js 18+, ESM only.** There is no CommonJS build and none is planned —
-> `require('jp-address-romaji')` fails with `ERR_REQUIRE_ESM`. Use `import`, or a dynamic
+> `require('jp-address-romaji')` fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`. Use `import`, or a dynamic
 > `import()` from CommonJS code. The dataset is read from the filesystem, so the default
 > configuration is Node-only; browser use needs a data endpoint you host. Details under
 > [Requirements](#requirements).
@@ -75,7 +75,7 @@ Node-only; browser use requires supplying data through an endpoint you host.
 
 **ESM only, no CommonJS build.** Both packages ship `"type": "module"` with a single ESM entry
 point — there is no `require()`-compatible `dist/*.cjs`, and none is planned. Use `import` (or
-dynamic `import()` from CommonJS code); `require('jp-address-romaji')` fails with `ERR_REQUIRE_ESM`.
+dynamic `import()` from CommonJS code); `require('jp-address-romaji')` fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`.
 
 ## Coverage
 
@@ -149,8 +149,8 @@ and refuses rather than emitting a wrong address, so they surface as failures:
   in both directions: `toRomaji` returns `CORRUPT_ROMAJI_DATA` and `fromRomaji` will not offer it
   as a candidate. This is rare in the current dataset.
 - **Short forms of a town name can be ambiguous.** Measured on the shipped dataset with the
-  matcher's own key functions (`scripts/measure-ambiguity.ts`): 1.10% of the romanization keys
-  `fromRomaji` indexes (2,778 of 252,587) match more than one distinct town within the same
+  matcher's own key functions (`scripts/measure-ambiguity.ts`): 1.07% of the romanization keys
+  `fromRomaji` indexes (2,780 of 259,703) match more than one distinct town within the same
   municipality — Hakodate has both `昭和町` and `昭和`, so `"Showa"` matches both. Writing the
   full name (`"Showa-cho"`) resolves roughly half of those cases, and this library's own output
   always writes the full name. Typed short forms return `AMBIGUOUS` with the candidates.
@@ -202,9 +202,10 @@ cannot be recovered from it. If a name has no kana reading, those styles fail wi
 
 ### `fromRomaji(romajiAddress, options?)`
 
-Resolution is strictly outside-in — prefecture, then municipality, then town — because a town's
-romanization key is unique within a known municipality 98.9% of the time but far less so nationally,
-and 13 municipality names collide across prefectures (`Date-shi` is both 北海道伊達市 and 福島県伊達市).
+Resolution is strictly outside-in — prefecture, then municipality, then town — because, written as
+a full-form key, a town's romanization is unique within a known municipality 97.99% of the time
+(measured by `scripts/measure-ambiguity.ts` on the shipped dataset) but far less so nationally, and
+13 municipality names collide across prefectures (`Date-shi` is both 北海道伊達市 and 福島県伊達市).
 
 When more than one Japanese address matches, it returns `AMBIGUOUS` **with the candidates**, and
 lets you choose:
@@ -229,8 +230,8 @@ await fromRomaji('1-1 Ebisucho, Nakagyo-ku, Kyoto-shi, Kyoto 604-8081', {
 // → { ok: true, … town: 夷町 }
 ```
 
-No postal dataset is bundled. The ambiguity that even a full town name cannot resolve is 0.69%
-of full-form romanization keys (1,404 of 204,671, involving 2,620 towns nationally — measured by
+No postal dataset is bundled. The ambiguity that even a full town name cannot resolve is 0.67%
+of full-form romanization keys (1,406 of 211,041, involving 2,622 towns nationally — measured by
 `scripts/measure-ambiguity.ts` on the shipped dataset), so shipping Japan Post's `KEN_ALL` — a
 second data source with its own licence and update cadence — is not justified by what it would
 buy. The hook lets you use postal data you already have.

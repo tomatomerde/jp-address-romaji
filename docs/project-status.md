@@ -26,6 +26,11 @@ publish は `workflow_dispatch`（run `31616749939`）で通ったのに、**タ
 `release.yml` を `cut_release: true` で dispatch すれば、タグと GitHub Release まで
 ワークフローが作る（`releasing.md`「リリースを切る」）。タグ push も従来どおり使える。
 
+**`0.1.3` のリリース作業が別途進行中。** 公開後レビューで見つかった不具合の修正を含む
+リリースで、公開済み `0.1.2` の変換結果を変える変更が入る（詳細は下の「公開後レビューで
+見つかった不具合」と CHANGELOG を参照）。バージョンやリリース日がいつ確定するかはこの
+文書からは分からない — 確認できる状態になってから記録すること。
+
 完了済み:
 
 - `toRomaji` / `fromRomaji` / `parse` / `toFormat`。失敗は throw ではなく型付きの値として
@@ -40,6 +45,118 @@ publish は `workflow_dispatch`（run `31616749939`）で通ったのに、**タ
   拒否する `prepublishOnly` ガード
 
 `main` は上記すべてを含む。
+
+## 公開後レビューで見つかった不具合（未修正）
+
+以前この節にあった7項目のうち5件——自治体名の衝突を先勝ちで誤解決する不具合、長音スタイル
+指定時に翻字不能文字の検証がバイパスされる不具合、郵便番号抽出の前方境界欠如、テストが
+守っていなかったガード2箇所、丁目あり/なし併存町での先頭数字の黙示解釈——はこのブランチで
+修正され、修正の裏付けとなる回帰テストも追加された（コミット `a2b28f1`・`d9ba28b`・
+`e1d87e8`・`0e543db`、および自治体名衝突の追加修正 `3c55fb5`・`1a22394`）。内容は CHANGELOG と
+コミット履歴を参照。
+
+残る2件と、今回のレビューで新たに見つかった3件を記す。実データ（`JP_ADDRESS_ROMAJI_DATA_DIR`
+経由）に対して再現確認済み。重要度順。
+
+### 1【重大】丁目の先の小字（koaza）が順方向で黙って消え、別の住所になる
+
+```
+toRomaji('長野県飯田市本町三丁目大横1-1', {})
+  → ok=true "1-1 Hommachi, Iida-shi, Nagano, Japan"   （三丁目大横 が消えている）
+```
+
+原因は `packages/core/src/normalizer.ts` の `normalizeJapanese`。上流の正規化結果は
+`oaza_cho: "本町"` と `koaza: "三丁目大横"` を別フィールドで返すが、`koaza` を町名や
+`unparsed` のどちらにも一切添付していない。唯一 koaza を拾うのは `recoverKoazaNumber`
+（L115–118）で、これは koaza が `^([0-9]+)(丁目|番町|...)$` の形（純粋な数字+接尾辞）の
+ときだけ動く。`"三丁目大横"` は先頭が漢数字で、かつ末尾に地名 `大横` が続くためこの形に
+一致せず、`koaza` 全体がどこにも現れないまま捨てられる。
+
+逆方向にかけると、消えた情報のぶんだけ別の住所として復元される:
+
+```
+fromRomaji('1-1 Hommachi, Iida-shi, Nagano, Japan')
+  → ok=false, reason=AMBIGUOUS
+     candidates: 長野県飯田市本町一丁目1（chome 1）/ 長野県飯田市本町1-1（chome なし）
+```
+
+どちらの候補も元の「本町三丁目大横1-1」とは別の住所で、`AMBIGUOUS` 化自体は
+`0e543db`（このブランチの別修正）のおかげだが、順方向で失われた情報は戻らない。ラウンドトリップの
+不変条件（同一か明示的失敗のいずれか）を、順方向の時点で静かに破っている。
+
+### 2【中】`longVowel: 'oh'` の自前出力が自分自身を読み戻せない
+
+```
+toRomaji('北海道石狩郡当別町', {longVowel:'oh'}) → ok=false（town なしのため TOWN_NOT_FOUND）
+  partial.city.romaji = "Tohbetsu-cho"
+fromRomaji('Tohbetsu-cho, Hokkaido') → ok=false, reason=CITY_NOT_FOUND
+```
+
+原因は `packages/core/src/romaji/format.ts` の `formatMunicipality` と
+`packages/core/src/fromRomaji.ts` の `candidateKeys`（L93–109）が、同じ「oh」スタイルを
+異なる単位に適用していること。`formatMunicipality` は語幹（`トウベツ`）だけを oh 化し、
+接尾辞は別途 `"-cho"` を文字どおり付ける（→ `"Tohbetsu-cho"`）。一方 `candidateKeys` は
+`kanaToRomaji(kana, 'oh')` で読み全体（`トウベツチョウ`）をまとめて oh 化する
+（→ `"tohbetsuchoh"`、末尾が `choh` で `SUFFIX_PATTERN` の `cho` に一致しないため
+`stemKey` で接尾辞を剥がせない）。結果、`"Tohbetsu-cho"` を正規化した `"tohbetsucho"` は
+どちらの候補キー集合にも存在しない。
+
+`packages/core/src/data/prefectures.ts` の都道府県名（マクロン表記から `ō → oh` へ機械的に
+変換）と同じ仕組みが、市区町村側では語幹/接尾辞の分割と噛み合っていない。実データで
+語幹に長音の oh 短縮を持つ市区町村（`formatMunicipality(..., 'macron')` の語幹部分に `ō` を
+含むもの、都道府県を除く）を対象に簡易スキャンしたところ、少なくとも 53 件が同じ壊れ方を
+していた（`当別町`・`共和町`・`蔵王町`・`遠野市` など、全国に散在）。
+
+### 3【小】かな翻字でのみ一致した町の `parsed.town.romaji` が `undefined` になり、`toFormat` が英語宣言の住所に漢字を出す
+
+`fromRomaji.ts` の `buildParsed`（L444–454）が `record.oaza_cho_r` を存在するときだけ添付し、
+romaji フィールドを持たない町（データセット全体の約1割）ではマッチに使った決定的翻字を
+捨てている。再現:
+
+```
+fromRomaji('1-1 Oazakomagome, Aomori-shi, Aomori')
+  → ok=true, parsed.town = { ja: "大字駒込", kana: "オオアザコマゴメ" }（romaji なし）
+toFormat(parsed, 'google-i18n')
+  → { "languageCode": "en", "addressLines": ["1-1 大字駒込"], "locality": "Aomori-shi", ... }
+```
+
+`formats/index.ts` の `streetOf`（L66）の `town?.romaji ?? town?.ja` フォールバックが、
+`languageCode: 'en'` の宣言と矛盾する出力を作っている。
+
+### 4【小】かなの数字と romaji フィールドの数字表記が食い違うエントリが17件
+
+`前郷一番町`（秋田県横手市）は `oaza_cho_k` が `マエゴウ１バンチョウ`（数字）、`oaza_cho_r` が
+`Maego Ichibancho`（単語）。`北兵村一区`（北海道紋別郡湧別町）も同様に
+`キタヘイソン１ク` / `Kitaheisonikku`。全国データで「かなに数字が現れるのに romaji フィールドは
+数字を一切含まない」エントリは 17 件（実データセットの `ja/**/*.json` 全件を走査して確認）。
+
+既定の `longVowel: 'none'` は romaji フィールドを優先するので現状の出力は変わらないが、
+長音スタイルを切り替えると綴りが割れる:
+
+```
+toRomaji('秋田県横手市前郷一番町', {longVowel:'none'})   → "Maego Ichibancho, ..."
+toRomaji('秋田県横手市前郷一番町', {longVowel:'macron'}) → "Maegō1Banchō, ..."
+```
+
+`romanizeStem`（`format.ts`）は `none` 以外のスタイルでは常にかなを使い romaji フィールドを
+一切見ないため（今回の一連の修正が前提とする「v2 では数字は名前の一部」という扱いはかな側にしか
+及んでいない）、同じ町が指定スタイルによって別の綴りになる。
+
+あわせて `packages/core/src/romaji/validate.ts:61–62` のコメント「読みに紛れ込んだ数字も
+corrupt、ただし別種」は、今回の一連の修正が前提とする「v2 では数字は町名の一部であり
+untranslatable ではない」という理解と表現が衝突している。どちらかに揃えるべき。
+
+### 5【小】いずれも今日は到達不能だが、退行の芽
+
+- `format.ts` L98–99: 自治体の romaji フィールドが欠けているとき、接尾辞の読みを
+  `spec.romaji[0]` で**推測**する（`formatMunicipality('出雲崎町', 'イズモザキマチ', undefined,
+  'none')` → `"Izumozaki-cho"`、実際の読みは machi）。現行データでは romaji 欠落の自治体が
+  0件なので到達しないが、データ更新で退行しうる。かなの末尾から読みを決めるべき
+- `format.ts` 冒頭コメントが「データセットは ALL-CAPS（`SAPPORO SHI`）」と書いているが、
+  公開済み v2 データは `Sapporo-shi` 形。コードは両方扱えるがコメントが古い
+- `kyoto.ts` L30: `DIRECTION` に `東入る|西入る` が重複（無害）
+- `hepburn.ts`（`analyzeKana` の `ー` 分岐、L153–158）: 先頭・孤立の長音符が黙って脱落する
+  （`kanaToRomaji('ーア', 'none')` → `"a"`）。破損データ入力時のみ
 
 ## `NPM_TOKEN` は削除済み（2026-08-12）
 
@@ -338,11 +455,16 @@ README は同じ量に対して 0.95% と 1.23% を掲げていた。どちら�
 レジストリからダウンロードし、マッチャ自身のキー関数で測定して決着した — まさにこのために
 追加した `scripts/measure-ambiguity.ts` により、数値は考古学ではなく再現可能になった:
 
-- `fromRomaji` がインデックスするローマ字化キー（完全形と stem 化した短縮形）の **1.10%**
-  （2,778/252,587）が、同一 municipality 内の 2 つ以上の異なる town に対応する。関与する town は
-  4,869（3.74%）。
-- 完全形キーでは **0.69%**（1,404/204,671、town 2,620）— 完全な town 名でも解決できない残余で、
+- `fromRomaji` がインデックスするローマ字化キー（完全形と stem 化した短縮形）の **1.07%**
+  （2,780/259,703）が、同一 municipality 内の 2 つ以上の異なる town に対応する。関与する town は
+  4,871（3.74%）。
+- 完全形キーでは **0.67%**（1,406/211,041、town 2,622）— 完全な town 名でも解決できない残余で、
   KEN_ALL のトレードオフが実際に依拠しているのはこちらの数値。
+
+上の数値は **0.1.3 で測り直したもの**。`isTransliterableKana` が数字を許容するようになり、
+索引されるキーの母集団が変わったため（旧値は 1.10% / 0.69%）。**この種の数値を引用する箇所を
+増やすなら、必ず `scripts/measure-ambiguity.ts` の出力から取ること**——実装が変われば数値も
+動くので、手で書き写した値はいずれ嘘になる。
 
 手法のマトリクス（name/record での dedupe × plausibility フィルタ on/off × 母音スタイル ×
 stem）を回して、歴史的な 0.95/1.23 を再現する変種があるか確かめた。無かった — 最も近くて

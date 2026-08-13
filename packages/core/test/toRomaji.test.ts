@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { toRomaji } from '../src/toRomaji.js';
+import { toRomaji, extractPostalCode } from '../src/toRomaji.js';
 import { fromRomaji } from '../src/fromRomaji.js';
 import { useFixtureData, withNetworkBlocked } from './helpers.js';
 
@@ -254,6 +254,51 @@ describe('toRomaji: options', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.formatted).toBe('1-2-3 UEHARA, SHIBUYA-KU, TOKYO');
+  });
+});
+
+describe('toRomaji: postal code extraction requires a digit boundary', () => {
+  // Regression: the `NNN-NNNN` postal-code pattern had no guard against
+  // being adjacent to other digits, so it silently carved a fake postal
+  // code out of any nearby run of digits and a hyphen — a phone number, or
+  // a 4-digit block number followed by more numbers. Both are ordinary text,
+  // not typos, so the old behavior was a silent corruption, not a refusal.
+
+  it('does not carve a postal code out of a phone number, and does not truncate the building name', async () => {
+    const result = await toRomaji('東京都新宿区西新宿2-8-1 新宿ビル TEL03-1234-5678');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.parsed.postalCode).toBeUndefined();
+    expect(result.value.parsed.chome).toBe(2);
+    expect(result.value.parsed.blockNumbers).toEqual([8, 1]);
+    expect(result.unparsed).toBe('新宿ビル TEL03-1234-5678');
+    expect(result.value.formatted).toContain('TEL03-1234-5678');
+  });
+
+  it('does not misread a 4-digit block number as a postal code plus chome 1', async () => {
+    const result = await toRomaji('東京都新宿区西新宿1123-4567');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.parsed.postalCode).toBeUndefined();
+    expect(result.value.parsed.chome).toBe(1);
+    expect(result.value.parsed.blockNumbers).toEqual([123, 4567]);
+  });
+
+  it('extractPostalCode ignores an NNN-NNNN run glued to a preceding digit', () => {
+    expect(extractPostalCode('新宿区西新宿1123-4567')).toBeUndefined();
+  });
+
+  it('extractPostalCode ignores an NNN-NNNN run inside a longer hyphenated phone number', () => {
+    // A digit-only front boundary is not enough on its own: "090-1234" is
+    // NNN-NNNN with nothing but another hyphen after it, which a digit-only
+    // back boundary would accept. The back boundary must reject an adjacent
+    // hyphen too.
+    expect(extractPostalCode('TEL:090-1234-5678')).toBeUndefined();
+  });
+
+  it('extractPostalCode still finds an isolated, legitimately bounded postal code', () => {
+    expect(extractPostalCode('〒151-0064 東京都渋谷区上原1-2-3')).toBe('151-0064');
+    expect(extractPostalCode('東京都渋谷区上原1-2-3 160-0023')).toBe('160-0023');
   });
 });
 

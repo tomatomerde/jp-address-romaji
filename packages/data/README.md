@@ -21,7 +21,7 @@ its own; see the [library's requirements](https://github.com/tomatomerde/jp-addr
 
 ## What's in it
 
-638,567 town (machi-aza) entries across 1,899 municipalities, in the same layout the upstream
+638,567 town (machi-aza) entries across 1,898 municipalities, in the same layout the upstream
 Geolonia v2 API serves:
 
 ```

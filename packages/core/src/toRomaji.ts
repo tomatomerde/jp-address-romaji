@@ -228,10 +228,23 @@ interface PostalSplit {
  * stops the upstream normalizer from recognizing the address at all (it
  * returns level 0), and a trailing one is otherwise carried into the leftover
  * text and misread as a building name.
+ *
+ * The `NNN-NNNN` shape alone is not enough to identify a postal code: a
+ * 4-digit block number followed by a hyphenated banchi (`西新宿1123-4567`)
+ * or a phone number (`TEL03-1234-5678`) both contain an unrelated
+ * `\d{3}[-]\d{4}` substring. Both sides of the match are therefore required
+ * to *not* be adjacent to another digit or dash-like character — that's what
+ * marks the run as an isolated code rather than a fragment of a longer
+ * digit/hyphen sequence. `(?<!\d)` alone (front boundary only) still let a
+ * pattern like `090-1234-5678` match `090-1234`, since nothing followed the
+ * `4` immediately except another hyphen; excluding hyphens too closes that
+ * gap.
  */
 function splitPostalCode(input: string): PostalSplit {
   const normalized = input.normalize('NFKC');
-  const match = normalized.match(/〒?\s*(\d{3})\s*[-‐‑−ー－]\s*(\d{4})(?!\d)/);
+  const match = normalized.match(
+    /(?<![\d\-‐‑−ー－])〒?\s*(\d{3})\s*[-‐‑−ー－]\s*(\d{4})(?![\d\-‐‑−ー－])/,
+  );
   if (!match) return { rest: normalized };
   const rest = normalized.replace(match[0], ' ').replace(/\s+/g, ' ').trim();
   return { postalCode: `${match[1]}-${match[2]}`, rest };

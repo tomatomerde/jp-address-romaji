@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { kanaToRomaji, toKatakana } from '../src/romaji/hepburn.js';
+import { kanaToRomaji, toKatakana, isTransliterableKana } from '../src/romaji/hepburn.js';
+import { romanizeStem } from '../src/romaji/format.js';
 import {
   isUsableRomajiField,
   isPlausibleReading,
@@ -49,6 +50,31 @@ describe('kanaToRomaji', () => {
     expect(kanaToRomaji('渋谷', 'none')).toBeUndefined();
     expect(kanaToRomaji('', 'none')).toBeUndefined();
     expect(kanaToRomaji('ウエハラ町', 'none')).toBeUndefined();
+  });
+
+  it('keeps an embedded digit rather than refusing the whole reading', () => {
+    // Real v2 reading for Sapporo's 北十条西 (北海道札幌市北区): the block
+    // number is spelled into the kana itself (キタ１０ジョウニシ, full-width
+    // digit), matching the town's own romaji field "Kita10-Jonishi". A digit
+    // is part of the name, not an untranslatable character.
+    expect(kanaToRomaji('キタ１０ジョウニシ', 'none')).toBe('kita10jonishi');
+  });
+});
+
+describe('isTransliterableKana', () => {
+  it('accepts a reading with an embedded digit', () => {
+    expect(isTransliterableKana('キタ１０ジョウニシ')).toBe(true);
+    expect(isTransliterableKana('ウメガオカキタ１バンチョウ')).toBe(true);
+  });
+
+  it('rejects a reading with a genuinely untranslatable character', () => {
+    // Real v2 corruption in 茨城県東茨城郡大洗町's oaza_cho_k for サンビーチ:
+    // a full-width hyphen (U+FF0D) where a choonpu (ー, U+30FC) belongs. NFKC
+    // folds it to an ASCII hyphen, which is not a kana character.
+    expect(isTransliterableKana('サンビ－チ')).toBe(false);
+    // Real v2 corruption in 富山県高岡市: full-width Latin letters embedded
+    // in an otherwise-katakana reading.
+    expect(isTransliterableKana('ＩＣパーク')).toBe(false);
   });
 });
 
@@ -116,6 +142,39 @@ describe('dataset romaji validation', () => {
     // A v1-style row, where the prefix appears in the name but not the
     // reading, must still pass.
     expect(isPlausibleReading('大字三内', 'サンナイ')).toBe(true);
+  });
+});
+
+describe('romanizeStem: long-vowel styles must apply the same transliterability check as none', () => {
+  // Regression: `style === 'none'` routes through kanaToRomaji, which checks
+  // isTransliterableKana and returns undefined for anything it cannot spell.
+  // The macron/circumflex/oh branches used to call analyzeKana/renderSyllables
+  // directly, skipping that check entirely — untranslatable characters were
+  // passed through verbatim instead of causing a refusal. That let an input
+  // that correctly failed under the default style succeed under a long-vowel
+  // style, the opposite of the intended relationship (the long-vowel styles
+  // are documented as *requiring* the kana source, i.e. should be at least as
+  // strict, never looser).
+  const STYLES = ['none', 'macron', 'circumflex', 'oh'] as const;
+
+  it('refuses an untranslatable kana reading under every style, not just none', () => {
+    // Real v2 corruption: 茨城県東茨城郡大洗町's oaza_cho_k for サンビーチ has
+    // a full-width hyphen (NFKC-folds to ASCII '-') where a choonpu belongs.
+    const untranslatable = 'サンビ－チ';
+    for (const style of STYLES) {
+      expect(romanizeStem(untranslatable, undefined, style)).toBeUndefined();
+    }
+  });
+
+  it('keeps accepting a kana reading with an embedded digit under every style', () => {
+    // Real v2 reading for Sapporo's 北十条西 (北海道札幌市北区). Digits inside
+    // a reading are part of the name (the block number), not untranslatable
+    // characters, so no style should refuse this.
+    const withDigit = 'キタ１０ジョウニシ';
+    expect(romanizeStem(withDigit, undefined, 'none')).toBe('kita10jonishi');
+    expect(romanizeStem(withDigit, undefined, 'macron')).toBe('kita10jōnishi');
+    expect(romanizeStem(withDigit, undefined, 'circumflex')).toBe('kita10jônishi');
+    expect(romanizeStem(withDigit, undefined, 'oh')).toBe('kita10johnishi');
   });
 });
 

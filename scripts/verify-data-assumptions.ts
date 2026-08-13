@@ -109,6 +109,18 @@ function main(): void {
         if (town.oaza_cho_r) {
           // Same normalization the library uses: digits are kept, because a
           // trailing digit is part of the name (see assumption 4).
+          //
+          // NOTE: this key is deliberately naive — it only lowercases the raw
+          // `oaza_cho_r` field and strips non-alphanumerics. It does NOT match
+          // what `fromRomaji` actually indexes: it skips towns with no romaji
+          // field (so it misses the ~10% of towns romanized from kana, see
+          // assumption 1), and it does not include the stemmed short-form
+          // keys `candidateKeys` generates. So the percentage below is a
+          // cheap smoke-test proxy, not the ambiguity rate users experience.
+          // For the real, user-facing figures (which is what the README and
+          // CLAUDE.md quote), see `scripts/measure-ambiguity.ts`, which
+          // reuses `candidateKeys`/`fromRomaji`'s own key logic instead of
+          // reimplementing a rough approximation of it.
           const key = town.oaza_cho_r.toLowerCase().replace(/[^a-z0-9]/g, '');
           if (key) {
             if (!byKey.has(key)) byKey.set(key, new Set());
@@ -156,8 +168,12 @@ function main(): void {
   digitSamples.forEach((s) => console.log(`    ${s}`));
   console.log('');
   console.log('-- assumption 5: romanization is near-unique within a municipality --');
-  console.log(`  distinct romaji keys: ${distinctKeys}`);
-  console.log(`  ambiguous keys      : ${ambiguousKeys} (${pct(ambiguousKeys, distinctKeys)})`);
+  console.log('  (naive proxy metric — raw oaza_cho_r keys only, no kana fallback, no');
+  console.log('   candidateKeys stemming. NOT the user-facing ambiguity rate: that figure');
+  console.log('   is measured by `scripts/measure-ambiguity.ts` and is what the README and');
+  console.log('   CLAUDE.md quote (1.07% / 0.67%). This is a cheaper smoke-test signal.)');
+  console.log(`  distinct romaji-field keys (naive): ${distinctKeys}`);
+  console.log(`  ambiguous keys (naive)             : ${ambiguousKeys} (${pct(ambiguousKeys, distinctKeys)})`);
   console.log('');
 
   // Fail loudly on anything that invalidates a design decision.

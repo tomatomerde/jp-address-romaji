@@ -88,4 +88,48 @@ describe.skipIf(!available)('real dataset', () => {
     if (result.ok) return;
     expect(result.reason).toBe('KYOTO_STREET_ADDRESS');
   });
+
+  describe('long-vowel styles refuse what the default style refuses', () => {
+    // Regression: 茨城県東茨城郡大洗町's oaza_cho_k for サンビーチ carries a
+    // full-width hyphen (NFKC-folds to ASCII '-') in place of a choonpu. The
+    // default style correctly refuses it via kanaToRomaji/isTransliterableKana,
+    // but the macron/circumflex/oh styles used to call analyzeKana directly
+    // and skip that check, silently emitting "Sambi-Chi" instead of refusing.
+    const address = '茨城県東茨城郡大洗町サンビーチ1-1';
+
+    it.each(['none', 'macron', 'circumflex', 'oh'] as const)(
+      'refuses under longVowel=%s',
+      async (longVowel) => {
+        const result = await toRomaji(address, { longVowel });
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.reason).toBe('NO_ROMAJI_DATA');
+      },
+    );
+  });
+
+  describe('long-vowel styles keep an embedded digit that is part of the name', () => {
+    // 北海道札幌市北区北十条西: the block number lives inside the kana reading
+    // itself (キタ１０ジョウニシ). This must keep converting under every
+    // style — the digit-tolerance in isTransliterableKana exists specifically
+    // so this large, ordinary slice of Sapporo addresses is not refused.
+    const address = '北海道札幌市北区北十条西一丁目1-1';
+
+    // The 'none' style is sourced from the dataset's own romaji field
+    // (which spells the suffix with a hyphen: "Kita10-Jonishi"); the
+    // long-vowel styles are sourced from the kana reading instead (which has
+    // no such separator), so the exact spelling differs slightly between
+    // them — what matters here is that none of the four refuses.
+    it.each([
+      ['none', 'Kita10-Jonishi'],
+      ['macron', 'Kita10Jōnishi'],
+      ['circumflex', 'Kita10Jônishi'],
+      ['oh', 'Kita10Johnishi'],
+    ] as const)('romanizes under longVowel=%s', async (longVowel, expectedTown) => {
+      const result = await toRomaji(address, { longVowel });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.formatted).toContain(expectedTown);
+    });
+  });
 });
