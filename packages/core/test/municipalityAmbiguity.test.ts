@@ -72,6 +72,27 @@ describe('fromRomaji: municipality name collisions', () => {
     }
   });
 
+  it('carries blockNumbers and unparsed through to municipality-level AMBIGUOUS candidates', async () => {
+    // What precedes the (still-ambiguous) municipality segments — numbers and
+    // a building name here — cannot be resolved into a town at this level
+    // (which municipality's town list to even search is exactly what's
+    // ambiguous), but it must not be silently dropped from candidates a
+    // caller picks from and renders. Regression: buildMunicipalityCandidate
+    // (added in a2b28f1) hardcoded blockNumbers: [] and no unparsed field at
+    // all, unlike the town-level AMBIGUOUS branch below, which does carry
+    // both through.
+    const result = await fromRomaji('Sunshine Bldg 5F, 1-1 Sakura, Esashi-cho, Hokkaido');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('AMBIGUOUS');
+    expect(result.candidates).toHaveLength(2);
+    for (const candidate of result.candidates ?? []) {
+      expect(candidate.level).toBe(2);
+      expect(candidate.blockNumbers).toEqual([1, 1]);
+      expect(candidate.unparsed).toBe('Sunshine Bldg 5F, Sakura');
+    }
+  });
+
   it('resolves a real town into the correct one of two colliding municipalities (Shimanto-cho vs Shimanto-shi)', async () => {
     // The reported bug: "1-1 Nakamura, Shimanto-cho, Kochi" used to resolve
     // into 高知県四万十市中村 (wrong municipality) instead of

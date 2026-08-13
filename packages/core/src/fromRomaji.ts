@@ -192,8 +192,30 @@ export async function fromRomaji(
     // postal code narrows a town within one municipality, not a choice of
     // municipality), so this always surfaces as AMBIGUOUS.
     const matchedText = remaining.slice(remaining.length - municipality.consumed).join(', ');
+
+    // Whatever precedes the municipality segments (typically "<numbers>
+    // <town>" in western order) cannot be resolved into a town here — which
+    // municipality's town list to even search is exactly what's ambiguous —
+    // but it must not be silently dropped from the candidates a caller picks
+    // from and renders. Numbers are carried as blockNumbers (the same shape
+    // a chome-less town-level candidate uses) and the rest — the
+    // unresolved town text, plus the building name already split out before
+    // matching — is carried as unparsed, mirroring how the town-level
+    // ambiguity branch below builds `unparsed` for its own candidates.
+    const leftoverSegments = remaining.slice(0, remaining.length - municipality.consumed);
+    const leftoverNumbers: number[] = [];
+    const leftoverText: string[] = [];
+    for (const segment of leftoverSegments) {
+      const { numbers: segNumbers, name, unparsed: segExtra } = splitNumbersAndName(segment);
+      leftoverNumbers.push(...segNumbers);
+      if (name) leftoverText.push(name);
+      if (segExtra) leftoverText.push(segExtra);
+    }
+    const blockNumbers = leftoverNumbers;
+    const unparsed = [buildingName, ...leftoverText].filter(Boolean).join(', ') || undefined;
+
     const candidates: ParsedAddress[] = municipality.records.map((record) =>
-      buildMunicipalityCandidate(partial, record, postalCode),
+      buildMunicipalityCandidate(partial, record, postalCode, blockNumbers, unparsed),
     );
     return {
       ok: false,
@@ -649,13 +671,22 @@ function matchesMunicipality(record: CityRecord, tail: string[]): MatchQuality |
   return undefined;
 }
 
-/** Build an AMBIGUOUS candidate for a municipality-level collision — the town
+/**
+ * Build an AMBIGUOUS candidate for a municipality-level collision — the town
  * has not been located yet, so this stops at level 2 (like the TOWN_NOT_FOUND
- * partial for a resolved-but-town-less address). */
+ * partial for a resolved-but-town-less address).
+ *
+ * `blockNumbers` and `unparsed` are whatever the caller wrote before the
+ * (ambiguous) municipality segments — see the comment at the call site.
+ * They carry through unchanged across candidates, since which municipality
+ * the caller picks does not change what was written there.
+ */
 function buildMunicipalityCandidate(
   partial: Partial<ParsedAddress>,
   record: CityRecord,
   postalCode: string | undefined,
+  blockNumbers: number[],
+  unparsed: string | undefined,
 ): ParsedAddress {
   return {
     ...(postalCode ? { postalCode } : {}),
@@ -663,7 +694,8 @@ function buildMunicipalityCandidate(
     ...(record.county ? { county: { ja: record.county, kana: record.county_k, romaji: record.county_r } } : {}),
     city: { ja: record.city, kana: record.city_k, romaji: record.city_r },
     ...(record.ward ? { ward: { ja: record.ward, kana: record.ward_k, romaji: record.ward_r } } : {}),
-    blockNumbers: [],
+    blockNumbers,
+    ...(unparsed ? { unparsed } : {}),
     level: 2,
   };
 }
