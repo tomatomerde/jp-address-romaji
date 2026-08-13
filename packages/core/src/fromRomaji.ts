@@ -262,10 +262,36 @@ export async function fromRomaji(
     );
   }
 
-  const { numbers, name, matches } = located;
+  const { numbers, name, matches: allMatches } = located;
   const otherSegments = remaining.filter((_, i) => i !== townIndex);
   const unparsed =
     [buildingName, ...otherSegments, located.extra].filter(Boolean).join(', ') || undefined;
+
+  // When the romanized name collides across more than one distinct town in
+  // this municipality, prefer the town(s) reachable through their OWN romaji
+  // field over one reachable only via a kana transliteration. The dataset's
+  // romaji field is the authoritative spelling; a kana-derived key is a
+  // substitute for it (used when the field is absent), so it should only
+  // decide between towns when no romaji-backed reading is on offer — the
+  // same "provenance beats guess" preference matchMunicipality already
+  // applies for exact vs. stemmed municipality readings.
+  //
+  // Restricting this to actual collisions (rather than always preferring
+  // romaji-backed records) matters: 京都市中京区 has both 夷町 and 恵比須町
+  // romanizing to "Ebisucho", and BOTH carry their own romaji field. Neither
+  // is a substitute for the other, so that pair must stay AMBIGUOUS — this
+  // only fires when the competing group has no romaji-field backing at all.
+  const target = normalizeRomajiKey(name);
+  const distinctBeforePreference = [...new Set(allMatches.map((m) => m.oaza_cho ?? ''))];
+  let matches = allMatches;
+  if (distinctBeforePreference.length > 1) {
+    const romajiBackedOaza = new Set(
+      allMatches.filter((m) => romajiFieldKey(m.oaza_cho_r) === target).map((m) => m.oaza_cho ?? ''),
+    );
+    if (romajiBackedOaza.size > 0 && romajiBackedOaza.size < distinctBeforePreference.length) {
+      matches = allMatches.filter((m) => romajiBackedOaza.has(m.oaza_cho ?? ''));
+    }
+  }
 
   // Ambiguity must be resolved BEFORE interpreting the leading number.
   //
@@ -631,6 +657,27 @@ function findTownInText(towns: MachiAzaRecord[], text: string): LocatedTown | un
     }
   }
   return undefined;
+}
+
+/**
+ * The key reachable from a town record's own `romaji` field taken verbatim —
+ * no stemming, no kana transliteration. Used to tell an authoritative
+ * spelling apart from one that is only reachable via a kana-derived key
+ * (or via *stemming* the romaji field, which is a different, weaker kind of
+ * match — see below), when two different towns collide on the same
+ * romanized key within one municipality.
+ *
+ * Deliberately excludes the stemmed form of the romaji field. Including it
+ * reintroduces the same false-positive class {@link segmentQuality} guards
+ * against at the municipality level: 深谷 (plain, kana-only "フカヤ") and
+ * 深谷町 (romaji field `Fukayacho`) both romanize to "Fukaya" once 町 is
+ * stemmed off, but a bare query "Fukaya" was written for 深谷, not for a
+ * stemmed 深谷町 — preferring 深谷町 there because its OWN field merely
+ * happens to stem to the same key would silently pick the wrong town.
+ */
+function romajiFieldKey(romajiField: string | undefined): string | undefined {
+  if (!romajiField) return undefined;
+  return normalizeRomajiKey(romajiField) || undefined;
 }
 
 /** Find towns whose romanization matches `name`. */

@@ -71,6 +71,25 @@ export function useKoazaNumberAmbiguityFixtureData(): void {
 }
 
 /**
+ * A sixth, separate fixture dataset holding a real municipality (北海道上川郡
+ *東神楽町) with a town-name collision between a romaji-field-backed town and
+ * a kana-only-backed town that share the same romanized key
+ * (`ひじり野南一条` / `ひじりの南一条`). See
+ * fixtures-town-romaji-precedence/README.md.
+ */
+export const TOWN_ROMAJI_PRECEDENCE_FIXTURE_DATA_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'fixtures-town-romaji-precedence',
+  'data',
+);
+
+/** Point the library at the town romaji-field-precedence fixture dataset. */
+export function useTownRomajiPrecedenceFixtureData(): void {
+  clearDataCache();
+  configureDataSource({ dataDir: TOWN_ROMAJI_PRECEDENCE_FIXTURE_DATA_DIR });
+}
+
+/**
  * Run `fn` with `fetch` replaced by a stub that throws.
  *
  * Any network access — by our code or by the upstream normalizer — fails the
