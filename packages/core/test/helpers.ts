@@ -90,6 +90,24 @@ export function useTownRomajiPrecedenceFixtureData(): void {
 }
 
 /**
+ * A seventh, separate fixture dataset holding two real wards of 名古屋市
+ * (中村区/`Nakamura-ku` and 中区/`Naka-ku`) whose stems collide once a query
+ * suffix names the wrong KIND of administrative unit. See
+ * fixtures-suffix-category/README.md.
+ */
+export const SUFFIX_CATEGORY_FIXTURE_DATA_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'fixtures-suffix-category',
+  'data',
+);
+
+/** Point the library at the suffix-category fixture dataset. */
+export function useSuffixCategoryFixtureData(): void {
+  clearDataCache();
+  configureDataSource({ dataDir: SUFFIX_CATEGORY_FIXTURE_DATA_DIR });
+}
+
+/**
  * Run `fn` with `fetch` replaced by a stub that throws.
  *
  * Any network access — by our code or by the upstream normalizer — fails the

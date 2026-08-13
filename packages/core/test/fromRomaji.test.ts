@@ -50,6 +50,19 @@ describe('fromRomaji: reconstructs Japanese', () => {
     expect(result.partial?.city?.ja).toBe('出雲崎町');
   });
 
+  it('still resolves the "wrong" but plausible suffix reading for the same 町', async () => {
+    // 出雲崎町's own reading is "Izumozaki-machi" (see the fixture's
+    // IZUMOZAKI MACHI). "-cho" is a different, but equally legitimate,
+    // reading of 町 — the leniency that lets it stem-match here must survive
+    // the fix (see suffixCategory.test.ts) that stops a suffix naming the
+    // wrong KIND of unit (e.g. "-mura", "-gun") from doing the same.
+    const result = await fromRomaji('Izumozaki-cho, Santo-gun, Niigata');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.partial?.county?.ja).toBe('三島郡');
+    expect(result.partial?.city?.ja).toBe('出雲崎町');
+  });
+
   it('excludes a corrupt dataset entry from candidates instead of manufacturing ambiguity', async () => {
     // 円山's own kana/romaji are corrupt copies of 円山西町's (see
     // isPlausibleReading). Before that check was applied here too, this

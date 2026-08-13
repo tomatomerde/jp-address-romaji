@@ -13,8 +13,15 @@ import type { LongVowelStyle } from '../types.js';
 import { analyzeKana, renderSyllables, kanaToRomaji, isTransliterableKana } from './hepburn.js';
 import { isUsableRomajiField } from './validate.js';
 
-/** Administrative suffixes, with their possible readings. */
-const SUFFIXES: Record<string, { kana: string[]; romaji: string[] }> = {
+/**
+ * Administrative suffixes, with their possible readings.
+ *
+ * Exported for fromRomaji.ts's `segmentQuality`, which uses this same table
+ * to decide whether a suffix stripped off a QUERY token is a plausible
+ * reading for the kanji suffix the matched record actually has — see the
+ * comment there for why.
+ */
+export const SUFFIXES: Record<string, { kana: string[]; romaji: string[] }> = {
   都: { kana: ['ト'], romaji: ['to'] },
   道: { kana: ['ドウ'], romaji: ['do'] },
   府: { kana: ['フ'], romaji: ['fu'] },

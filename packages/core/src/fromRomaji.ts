@@ -23,6 +23,7 @@ import {
 } from './dataAccess.js';
 import { kanaToRomaji } from './romaji/hepburn.js';
 import { isPlausibleReading } from './romaji/validate.js';
+import { SUFFIXES } from './romaji/format.js';
 import { numberToKanji } from './kanjiNumbers.js';
 import { containsJapanese } from './script.js';
 
@@ -540,18 +541,74 @@ function exactKeys(kana?: string, romajiField?: string): Set<string> {
 }
 
 /**
+ * Which kanji administrative suffix each token `SUFFIX_PATTERN` can capture
+ * denotes — e.g. `mura`/`son` both mean 村, `cho`/`chou`/`machi` all mean 町.
+ *
+ * Built from `SUFFIXES` (`romaji/format.ts`, the table of which *readings*
+ * are possible for which kanji suffix) so the two tables cannot drift on the
+ * readings they agree about, plus three tokens `SUFFIXES` has no entry for
+ * because the render side never emits them, even though `SUFFIX_PATTERN`
+ * accepts them as query input: `chou` (an alternate romanization of `cho`,
+ * both meaning 町), and the English `city`/`ward` (meaning 市/区
+ * respectively, the same units `shi`/`ku` denote).
+ */
+const SUFFIX_TOKEN_KANJI: Record<string, string> = { chou: '町', city: '市', ward: '区' };
+for (const [kanji, spec] of Object.entries(SUFFIXES)) {
+  for (const romaji of spec.romaji) SUFFIX_TOKEN_KANJI[romaji] = kanji;
+}
+
+/**
+ * Is the administrative suffix `stemKey` strips off a query token plausibly
+ * naming the same KIND of unit as `ja`'s actual kanji suffix?
+ *
+ * `stemKey` strips ANY of `shi/ku/cho/chou/machi/mura/son/gun/city/ward` off
+ * the end of a token regardless of what kind of unit it is actually being
+ * matched against — that pattern doesn't know whether the record it will be
+ * compared to is a 市, a 区, a 町, or a 郡. Left unchecked, that lets a query
+ * suffix for the wrong KIND of unit still produce a stem match, e.g.
+ * "Nakamura" (naka + village-style "-mura") stemming to "naka" and
+ * colliding with 中区's own stem "naka" (city-style "-ku") — a nonsense
+ * suffix accepted as if the real one had been typed, the exact same class of
+ * bug `matchTowns`'s comment above already warns about for query stemming.
+ *
+ * This only checks the KIND of unit ("mura" and "son" are both plausible for
+ * any 村, regardless of which one that particular 村's own romaji field
+ * actually uses) — it does not require the token to be the SPECIFIC reading
+ * this record uses. That specific-reading leniency is exactly what the
+ * stem-match fallback exists to provide: a 町 can genuinely be read "-cho"
+ * or "-machi", and the dataset only records the one that's actually correct
+ * for that municipality.
+ */
+function suffixIsPlausibleFor(ja: string, s: string): boolean {
+  const suffixMatch = s.match(SUFFIX_PATTERN);
+  if (!suffixMatch) return false;
+  const token = suffixMatch[1]!.toLowerCase();
+  return SUFFIX_TOKEN_KANJI[token] === ja.slice(-1);
+}
+
+/**
  * Quality of a single query segment against one field, worst-case combined
  * across the two segments of a ward+city or city+county pair (a pair is only
  * as good as its weaker half).
+ *
+ * `ja` is the dataset's Japanese name for the field being matched (the
+ * record's `ward`, `city`, or `county`) — needed only to gate the
+ * suffix-stemmed fallback below via {@link suffixIsPlausibleFor}.
  */
-function segmentQuality(exact: Set<string>, all: Set<string>, s: string): MatchQuality | undefined {
+function segmentQuality(exact: Set<string>, all: Set<string>, s: string, ja: string): MatchQuality | undefined {
   const key = normalizeRomajiKey(s);
   if (exact.has(key)) return 'exact';
-  // Falling back to a stem match on either side is what lets a query with
+  if (all.has(key)) return 'stem';
+  // Falling back to a stem match on the QUERY side is what lets a query with
   // the "wrong" but plausible administrative-suffix reading still resolve
   // (a 町 can genuinely be read "-cho" or "-machi"; the dataset only records
-  // the one that's actually correct for that municipality).
-  if (all.has(key) || all.has(stemKey(s))) return 'stem';
+  // the one that's actually correct for that municipality) — but only when
+  // the suffix being stripped is actually a possible reading of THIS
+  // record's own suffix kanji. Without that check, stripping "-mura" off a
+  // query meant for a 区 still produces a stem that can coincidentally equal
+  // the 区's own stem, letting a nonsense suffix resolve as if it had been
+  // typed correctly.
+  if (suffixIsPlausibleFor(ja, s) && all.has(stemKey(s))) return 'stem';
   return undefined;
 }
 
@@ -569,7 +626,7 @@ function matchesMunicipality(record: CityRecord, tail: string[]): MatchQuality |
     // alone is ambiguous across Sapporo, Osaka, Kobe and others, so we require
     // the city segment too and let the two-segment branch handle it.
     if (record.ward) return undefined;
-    return segmentQuality(cityExact, cityAll, only);
+    return segmentQuality(cityExact, cityAll, only, record.city);
   }
 
   const [first, second] = tail as [string, string];
@@ -577,16 +634,16 @@ function matchesMunicipality(record: CityRecord, tail: string[]): MatchQuality |
     // Western order puts the smaller unit first: "Chuo-ku, Sapporo-shi".
     const wardExact = exactKeys(record.ward_k, record.ward_r);
     const wardAll = candidateKeys(record.ward_k, record.ward_r);
-    const wardQ = segmentQuality(wardExact, wardAll, first);
-    const cityQ = segmentQuality(cityExact, cityAll, second);
+    const wardQ = segmentQuality(wardExact, wardAll, first, record.ward);
+    const cityQ = segmentQuality(cityExact, cityAll, second, record.city);
     if (wardQ && cityQ) return combine(wardQ, cityQ);
   }
   if (record.county) {
     // "Izumozaki-machi, Santo-gun"
     const countyExact = exactKeys(record.county_k, record.county_r);
     const countyAll = candidateKeys(record.county_k, record.county_r);
-    const cityQ = segmentQuality(cityExact, cityAll, first);
-    const countyQ = segmentQuality(countyExact, countyAll, second);
+    const cityQ = segmentQuality(cityExact, cityAll, first, record.city);
+    const countyQ = segmentQuality(countyExact, countyAll, second, record.county);
     if (cityQ && countyQ) return combine(cityQ, countyQ);
   }
   return undefined;
