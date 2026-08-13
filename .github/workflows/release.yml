@@ -204,16 +204,19 @@ jobs:
                   fi
                   EXPECTED_VERSION="$dv"
                   TAG="v$EXPECTED_VERSION"
+                  CHANGELOG_VERSION="$EXPECTED_VERSION"
                   RELEASE_TITLE="$TAG"
                   ;;
                 data-only)
                   EXPECTED_VERSION=$(node -p "require('./packages/data/package.json').version")
                   TAG="data-v$EXPECTED_VERSION"
+                  CHANGELOG_VERSION="data-$EXPECTED_VERSION"
                   RELEASE_TITLE="jp-address-romaji-data $TAG"
                   ;;
                 core-only)
                   EXPECTED_VERSION=$(node -p "require('./packages/core/package.json').version")
                   TAG="core-v$EXPECTED_VERSION"
+                  CHANGELOG_VERSION="core-$EXPECTED_VERSION"
                   RELEASE_TITLE="jp-address-romaji $TAG"
                   ;;
                 *)
@@ -223,6 +226,12 @@ jobs:
               esac
               echo "TAG=$TAG" >> "$GITHUB_ENV"
               echo "EXPECTED_VERSION=$EXPECTED_VERSION" >> "$GITHUB_ENV"
+              # Same scoping rule the tag-push branch uses: the CHANGELOG is
+              # one shared file, so a scoped release needs a scoped heading.
+              # Leaving this unset made the guard look for a section called
+              # "## " and hard-fail every cut_release run — the path
+              # docs/releasing.md tells a session to use.
+              echo "CHANGELOG_VERSION=$CHANGELOG_VERSION" >> "$GITHUB_ENV"
               echo "RELEASE_TITLE=$RELEASE_TITLE" >> "$GITHUB_ENV"
               # The tag-vs-package check below is a tautology on this path
               # (the tag came from package.json), but the CHANGELOG guard
