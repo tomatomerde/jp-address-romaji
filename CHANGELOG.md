@@ -22,7 +22,7 @@
   real script as a subprocess against a local fixture server with an injectable failure policy,
   covering a clean run, a municipality recovered by the sweep, and one that never recovers.
 
-## 0.1.1 — 2026-08-11
+## 0.1.1 — 2026-08-12
 
 ### Fixed
 
@@ -86,7 +86,7 @@ First release.
 
 ### `jp-address-romaji-data`
 
-- The offline dataset: 638,567 town entries across 1,899 municipalities.
+- The offline dataset: 638,567 town entries across 1,898 municipalities.
 - `build` CLI to regenerate or refresh it from upstream.
 - Town-level coordinates and street-level records are excluded; see the package README for why.
 
