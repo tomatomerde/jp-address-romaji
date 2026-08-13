@@ -41,6 +41,133 @@ provenance も付いている。タグ push はセッションの資格情報で
 
 `main` は上記すべてを含む。
 
+## 公開後レビューで見つかった未修正の不具合
+
+以下はいずれも、公開済み `0.1.2` の実物に対して再現確認まで済んでいる。まだ直っていない。
+重要度順。
+
+### 1【重大】`fromRomaji` が別の自治体の実在住所を `ok: true` で返す
+
+原因は `packages/core/src/fromRomaji.ts` の `matchMunicipality` / `matchesMunicipality`
+（L381–427）にある2つの欠陥の複合:
+
+- クエリ側で `stemKey` を試すため接尾辞が剥がれ、`Fuchu-cho` が stem `fuchu` で `府中市` に
+  一致する。同ファイルの `matchTowns`（L478–491）のコメントは、町名レベルでまさにこの不具合
+  （`Uguisudanimura` が鶯谷町に一致）を修正したと明記しているのに、**市区町村レベルには
+  同じ修正が入っていない**
+- `for (const record of cities)` の先勝ちで確定し、**市区町村レベルには `AMBIGUOUS` 判定が
+  存在しない**
+
+実データ全国スキャンで、自分自身の名前を単一セグメントで入力すると別の自治体に解決される
+市区町村が **13件**。うち4件は町名まで共有するため完全に静かな誤住所になる。再現した実際の
+出力:
+
+```
+"1-1 Sakuragaoka, Fuchu-cho, Hiroshima" → ok=true 広島県府中市桜が丘一丁目1   （意図: 安芸郡府中町桜ヶ丘1-1）
+"1-1 Otani, Echizen-cho, Fukui"         → ok=true 福井県越前市大谷町1-1       （意図: 丹生郡越前町大谷1-1）
+"1-1 Honcho, Esashi-cho, Hokkaido"      → ok=true 北海道檜山郡江差町字本町1-1 （意図: 枝幸郡枝幸町本町1-1）
+"1-1 Nakamura, Shimanto-cho, Kochi"     → ok=true 高知県四万十市中村1-1       （意図: 高岡郡四万十町中村1-1）
+```
+
+残り9件（利島村→豊島区、白川村→白川町、木曽町→木祖村 など）は `TOWN_NOT_FOUND` になり、
+実在住所が拒否される。郡名を書けば正しく解決する（`Fuchu-cho, Aki-gun, Hiroshima` は正常）
+ことも確認済み。
+
+これは `CLAUDE.md` が掲げる「間違った宛名ラベルは、拒否された宛名ラベルより悪い」「勝手に
+選ばず `AMBIGUOUS` を候補付きで返す」という中核の不変条件の違反。
+
+修正時の注意: 江差町と枝幸町は**読みまで同一**（どちらも Esashi-cho）なので、クエリ側の
+stem を廃止するだけでは直らない。「全一致候補を収集 → 完全キー一致を stem 一致より優先
+→ それでも複数なら `AMBIGUOUS` を候補付きで返す」という形が必要。回帰テストには府中町/
+府中市、江差町/枝幸町（読み同一 → `AMBIGUOUS` 必須）、四万十町中村の3類型を入れること。
+
+### 2【重大】長音スタイル指定時に翻字不能文字の検証がバイパスされる
+
+`packages/core/src/romaji/format.ts` の `romanizeStem`（L124–137）。`style === 'none'` は
+`kanaToRomaji` を通り `isTransliterableKana` で弾かれるが、`macron` / `circumflex` / `oh` は
+`analyzeKana` を直接呼ぶため、`toSyllables`（`hepburn.ts` L146–147）が未対応文字を逐語で
+残す。再現:
+
+```
+toRomaji('茨城県東茨城郡大洗町サンビーチ1-1', {})                   → NO_ROMAJI_DATA（正しく拒否）
+toRomaji('茨城県東茨城郡大洗町サンビーチ1-1', {longVowel:'macron'}) → ok=true "1-1 Sambi-Chi, Ōarai-machi, …"
+```
+
+**既定より長音スタイルのほうが緩いという逆転**で、拒否すべき入力が通る。データセット実測
+では `oaza_cho_k` が翻字不能な行が 16,918 件あり、大半は数字混入（`キタ１０ジョウニシ` →
+`Kita10Jōnishi`）で偶然まともな出力になっている。ガードを単純に適用すると札幌の条丁目名の
+macron 出力が全滅するので、**数字は許容し、それ以外を拒否**するのが妥当な方向。数字以外の
+混入は4行のみ。
+
+### 3【中】郵便番号の抽出に前方の数字境界がない（双方向）
+
+`toRomaji.ts` の `splitPostalCode`（L234）と `fromRomaji.ts` の `tokenize`（L362）のどちらにも
+`(?<!\d)` 相当の先頭境界がない。再現:
+
+```
+toRomaji('東京都新宿区西新宿2-8-1 新宿ビル TEL03-1234-5678')
+  → ok=true "新宿ビル TEL03-1, 2-8-1 Nishishinjuku, … 234-5678, Japan"  （電話番号を郵便番号化・ビル名も切断）
+toRomaji('東京都新宿区西新宿1123-4567')
+  → ok=true "1 Nishishinjuku, … 123-4567, Japan"                        （4桁番地を郵便番号+丁目1に誤分解）
+fromRomaji('1123-4567 Nishishinjuku, Shinjuku-ku, Tokyo')
+  → ok=true 東京都新宿区西新宿一丁目 postal=123-4567
+```
+
+いずれも `ok: true` の静かな破損。前後に数字・ハイフンが連結していないことを要求すべき。
+あわせて `splitPostalCode` は区切りに `ー`（長音符）を許すのに `tokenize` は ASCII `-` のみ、
+という非対称もある。
+
+### 4【中】テストが守っていないガードが2箇所（変異テストで実証）
+
+対象コードをわざと壊して `pnpm test` を実行した結果、**105テストすべてが green のまま**
+だったもの:
+
+- `fromRomaji.ts` L414 の `if (record.ward) return false;`（「`Chuo-ku` 単独では政令市の区に
+  一致させない」ガード）
+- `fromRomaji.ts` L314–321 の「その丁目は存在しない」拒否。削除すると `99-1 Ginza` の類が
+  実在しない住所として黙って成功する
+
+対照として `stripAzaPrefix` のかな側剥がし（`CLAUDE.md` の地雷3）を壊すと1テストが落ちるので、
+スイート全体が空洞なわけではない。上記2つのガードには回帰テストを足すこと。
+
+### 5【中】同名の町に「丁目あり行」と「丁目なし行」が併存するとき、先頭数字を黙って丁目と解釈する
+
+`fromRomaji.ts` L298–322。候補が複数のときの分岐は、コメント自身が「丁目でフィルタするのは
+片方の読みを黙って選ぶことだ」と述べているのに、**町名が単一の場合は同じ選択を黙って行って
+いる**。該当する町は全国 2,027 件。
+
+```
+"2-5 Kitanosawa, Minami-ku, Sapporo-shi, Hokkaido" → ok=true 北海道札幌市南区北ノ沢二丁目5
+```
+
+北ノ沢には丁目なし行も実在するので「北ノ沢2番5」という読みも成立する。ライブラリ自身の
+基準では `AMBIGUOUS` 相当。少なくとも設計判断として文書化が要る。
+
+### 6【小】かな翻字でマッチした町の `parsed.town.romaji` が `undefined` になり、`toFormat` が英語宣言の住所に漢字を出す
+
+`fromRomaji.ts` の `buildParsed`（L342–346）が `oaza_cho_r` だけを添付し、マッチに使った
+決定的翻字（データセット由来なので推測ではない）を捨てている。romaji フィールドを持たない
+約1割のエントリで再現:
+
+```
+fromRomaji('1-1 oazakomagome, Aomori-shi, Aomori') → ok=true, town.romaji=undefined
+toFormat(parsed, 'google-i18n') → {"languageCode":"en", "addressLines":["1-1 大字駒込"], …}
+```
+
+`formats/index.ts` の `streetOf`（L66）の `romaji ?? ja` フォールバックが、`languageCode:'en'`
+の宣言と矛盾する出力を作っている。
+
+### 7【小】いずれも今日は到達不能だが、退行の芽
+
+- `format.ts` L91: 自治体の romaji フィールドが欠けているとき、接尾辞の読みを
+  `spec.romaji[0]` で**推測**する（`formatMunicipality('出雲崎町', 'イズモザキマチ', undefined,
+  'none')` → `"Izumozaki-cho"`、実際の読みは machi）。現行データでは romaji 欠落の自治体が
+  0件なので到達しないが、データ更新で退行しうる。かなの末尾から読みを決めるべき
+- `format.ts` 冒頭コメントが「データセットは ALL-CAPS（`SAPPORO SHI`）」と書いているが、
+  公開済み v2 データは `Sapporo-shi` 形。コードは両方扱えるがコメントが古い
+- `kyoto.ts` L30: `DIRECTION` に `東入る|西入る` が重複（無害）
+- `hepburn.ts`: 先頭・孤立の長音符が黙って脱落する（`ーア` → `"a"`）。破損データ入力時のみ
+
 ## `NPM_TOKEN` は削除済み（2026-08-12）
 
 Trusted publishing は実リリース（`v0.1.1`、2026-08-12）で実証され、トークンを残す唯一の理由 —
