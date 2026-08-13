@@ -247,14 +247,25 @@ publish すると、`npm install jp-address-romaji` がすべての利用者に�
 ### タグを GitHub の UI から作る場合（`git push` が使えないとき）
 
 セッションの資格情報ではタグを push できない（403）。**リリース画面からタグごと作れる**ので、
-ブラウザさえあれば代われる:
+ブラウザさえあれば代われる。ただし `git tag` / `git push` 経路が使えるならそちらを優先すること
+——UI 経路には下の2つの手作業が付きまとう。
+
 `https://github.com/tomatomerde/jp-address-romaji/releases/new` →
-Choose a tag に `v<version>` を打って **Create new tag: … on publish** → Target は `main` →
-Publish release。
+Choose a tag に `v<version>` を打って **Create new tag: … on publish** → **Target には `main` では
+なく、公開物を実際にビルドしたコミットを指定する**（Target ドロップダウンはブランチだけでなく
+コミット SHA も選べる）。`main` はタグ付け時点で公開物のビルド元より先に進んでいることがあり、
+その場合 `v<version>` は誤ったコミットを指す——`package.json` のバージョンガードはそれを検出
+できない（ワークフローが見るのはバージョン番号だけで、コミットの中身ではないため）。たとえば
+`0.1.2` の publish は `52104b0` 時点の main で走った。
 
 タグができた時点でこのワークフローが起動する。**publish は既にレジストリにあるものをスキップし、
 Release も既に存在するのでそのまま残る**ので、公開済みバージョンに後からタグだけを付けたい
-ときにも使える（今回 `0.1.2` がその状態になった。経緯は `project-status.md`）。
+ときにも使える（今回 `0.1.2` がその状態になった。経緯は `project-status.md`）。ただし Release が
+既に存在する場合、その本文は CHANGELOG から自動生成されない（ワークフローの「Create GitHub
+Release」ステップは既存 Release を残すだけで上書きしない）。UI で新規に Release を作る場合も
+本文は入力した内容がそのまま使われ、CHANGELOG からは生成されない。どちらの場合も、該当バージョンの
+CHANGELOG の節を**手動でコピーして本文に貼ること**——`v0.1.0` / `v0.1.1` の Release と体裁を
+揃えるため。
 
 ### リリース候補と、それが守るもの・守らないもの
 
