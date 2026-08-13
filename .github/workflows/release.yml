@@ -578,5 +578,14 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "A GitHub Release for $TAG already exists; leaving it as is."
           else
-            gh release create "$TAG" --title "$RELEASE_TITLE" --notes-file release-notes.md
+            # Same derivation the npm publish steps use for dist-tag: a
+            # version containing `-` is a semver prerelease. Without this,
+            # `v0.1.0-rc.1` was published as a plain (non-prerelease) Release
+            # even though it went to npm's `next` tag — verified against the
+            # actual Release, which had "prerelease": false.
+            case "$EXPECTED_VERSION" in
+              *-*) prerelease_flag=(--prerelease) ;;
+              *) prerelease_flag=() ;;
+            esac
+            gh release create "$TAG" --title "$RELEASE_TITLE" --notes-file release-notes.md "${prerelease_flag[@]}"
           fi
