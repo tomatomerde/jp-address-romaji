@@ -293,6 +293,11 @@ jobs:
             /^## / { if ($2 == want) { found=1; print; next } else if (found) exit }
             found { print }
           ' CHANGELOG.md)
+          # Only the heading line decides whether this version is released.
+          # Pure parameter expansion, not `… | head -n 1`: `head` exits after
+          # its first line and SIGPIPEs the writer, which `pipefail` turns
+          # into a failed step — the same trap this file documents twice below.
+          heading_line="${section%%$'\n'*}"
 
           problem=""
           if [ -z "$section" ]; then
@@ -312,8 +317,14 @@ jobs:
             # ("has a dated section"), this form exits 1 as it should.
             # `nocasematch` + `[[ ]]` needs no subprocess and no pipe, so
             # there's nothing here for SIGPIPE to hit.
+            #
+            # Only the heading is searched. Scanning the whole section made
+            # the word unmentionable: the 0.1.3 notes describe a fix to this
+            # very guard, and saying "unreleased" in that sentence failed the
+            # release. The marker lives in the heading (`## 0.2.0 —
+            # unreleased`), which is what the error message tells you to fix.
             shopt -s nocasematch
-            if [[ "$section" == *unreleased* ]]; then
+            if [[ "$heading_line" == *unreleased* ]]; then
               problem="CHANGELOG.md's '$heading' section still says 'unreleased'."
             fi
             shopt -u nocasematch
