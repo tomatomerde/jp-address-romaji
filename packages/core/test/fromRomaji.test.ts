@@ -54,11 +54,32 @@ describe('fromRomaji: reconstructs Japanese', () => {
     // 円山's own kana/romaji are corrupt copies of 円山西町's (see
     // isPlausibleReading). Before that check was applied here too, this
     // input matched BOTH entries and returned AMBIGUOUS for an address that
-    // genuinely has only one real match.
-    const result = await fromRomaji('1-1 Maruyamanishimachi, Chuo-ku, Sapporo-shi, Hokkaido');
+    // genuinely has only one real town match.
+    //
+    // The leading number is deliberately not a valid chome (円山西町 only has
+    // chome 1 through 10) so this exercises only the corrupt-entry exclusion,
+    // not the separate chome-vs-chome-less ambiguity that a real chome number
+    // would trigger here (円山西町 genuinely has both a chome-less row and
+    // chome rows — see chomeAmbiguity.test.ts).
+    const result = await fromRomaji('99-1 Maruyamanishimachi, Chuo-ku, Sapporo-shi, Hokkaido');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.parsed.town?.ja).toBe('円山西町');
+    expect(result.value.parsed.chome).toBeUndefined();
+  });
+
+  it('reports AMBIGUOUS for chome vs chome-less even once the corrupt dataset entry is excluded', async () => {
+    // 円山西町 genuinely has both a chome-less row and chome rows 1-10 in the
+    // real dataset (see chomeAmbiguity.test.ts for the general case). This
+    // confirms the corrupt-entry exclusion above and the chome ambiguity
+    // handling compose correctly: candidates are exactly the two genuine
+    // 円山西町 readings, with no leak of the corrupt 円山 entry.
+    const result = await fromRomaji('1-1 Maruyamanishimachi, Chuo-ku, Sapporo-shi, Hokkaido');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('AMBIGUOUS');
+    expect(result.candidates).toHaveLength(2);
+    expect(result.candidates?.every((c) => c.town?.ja === '円山西町')).toBe(true);
   });
 
   it('uses a supplied postal-code index to resolve an ambiguity', async () => {

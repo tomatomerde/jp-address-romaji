@@ -330,6 +330,38 @@ export async function fromRomaji(
   if (chomeEntries.length > 0 && numbers.length > 0) {
     const hit = chomeEntries.find((m) => m.chome_n === numbers[0]);
     if (hit) {
+      if (plainEntry) {
+        // Both readings exist for this exact leading number: 浅岸 has both a
+        // chome 1 and a chome-less entry, so "1-1 Asagishi" is either
+        // 浅岸一丁目1 (chome 1, block [1]) or 浅岸1番1号 (chome-less, block
+        // [1, 1]). There is nothing in the input to tell them apart, so
+        // filtering by chome here — as the branch below does when only one
+        // reading is possible — would silently pick one of two equally valid
+        // readings. That is exactly the shortcut the distinct-town-name
+        // ambiguity above refuses to take, so this mirrors it: AMBIGUOUS with
+        // both readings as candidates.
+        //
+        // Note this is a genuinely different ambiguity from the one above:
+        // there the SAME leading number picks between two DIFFERENT towns
+        // sharing a romanization; here it picks between two readings of the
+        // SAME town. `postalCodeIndex` cannot help here even in principle —
+        // it narrows by town name (see its doc comment), and both candidates
+        // report the same town name.
+        const chomeCandidate = buildParsed(partial, hit, numbers[0], numbers.slice(1), unparsed, postalCode);
+        const plainCandidate = buildParsed(partial, plainEntry, undefined, numbers, unparsed, postalCode);
+        const candidates = [chomeCandidate, plainCandidate];
+        return {
+          ok: false,
+          reason: 'AMBIGUOUS',
+          message:
+            `"${numbers.join('-')} ${name}" is ambiguous in ${prefRecord.pref}${cityPathName(record)}: ` +
+            `${name} has both a chome ${numbers[0]} and a chome-less entry, so this could be ` +
+            `${renderJapanese(chomeCandidate)} (chome ${numbers[0]}) or ${renderJapanese(plainCandidate)} ` +
+            `(chome-less). Choose one of the returned candidates.`,
+          partial,
+          candidates,
+        };
+      }
       chome = numbers[0];
       blockNumbers = numbers.slice(1);
       resolved = hit;
@@ -341,6 +373,10 @@ export async function fromRomaji(
         { ...partial, level: 2 },
       );
     }
+    // else: numbers[0] is not a valid chome for this town, but a chome-less
+    // entry exists — not ambiguous, just not readable as a chome. Falls
+    // through with the chome-less reading (resolved/blockNumbers as set
+    // above), the same way it already did before this branch was added.
   }
 
   const parsed = buildParsed(partial, resolved, chome, blockNumbers, unparsed, postalCode);

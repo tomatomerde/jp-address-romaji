@@ -36,6 +36,24 @@ export function useMunicipalityAmbiguityFixtureData(): void {
 }
 
 /**
+ * A third, separate fixture dataset holding a real town (岩手県盛岡市浅岸) that
+ * has both a chome-less row and chome rows. Kept apart from `FIXTURE_DATA_DIR`
+ * for the same reason as the municipality-ambiguity fixture above — see
+ * fixtures-chome-ambiguity/README.md.
+ */
+export const CHOME_AMBIGUITY_FIXTURE_DATA_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'fixtures-chome-ambiguity',
+  'data',
+);
+
+/** Point the library at the chome/chome-less collision fixture dataset. */
+export function useChomeAmbiguityFixtureData(): void {
+  clearDataCache();
+  configureDataSource({ dataDir: CHOME_AMBIGUITY_FIXTURE_DATA_DIR });
+}
+
+/**
  * Run `fn` with `fetch` replaced by a stub that throws.
  *
  * Any network access — by our code or by the upstream normalizer — fails the
