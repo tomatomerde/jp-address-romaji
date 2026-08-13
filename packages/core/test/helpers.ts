@@ -54,6 +54,23 @@ export function useChomeAmbiguityFixtureData(): void {
 }
 
 /**
+ * A fifth, separate fixture dataset holding two real towns (岩手県遠野市青笹町
+ * 青笹 and 福井県大飯郡おおい町名田庄挙原) whose koaza rows are themselves
+ * numbered (`N地割`, `N号`). See fixtures-koaza-number-ambiguity/README.md.
+ */
+export const KOAZA_NUMBER_AMBIGUITY_FIXTURE_DATA_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'fixtures-koaza-number-ambiguity',
+  'data',
+);
+
+/** Point the library at the numbered-koaza fixture dataset. */
+export function useKoazaNumberAmbiguityFixtureData(): void {
+  clearDataCache();
+  configureDataSource({ dataDir: KOAZA_NUMBER_AMBIGUITY_FIXTURE_DATA_DIR });
+}
+
+/**
  * Run `fn` with `fetch` replaced by a stub that throws.
  *
  * Any network access — by our code or by the upstream normalizer — fails the
