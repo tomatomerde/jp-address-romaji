@@ -49,7 +49,7 @@ npm install jp-address-romaji jp-address-romaji-data
 ```
 
 > **Node.js 18 以上、ESM 専用。** CommonJS ビルドは無く、追加する予定もありません——
-> `require('jp-address-romaji')` は `ERR_REQUIRE_ESM` で失敗します。`import`、または
+> `require('jp-address-romaji')` は `ERR_PACKAGE_PATH_NOT_EXPORTED` で失敗します。`import`、または
 > CommonJS からの動的 `import()` を使ってください。データセットはファイルシステムから
 > 読むため既定構成は Node 専用で、ブラウザで使うには自身がホストするエンドポイントが
 > 必要です。詳細は[動作要件](#動作要件)。
@@ -78,7 +78,7 @@ Node.js 18 以上。オフラインデータをファイルシステムから読
 **ESM 専用で、CommonJS ビルドはありません。** 両パッケージとも `"type": "module"` で単一の ESM
 エントリポイントのみを提供しており、`require()` で読める `dist/*.cjs` は存在せず、今後追加する
 予定もありません。`import`（または CommonJS コードからの動的 `import()`）を使ってください。
-`require('jp-address-romaji')` は `ERR_REQUIRE_ESM` で失敗します。
+`require('jp-address-romaji')` は `ERR_PACKAGE_PATH_NOT_EXPORTED` で失敗します。
 
 ## カバレッジ
 

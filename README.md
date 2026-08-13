@@ -47,7 +47,7 @@ npm install jp-address-romaji jp-address-romaji-data
 ```
 
 > **Node.js 18+, ESM only.** There is no CommonJS build and none is planned —
-> `require('jp-address-romaji')` fails with `ERR_REQUIRE_ESM`. Use `import`, or a dynamic
+> `require('jp-address-romaji')` fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`. Use `import`, or a dynamic
 > `import()` from CommonJS code. The dataset is read from the filesystem, so the default
 > configuration is Node-only; browser use needs a data endpoint you host. Details under
 > [Requirements](#requirements).
@@ -75,7 +75,7 @@ Node-only; browser use requires supplying data through an endpoint you host.
 
 **ESM only, no CommonJS build.** Both packages ship `"type": "module"` with a single ESM entry
 point — there is no `require()`-compatible `dist/*.cjs`, and none is planned. Use `import` (or
-dynamic `import()` from CommonJS code); `require('jp-address-romaji')` fails with `ERR_REQUIRE_ESM`.
+dynamic `import()` from CommonJS code); `require('jp-address-romaji')` fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`.
 
 ## Coverage
 
