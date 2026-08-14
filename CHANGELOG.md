@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.1.5 — 2026-08-14
+
+`0.1.4`'s headline fix did not fix the address it was reported for. This does.
+
+### Fixed
+
+- **A koaza whose reading stops at its counter is now refused instead of romanized.**
+  `toRomaji('長野県飯田市本町三丁目大横1-1')` came back from `0.1.4` as
+  `"1-1 3Chome Hommachi, Iida-shi, Nagano, Japan"` — `ok: true`, with `大横` missing from the
+  label, and the result does not read back (`fromRomaji` returns `TOWN_NOT_FOUND`). The dataset
+  gives `三丁目大横` the reading `３チョウメ`, which never reaches `大横`.
+
+  `0.1.4`'s completeness check only caught truncation before one of seven positional kanji
+  (北/南/東/西/上/下/中). `横` is not one of them, so the truncated reading passed and was
+  romanized. The check now also refuses a reading that ends at a counter (`丁目`, `条`, `号`,
+  `地割`, …) while the name continues past it. Measured on the shipped dataset, that moves 7 more
+  rows from romanized to refused: 1,399 of 418,605 named koaza are now refused (0.334%, from
+  1,392).
+
+- **The regression test for `0.1.4`'s headline fix was passing against invented data.**
+  `fixtures-koaza` gave `三丁目大横` the reading `サンチョウメオオヨコ`, which does not exist in
+  the shipped dataset, and added a `南郷通三丁目西`/`３チョウメニシ` row that does not exist
+  either. Both were the fixture's positive controls, so the test asserted an output
+  (`"1-1 Sanchomeoyoko Hommachi"`) that no real input can produce. The fixture now matches the
+  real dataset row for row, the reported address is asserted as a refusal, and the
+  romanize-when-complete path is pinned to a real example instead (`兵庫県朝来市生野町口銀谷字愛宕`,
+  reading `アザアタゴ`).
+
 ## 0.1.4 — 2026-08-14
 
 The headline fix restores address information `toRomaji` was silently discarding. Everything else

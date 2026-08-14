@@ -144,6 +144,28 @@ const TRAILING_POSITIONAL_KANJI: Record<string, readonly string[]> = {
 };
 
 /**
+ * Counters a koaza name can be numbered with, paired with the katakana the
+ * dataset uses for them. Ordered longest-first where one is a prefix of
+ * another, so `番町` is not matched as a bare `番`.
+ *
+ * Only counters actually seen in the shipped dataset's koaza names are listed
+ * — same rule as {@link TRAILING_POSITIONAL_KANJI}: evidenced entries only, no
+ * speculative ones. `scripts/verify-data-assumptions.ts` reports the counts
+ * these refuse, so a new shape shows up as a number rather than as a silently
+ * dropped name.
+ */
+const KOAZA_COUNTERS: ReadonlyArray<readonly [string, string]> = [
+  ['番町', 'バンチョウ'],
+  ['番丁', 'バンチョウ'],
+  ['丁目', 'チョウメ'],
+  ['地割', 'チワリ'],
+  ['条', 'ジョウ'],
+  ['号', 'ゴウ'],
+  ['軒', 'ケン'],
+  ['線', 'セン'],
+];
+
+/**
  * Can a koaza's dataset reading be trusted to cover the WHOLE name, not just
  * a truncated prefix of it?
  *
@@ -187,6 +209,26 @@ export function isKoazaReadingComplete(ja: string, kana: string | undefined): bo
   // a reading that stops before the last kanji entirely, as 一丁目北/１チョウメ
   // does — instead of at the kanji's mere presence.
   if (expectedTails && !expectedTails.some((tail) => kana.endsWith(tail))) return false;
+
+  // Second evidenced shape: the reading stops at a counter suffix while the
+  // name keeps going past it. `三丁目大横` reads `３チョウメ` — the 大横 is
+  // simply absent — and the trailing-kanji rule above misses it because 横 is
+  // not one of the seven positional kanji. That is not a narrower version of
+  // the same bug, it is the same bug: 0.1.4 shipped `本町三丁目大横1-1` as
+  // "1-1 3Chome Hommachi", dropping 大横 from a label while returning ok, and
+  // the result does not read back (`TOWN_NOT_FOUND`).
+  //
+  // Anchored on the LAST occurrence of the counter and on the reading ending
+  // exactly at that counter's own reading, so it fires on a truncation and
+  // not on a name that merely contains a counter mid-string. Measured on the
+  // shipped dataset: 151 rows across 9 towns, a superset of what the
+  // positional-kanji rule already refuses.
+  for (const [counter, reading] of KOAZA_COUNTERS) {
+    const at = ja.lastIndexOf(counter);
+    if (at < 0) continue;
+    if (ja.length > at + counter.length && kana.endsWith(reading)) return false;
+    break;
+  }
 
   return true;
 }

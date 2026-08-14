@@ -62,9 +62,16 @@ CHANGELOG の `0.1.4` の項を参照。`package.json` のバージョンは `0.
 
 ```text
 toRomaji('長野県飯田市本町三丁目大横1-1', {})
-  → 修正前: ok=true "1-1 Hommachi, Iida-shi, Nagano, Japan"          （三丁目大横 が消えている）
-  → 修正後: ok=true "1-1 Sanchomeoyoko Hommachi, Iida-shi, Nagano, Japan"
+  → 0.1.3 まで: ok=true "1-1 Hommachi, Iida-shi, Nagano, Japan"       （三丁目大横 が消えている）
+  → 0.1.4:      ok=true "1-1 3Chome Hommachi, Iida-shi, Nagano, Japan"（大横 が消えている）
+  → 0.1.5:      KOAZA_READING_INCOMPLETE
 ```
+
+**この節はかつて 0.1.4 の出力を `"1-1 Sanchomeoyoko Hommachi"` と書いていたが、それは実データでは
+起こらない。** フィクスチャがこの行に `サンチョウメオオヨコ` という実在しない読みを持っており、
+回帰テストがその作られたデータに対して通っていた。実データの読みは `３チョウメ` で `大横` に
+届かないため、0.1.4 は `大横` を落としたまま `ok` を返していた。0.1.5 でフィクスチャを実データに
+合わせ、完全性チェックに「読みが単位で止まっているのに名前が続く」形を足して拒否するようにした。
 
 原因は `packages/core/src/normalizer.ts` の `normalizeJapanese`。上流の正規化結果は
 `oaza_cho: "本町"` と `koaza: "三丁目大横"` を別フィールドで返すが、`koaza` を町名や

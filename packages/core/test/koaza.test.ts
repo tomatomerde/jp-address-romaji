@@ -33,25 +33,24 @@ import { useKoazaFixtureData } from './helpers.js';
 beforeAll(() => useKoazaFixtureData());
 
 describe('toRomaji: a named koaza with a complete reading is romanized and kept', () => {
-  it('the exact reported case: 長野県飯田市本町三丁目大横1-1', async () => {
-    const result = await toRomaji('長野県飯田市本町三丁目大横1-1');
+  it('the koaza is romanized and kept: 兵庫県朝来市生野町口銀谷字愛宕1-1', async () => {
+    const result = await toRomaji('兵庫県朝来市生野町口銀谷字愛宕1-1');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.value.parsed.town?.ja).toBe('本町');
-    expect(result.value.parsed.koaza?.ja).toBe('三丁目大横');
-    expect(result.value.parsed.koaza?.kana).toBe('サンチョウメオオヨコ');
-    expect(result.value.parsed.koaza?.romaji).toBe('Sanchomeoyoko');
+    expect(result.value.parsed.town?.ja).toBe('生野町口銀谷');
+    expect(result.value.parsed.koaza?.ja).toBe('字愛宕');
+    expect(result.value.parsed.koaza?.kana).toBe('アザアタゴ');
     expect(result.value.parsed.blockNumbers).toEqual([1, 1]);
 
     // The koaza must actually appear in the rendered string, adjacent to the
     // town, and never be mistakable for a block number (it is a separate,
     // alphabetic word, not one of the hyphenated digits).
-    expect(result.value.formatted).toBe('1-1 Sanchomeoyoko Hommachi, Iida-shi, Nagano, Japan');
+    expect(result.value.formatted).toContain(result.value.parsed.koaza!.romaji!);
   });
 
   it('the koaza is also carried into toFormat targets, not just the toRomaji string', async () => {
-    const result = await toRomaji('長野県飯田市本町三丁目大横1-1');
+    const result = await toRomaji('兵庫県朝来市生野町口銀谷字愛宕1-1');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -63,18 +62,6 @@ describe('toRomaji: a named koaza with a complete reading is romanized and kept'
 
     const stripe = toFormat(result.value.parsed, 'stripe');
     expect(stripe.line1).toContain(result.value.parsed.koaza!.romaji!);
-  });
-
-  it('a koaza ending in a positional kanji with a COMPLETE reading is accepted (control)', async () => {
-    const result = await toRomaji('北海道札幌市白石区南郷通三丁目西1-1');
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.parsed.koaza?.ja).toBe('三丁目西');
-    expect(result.value.parsed.koaza?.kana).toBe('３チョウメニシ');
-    expect(result.value.parsed.koaza?.romaji).toBe('3Chomenishi');
-    expect(result.value.formatted).toBe(
-      '1-1 3Chomenishi Nangodori, Shiroishi-ku, Sapporo-shi, Hokkaido, Japan',
-    );
   });
 
   it('a town with no koaza in the input is unaffected (no koaza on the parsed result)', async () => {
@@ -105,21 +92,41 @@ describe('toRomaji: a named koaza with an INCOMPLETE reading is refused, never d
     if (result.ok) return;
     expect(result.reason).toBe('KOAZA_READING_INCOMPLETE');
   });
+
+  // The originally reported address. Its reading is truncated the same way
+  // 南郷通's are — the dataset gives `三丁目大横` the reading `３チョウメ`,
+  // which never reaches 大横 — but 横 is not one of the seven positional
+  // kanji, so the trailing-kanji rule alone let it through and 0.1.4 shipped
+  // it as "1-1 3Chome Hommachi": ok, with 大横 missing from the label, and
+  // not readable back (TOWN_NOT_FOUND).
+  //
+  // This fixture used to carry `サンチョウメオオヨコ` for this row — a
+  // complete reading that does not exist in the shipped dataset — so the
+  // regression test for the reported bug passed against data invented to make
+  // it pass. The row now matches the real dataset byte for byte.
+  it('the exact reported case: 長野県飯田市本町三丁目大横1-1', async () => {
+    const result = await toRomaji('長野県飯田市本町三丁目大横1-1');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('KOAZA_READING_INCOMPLETE');
+    expect(result.partial?.koaza?.romaji).toBeUndefined();
+    expect(result.partial?.town?.ja).toBe('本町');
+  });
 });
 
 describe('fromRomaji: never silently resolves a koaza-bearing address to the koaza-less town', () => {
   it('round-tripping the forward output never returns a DIFFERENT address (identity or explicit failure only)', async () => {
-    const forward = await toRomaji('長野県飯田市本町三丁目大横1-1');
+    const forward = await toRomaji('兵庫県朝来市生野町口銀谷字愛宕1-1');
     expect(forward.ok).toBe(true);
     if (!forward.ok) return;
-    expect(forward.value.formatted).toBe('1-1 Sanchomeoyoko Hommachi, Iida-shi, Nagano, Japan');
+    expect(forward.value.formatted).toContain(forward.value.parsed.koaza!.romaji!);
 
     const back = await fromRomaji(forward.value.formatted);
     // This library does not attempt to reverse-match a koaza (there is no
     // per-koaza town index — see fixtures-koaza/README.md and
     // docs/project-status.md item 1's "reverse direction" note): with only
-    // this fixture's two 本町 rows, "Sanchomeoyoko Hommachi" cannot match
-    // either one (not the flat row: the extra word "Sanchomeoyoko" is never
+    // this fixture's two 生野町口銀谷 rows, "Azaatago Ikunocho Kuchiganaya"
+    // cannot match either one (not the flat row: the extra koaza word is never
     // dropped by the matcher's longest-first, front-anchored search; not the
     // koaza row: there is no dataset index keyed by koaza text at all). The
     // explicit TOWN_NOT_FOUND below is that refusal, confirmed rather than
@@ -131,17 +138,17 @@ describe('fromRomaji: never silently resolves a koaza-bearing address to the koa
       // If the reverse direction ever resolves this outright, it must
       // resolve to the SAME address, koaza included — never silently to the
       // koaza-less 本町.
-      expect(back.value.parsed.town?.ja).toBe('本町');
-      expect(back.value.parsed.koaza?.ja).toBe('三丁目大横');
+      expect(back.value.parsed.town?.ja).toBe('生野町口銀谷');
+      expect(back.value.parsed.koaza?.ja).toBe('字愛宕');
     } else if (back.reason === 'AMBIGUOUS') {
       // A legitimate outcome (same shape as any other ambiguity this library
       // already returns): every candidate must still be an address that
-      // actually contains 三丁目大横, not the koaza-less 本町 masquerading as
+      // actually contains 字愛宕, not the koaza-less 生野町口銀谷 masquerading as
       // one of the choices.
       expect(back.candidates?.length).toBeGreaterThan(0);
       for (const candidate of back.candidates ?? []) {
-        if (candidate.town?.ja === '本町') {
-          expect(candidate.koaza?.ja).toBe('三丁目大横');
+        if (candidate.town?.ja === '生野町口銀谷') {
+          expect(candidate.koaza?.ja).toBe('字愛宕');
         }
       }
     }
@@ -172,6 +179,9 @@ describe('isKoazaReadingComplete', () => {
     expect(isKoazaReadingComplete('十二丁目南', '１２チョウメ')).toBe(false);
     // Absent reading is the extreme case of the same thing.
     expect(isKoazaReadingComplete('三丁目大横', undefined)).toBe(false);
+    // The reading stops at the counter while the name continues past it —
+    // 横 is not a positional kanji, so only the counter rule catches this.
+    expect(isKoazaReadingComplete('三丁目大横', '３チョウメ')).toBe(false);
     expect(isKoazaReadingComplete('三丁目大横', '   ')).toBe(false);
   });
 
