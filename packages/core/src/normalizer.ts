@@ -97,7 +97,7 @@ export function isDataConfigured(): boolean {
  * same upstream pattern and are kept for parity, on towns that don't have a
  * `chome`.
  */
-const NUMBERED_KOAZA = /^([0-9]+)(丁目|番町|番丁|条|軒|線|の町|ノ町|地割|号)$/;
+export const NUMBERED_KOAZA = /^([0-9]+)(丁目|番町|番丁|条|軒|線|の町|ノ町|地割|号)$/;
 
 /**
  * A koaza row whose name is just a number plus one of the suffixes above

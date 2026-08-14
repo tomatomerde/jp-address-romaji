@@ -20,6 +20,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isPlausibleReading, isUsableRomajiField } from '../packages/core/src/romaji/validate.js';
+import { NUMBERED_KOAZA } from '../packages/core/src/normalizer.js';
 
 interface City { county?: string; city: string; ward?: string }
 interface Pref { pref: string; cities: City[] }
@@ -28,6 +29,9 @@ interface Town {
   oaza_cho_k?: string;
   oaza_cho_r?: string;
   chome_n?: number;
+  koaza?: string;
+  koaza_k?: string;
+  koaza_r?: string;
 }
 
 function arg(name: string, fallback: string): string {
@@ -61,6 +65,18 @@ function main(): void {
 
   const flaggedSamples: string[] = [];
   const digitSamples: string[] = [];
+
+  // -- koaza (assumption 6) --
+  // `recoverKoazaNumber` (normalizer.ts) only rescues a koaza whose whole name
+  // is a number plus a suffix. Every other koaza is currently dropped, which
+  // silently changes the address. These counters size that hole.
+  let withKoaza = 0;
+  let koazaNumbered = 0;
+  let koazaNamed = 0;
+  let koazaNamedWithKana = 0;
+  let koazaNamedWithRomaji = 0;
+  let koazaNamedWithNeither = 0;
+  const koazaNamedSamples: string[] = [];
   // Distinct towns per municipality that share one romanization.
   let ambiguousKeys = 0;
   let distinctKeys = 0;
@@ -103,6 +119,26 @@ function main(): void {
               `${town.chome_n !== undefined ? ` (chome ${town.chome_n})` : ''}` +
               ` -> "${town.oaza_cho_r}"`,
             );
+          }
+        }
+
+        if (town.koaza) {
+          withKoaza++;
+          if (NUMBERED_KOAZA.test(town.koaza.normalize('NFKC')) && town.chome_n === undefined) {
+            koazaNumbered++;
+          } else {
+            koazaNamed++;
+            if (town.koaza_k) koazaNamedWithKana++;
+            if (town.koaza_r) koazaNamedWithRomaji++;
+            if (!town.koaza_k && !town.koaza_r) koazaNamedWithNeither++;
+            if (koazaNamedSamples.length < 25) {
+              koazaNamedSamples.push(
+                `${pref.pref}${municipality}${town.oaza_cho}` +
+                `${town.chome_n !== undefined ? `${town.chome_n}丁目` : ''}` +
+                ` + koaza "${town.koaza}"` +
+                ` [kana ${town.koaza_k ?? '—'} / romaji ${town.koaza_r ?? '—'}]`,
+              );
+            }
           }
         }
 
@@ -174,6 +210,17 @@ function main(): void {
   console.log('   CLAUDE.md quote (1.07% / 0.67%). This is a cheaper smoke-test signal.)');
   console.log(`  distinct romaji-field keys (naive): ${distinctKeys}`);
   console.log(`  ambiguous keys (naive)             : ${ambiguousKeys} (${pct(ambiguousKeys, distinctKeys)})`);
+  console.log('');
+  console.log('-- assumption 6: a koaza is either a bare number or carries its own reading --');
+  console.log(`  rows with a koaza          : ${withKoaza} (${pct(withKoaza, towns)})`);
+  console.log(`    numbered (recoverable)   : ${koazaNumbered}`);
+  console.log(`    named                    : ${koazaNamed}`);
+  console.log(`      with koaza_k           : ${koazaNamedWithKana} (${pct(koazaNamedWithKana, koazaNamed)} of named)`);
+  console.log(`      with koaza_r           : ${koazaNamedWithRomaji} (${pct(koazaNamedWithRomaji, koazaNamed)} of named)`);
+  console.log(`      with neither           : ${koazaNamedWithNeither} (${pct(koazaNamedWithNeither, koazaNamed)} of named)`);
+  console.log('  A NAMED koaza is the one this library cannot fold into a block number.');
+  console.log('  "with neither" is the share that can only ever be an explicit refusal:');
+  koazaNamedSamples.forEach((s) => console.log(`    ${s}`));
   console.log('');
 
   // Fail loudly on anything that invalidates a design decision.
