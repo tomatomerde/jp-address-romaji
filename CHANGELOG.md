@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.1.4 — 2026-08-14
+
+Two more cases where the library broke its own round-trip promise, both present since `0.1.0`
+and both found by sweeping the whole dataset rather than by reading code. One is fixed; the
+other is now refused, because fixing it properly needs an API change this release does not make.
+
+### Fixed
+
+- **`fromRomaji` could not read back what `toRomaji` wrote in `longVowel: 'oh'` style.**
+  `toRomaji('北海道石狩郡当別町錦町1-1', { longVowel: 'oh' })` produces
+  `"1-1 Nishikimachi, Tohbetsu-cho, Ishikari-gun, Hokkaidoh, Japan"`, and feeding that back
+  returned `CITY_NOT_FOUND`. `formatMunicipality` romanizes the stem alone in the requested style
+  and appends the suffix's literal reading (`Tohbetsu` + `-cho`), while the reverse index only
+  held the whole reading transliterated as one word (`tohbetsuchoh`), which the suffix stripper
+  cannot take apart. **71 municipalities** were unreachable this way. The same split also fixes a
+  second shape the whole-word key got wrong: a moraic ン on the stem/suffix boundary assimilated
+  across it (`長南町` → `...nammachi`) where the split rendering does not (`Chohnan-machi`).
+  `macron` and `circumflex` were unaffected — only `oh` alters the suffix as well as the stem.
+
+### Changed
+
+- **A named koaza (小字) is now refused instead of silently dropped.**
+  `toRomaji('長野県飯田市本町三丁目大横1-1')` used to return
+  `"1-1 Hommachi, Iida-shi, Nagano, Japan"` — with both the chome and the koaza `三丁目大横` gone.
+  Since 本町 also has ordinary chome rows, that string reads back as 本町一丁目1: **a different,
+  real address one town over.** It was the only silent mismatch left in a 23,486-address national
+  round-trip.
+
+  The koaza cannot be recovered into the output: `ParsedAddress` has no field for one, and
+  folding it into the town name would produce a string `fromRomaji` can never match, since it
+  only ever compares a town against its `oaza_cho` fields. So the conversion now fails with
+  `NO_ROMAJI_DATA`, carrying the full name on `partial.town` (`本町三丁目大横`) and a message
+  explaining why. A wrong label is worse than a refused one.
+
+  **This only fires when the input names a koaza, immediately after the town.** 65.5% of dataset
+  rows carry a named koaza, and the upstream normalizer resolves to one of those rows even for an
+  address that mentions no koaza at all — so "the dataset row has a koaza" is not the test.
+  `北海道札幌市白石区南郷通1-1` (row koaza `一丁目北`) and `宮城県柴田郡川崎町大字小野1-1` (row
+  koaza `字町`) convert exactly as they did in `0.1.3`; add the koaza to either and the same
+  address is refused. Position is checked, not mere presence: matching `字町` anywhere in the
+  string finds the 町 of 川崎町 and refuses an ordinary address. Measured on the real dataset,
+  sampling 400 koaza-bearing towns written without their koaza: zero change.
+
+  The numeric koaza handled in `0.1.3` (`青笹町青笹2-3`, where the digit becomes a block number)
+  is unchanged. Giving koaza a real home in the output is left for a release that can change the
+  API.
+
 ## 0.1.3 — 2026-08-13
 
 A correctness release. Every item under **Fixed** was a case where a conversion returned

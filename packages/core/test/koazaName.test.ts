@@ -84,4 +84,28 @@ describe('toRomaji: a named koaza must not be silently dropped', () => {
     if (!result.ok) return;
     expect(result.value.formatted).toBe('1-1 Akebonocho, Iida-shi, Nagano, Japan');
   });
+
+  // The refusal keys off what the CALLER wrote, not off the row the upstream
+  // normalizer happened to resolve to. Those rows carry a koaza for 65.5% of
+  // the dataset, so keying off the row refuses ordinary addresses: measured
+  // on the real dataset, 10 of 400 koaza-bearing towns written WITHOUT their
+  // koaza — 北海道札幌市白石区南郷通1-1 (row koaza `一丁目北`) among them —
+  // stopped converting. Widening this guard again should break this test.
+  it('does not refuse when the caller named no koaza at all (本町 with a bare number)', async () => {
+    const result = await toRomaji('長野県飯田市本町1-1');
+    if (!result.ok) {
+      // Whatever else may fail here, it must not be the koaza refusal: that
+      // fires only when the input itself carried the koaza.
+      expect(result.message ?? '').not.toContain('koaza');
+    }
+  });
+
+  // `字町` shrinks to `町` once its prefix is stripped, and `町` occurs in
+  // half the municipality names in Japan. A substring search anywhere in the
+  // input matched 宮城県柴田郡川崎町大字小野1-1 on the 町 of 川崎町 and
+  // refused it; the koaza has to sit immediately after the town.
+  it('does not match a koaza occurring elsewhere in the address', async () => {
+    const result = await toRomaji('長野県飯田市本町一丁目1');
+    expect(result.ok).toBe(true);
+  });
 });

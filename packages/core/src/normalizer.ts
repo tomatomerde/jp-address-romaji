@@ -128,6 +128,32 @@ function isNumberedKoaza(koaza: string): boolean {
   return NUMBERED_KOAZA.test(koaza.normalize('NFKC'));
 }
 
+/**
+ * Did the caller's own text name this koaza, right after the town?
+ *
+ * Position matters, not mere presence: a plain `includes` fires on any
+ * incidental occurrence, and koaza names are often one common character once
+ * their prefix is stripped. `字町` in `宮城県柴田郡川崎町大字小野1-1` matched
+ * the `町` of 川崎町 and refused an address that names no koaza at all.
+ *
+ * The `字`/`大字` prefix is stripped from both sides, since the dataset
+ * spells it (`字赤萩道上`) more often than people write it, and NFKC is
+ * applied so a full-width digit inside a koaza is not a spurious mismatch.
+ * If the town itself is not found in the input — the caller wrote it in some
+ * form the dataset does not use — this answers false and the koaza is
+ * dropped as before, which is the conservative direction.
+ */
+function inputNamesKoaza(input: string, town: string, koaza: string): boolean {
+  const nfkc = (s: string) => s.normalize('NFKC');
+  const strip = (s: string) => s.replace(/^(?:大字|字)/, '');
+  const needle = strip(nfkc(koaza));
+  if (needle.length === 0) return false;
+  const haystack = nfkc(input);
+  const at = haystack.indexOf(nfkc(town));
+  if (at < 0) return false;
+  return strip(haystack.slice(at + nfkc(town).length)).startsWith(needle);
+}
+
 /** Structured view of a normalization result, with readings attached. */
 export interface NormalizedAddress {
   pref?: { ja: string; kana?: string; romaji?: string };
@@ -216,7 +242,18 @@ export async function normalizeJapanese(input: string): Promise<NormalizedAddres
     // address one town over. Only `ja` is kept — toRomaji.ts's refusal
     // message is the only consumer, and it has no output field to put a
     // romanized koaza in regardless of whether one could be produced.
-    if (machiAza.koaza && !isNumberedKoaza(machiAza.koaza)) {
+    //
+    // Only when the CALLER wrote it. The upstream normalizer resolves to a
+    // specific machi-aza row, and for a town whose rows all carry koaza it
+    // picks one regardless of what the input said — so `machiAza.koaza` is
+    // set for plain addresses like `北海道札幌市白石区南郷通1-1` (koaza
+    // `一丁目北`), which name no koaza at all. Refusing those would reject
+    // ordinary addresses that converted fine in 0.1.3: measured on the real
+    // dataset, 10 of 400 sampled koaza-bearing towns. Dropping a koaza the
+    // caller never wrote loses nothing they asked for; dropping one they DID
+    // write silently answers a different question. Only the second is a lie,
+    // and only the second is refused.
+    if (machiAza.koaza && !isNumberedKoaza(machiAza.koaza) && inputNamesKoaza(input, machiAza.oaza_cho, machiAza.koaza)) {
       out.koaza = { ja: machiAza.koaza };
     }
   } else if (result.town) {
