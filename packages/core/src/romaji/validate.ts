@@ -99,8 +99,15 @@ function stripAzaPrefix(ja: string, kana: string): { ja: string; kana: string } 
 }
 
 /**
- * Trailing positional kanji, mapped to the katakana a complete reading must
- * end with when the koaza name ends with that kanji.
+ * Trailing positional kanji, mapped to every katakana reading a complete
+ * reading may end with when the koaza name ends with that kanji.
+ *
+ * The list per kanji is deliberately generous, because the check is only ever
+ * used to REFUSE: a reading ending in any listed alternative is accepted, and
+ * only one ending in none of them is treated as truncated. An over-long list
+ * costs a missed truncation of an unusual shape; an over-short one costs
+ * refusing ordinary names outright (see the note in
+ * {@link isKoazaReadingComplete} for the ones a single-reading table rejected).
  *
  * This is the one class of koaza-reading truncation we have direct evidence
  * of. A sample from the dataset (assumption 6 in
@@ -126,14 +133,14 @@ function stripAzaPrefix(ja: string, kana: string): { ja: string; kana: string } 
  * measurement) if a wider evidenced pattern turns up; do not add speculative
  * entries.
  */
-const TRAILING_POSITIONAL_KANJI: Record<string, string> = {
-  北: 'キタ',
-  南: 'ミナミ',
-  東: 'ヒガシ',
-  西: 'ニシ',
-  上: 'カミ',
-  下: 'シモ',
-  中: 'ナカ',
+const TRAILING_POSITIONAL_KANJI: Record<string, readonly string[]> = {
+  北: ['キタ', 'ホク', 'ボク', 'ギタ'],
+  南: ['ミナミ', 'ナン', 'ナ'],
+  東: ['ヒガシ', 'トウ', 'アズマ', 'ドウ', 'ガシ'],
+  西: ['ニシ', 'サイ', 'セイ', 'ジシ'],
+  上: ['カミ', 'ウエ', 'ウワ', 'ジョウ', 'アゲ', 'ガミ', 'ノボリ'],
+  下: ['シモ', 'シタ', 'ゲ', 'ジモ', 'ジタ', 'オロシ', 'サガリ', 'クダリ'],
+  中: ['ナカ', 'チュウ', 'ジュウ', 'ウチ', 'ヂュウ'],
 };
 
 /**
@@ -170,8 +177,16 @@ export function isKoazaReadingComplete(ja: string, kana: string | undefined): bo
   if (!isPlausibleReading(ja, kana)) return false;
 
   const lastChar = ja.normalize('NFKC').slice(-1);
-  const expectedTail = TRAILING_POSITIONAL_KANJI[lastChar];
-  if (expectedTail && !kana.endsWith(expectedTail)) return false;
+  const expectedTails = TRAILING_POSITIONAL_KANJI[lastChar];
+  // Refuse only when the reading ends with NONE of that kanji's readings. Each
+  // of these kanji has several, and pinning one per kanji refused a large
+  // class of perfectly complete readings: 宮下/ミヤシタ, 城下/シロシタ,
+  // 坂上/サカウエ, 府中/フチュウ, 大東/ダイトウ, 台北/ダイホク all end in a
+  // real reading of their last kanji that simply is not the positional one.
+  // Listing the alternatives keeps the check aimed at what it was built for —
+  // a reading that stops before the last kanji entirely, as 一丁目北/１チョウメ
+  // does — instead of at the kanji's mere presence.
+  if (expectedTails && !expectedTails.some((tail) => kana.endsWith(tail))) return false;
 
   return true;
 }

@@ -27,6 +27,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { toRomaji } from '../src/toRomaji.js';
 import { fromRomaji } from '../src/fromRomaji.js';
 import { toFormat } from '../src/formats/index.js';
+import { isKoazaReadingComplete } from '../src/romaji/validate.js';
 import { useKoazaFixtureData } from './helpers.js';
 
 beforeAll(() => useKoazaFixtureData());
@@ -147,5 +148,54 @@ describe('fromRomaji: never silently resolves a koaza-bearing address to the koa
     // Any other failure reason (e.g. TOWN_NOT_FOUND, since the dataset has no
     // per-koaza town index to search) is the documented, acceptable outcome:
     // an explicit typed failure rather than a silently wrong address.
+  });
+});
+
+/**
+ * The completeness rule is the whole basis for deciding whether a koaza can be
+ * romanized, so it needs its own tests independent of any fixture dataset.
+ *
+ * The regression these pin is over-refusal. The first version of the rule
+ * mapped each positional kanji to a SINGLE reading (北 -> キタ, 下 -> シモ,
+ * 中 -> ナカ, ...) and refused anything whose kana did not end in exactly that.
+ * Every name in the second block below was refused by it, and every one of
+ * them is an ordinary place name with a perfectly complete reading — the last
+ * kanji simply has more than one reading. Refusing them would have turned a
+ * fix for silently-dropped koaza into a large new source of spurious
+ * KOAZA_READING_INCOMPLETE failures.
+ */
+describe('isKoazaReadingComplete', () => {
+  it('refuses a reading that stops before the trailing kanji', () => {
+    // Both measured in the real dataset (assumption 6, run 31782019121):
+    // 南郷通's koaza readings stop at チョウメ, omitting the 北/南 entirely.
+    expect(isKoazaReadingComplete('一丁目北', '１チョウメ')).toBe(false);
+    expect(isKoazaReadingComplete('十二丁目南', '１２チョウメ')).toBe(false);
+    // Absent reading is the extreme case of the same thing.
+    expect(isKoazaReadingComplete('三丁目大横', undefined)).toBe(false);
+    expect(isKoazaReadingComplete('三丁目大横', '   ')).toBe(false);
+  });
+
+  it('accepts ordinary names whose trailing kanji takes a non-positional reading', () => {
+    const complete: [string, string][] = [
+      ['府中', 'フチュウ'],
+      ['山中', 'ヤマナカ'],
+      ['坂上', 'サカウエ'],
+      ['川上', 'カワカミ'],
+      ['城下', 'シロシタ'],
+      ['宮下', 'ミヤシタ'],
+      ['竹之下', 'タケノシタ'],
+      ['大東', 'ダイトウ'],
+      ['吾妻東', 'アズマヒガシ'],
+      ['大西', 'オオニシ'],
+      ['台北', 'ダイホク'],
+    ];
+    for (const [ja, kana] of complete) {
+      expect(isKoazaReadingComplete(ja, kana), `${ja} [${kana}]`).toBe(true);
+    }
+  });
+
+  it('accepts a positional reading that IS present', () => {
+    expect(isKoazaReadingComplete('三丁目西', '３チョウメニシ')).toBe(true);
+    expect(isKoazaReadingComplete('一丁目北', '１チョウメキタ')).toBe(true);
   });
 });
