@@ -6,6 +6,19 @@
 
 ### Fixed
 
+- **A koaza the caller never wrote is no longer added to the output.**
+  `toRomaji('宮城県柴田郡川崎町大字小野1-1')` came back from `0.1.4` as
+  `"1-1 Azamachi Ono, Kawasaki-machi, Shibata-gun, Miyagi, Japan"` — the `字町` in it appears
+  nowhere in the input. The same invented `字町` landed on four other unrelated towns in a
+  300-address sample; 8 of those 300 gained a koaza this way.
+
+  The upstream normalizer resolves an address to one specific machi-aza row, and for a town whose
+  rows all carry a koaza it picks one whatever the input said. `0.1.4` surfaced that row's koaza
+  unconditionally. It is now surfaced only when the input names it, immediately after the town —
+  position, not mere presence, because a koaza is often a single common character once its
+  `字`/`大字` prefix is stripped, and `字町` otherwise matches the 町 of 川崎町. Same sample after
+  the fix: 0 of 300. Writing the koaza still works: `大字小野字赤萩道上1-1` romanizes it.
+
 - **A koaza whose reading stops at its counter is now refused instead of romanized.**
   `toRomaji('長野県飯田市本町三丁目大横1-1')` came back from `0.1.4` as
   `"1-1 3Chome Hommachi, Iida-shi, Nagano, Japan"` — `ok: true`, with `大横` missing from the

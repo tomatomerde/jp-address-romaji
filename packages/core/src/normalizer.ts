@@ -128,6 +128,34 @@ export const NUMBERED_KOAZA = /^([0-9]+)(丁目|番町|番丁|条|軒|線|の町
  * produces (see toRomaji.test.ts and the real-world examples in
  * fixtures-koaza-number-ambiguity/README.md).
  */
+/**
+ * Did the caller's own text name this koaza, right after the town?
+ *
+ * Position matters, not mere presence. Koaza names are often a single common
+ * character once the `字`/`大字` prefix is stripped, and a plain `includes`
+ * then fires on anything: `字町` matched the 町 of 川崎町 in
+ * `宮城県柴田郡川崎町大字小野1-1`. Anchoring on the town keeps the question
+ * to "does the address continue with this koaza", which is what decides
+ * whether dropping it would lose something the caller wrote.
+ *
+ * If the town itself is not found in the input — the caller spelled it some
+ * way the dataset does not — this answers false and the koaza is left off,
+ * which is the conservative direction: the output then says only what the
+ * input said.
+ */
+function inputNamesKoaza(input: string, machiAza: { oaza_cho?: string; koaza?: string }): boolean {
+  const { oaza_cho: town, koaza } = machiAza;
+  if (!town || !koaza) return false;
+  const nfkc = (s: string) => s.normalize('NFKC');
+  const strip = (s: string) => s.replace(/^(?:大字|字)/, '');
+  const needle = strip(nfkc(koaza));
+  if (needle.length === 0) return false;
+  const haystack = nfkc(input);
+  const at = haystack.indexOf(nfkc(town));
+  if (at < 0) return false;
+  return strip(haystack.slice(at + nfkc(town).length)).startsWith(needle);
+}
+
 function recoverKoazaNumber(koaza: string | undefined, chomeN: number | undefined): string | undefined {
   if (!koaza || chomeN !== undefined) return undefined;
   const match = koaza.normalize('NFKC').match(NUMBERED_KOAZA);
@@ -222,7 +250,15 @@ export async function normalizeJapanese(input: string): Promise<NormalizedAddres
   // (named, like `三丁目大横`, or numbered-but-unrecoverable because a chome
   // is also present) is reported so the caller can decide what to do with it,
   // instead of it silently disappearing the way it used to.
-  if (machiAza?.koaza && recoveredKoazaNumber === undefined) {
+  // ...and only when the CALLER's text named it. The upstream normalizer
+  // resolves to one specific machi-aza row, and for a town whose rows all
+  // carry a koaza it picks one regardless of what the input said. Surfacing
+  // that unconditionally put a koaza the caller never wrote into the output:
+  // `宮城県柴田郡川崎町大字小野1-1` came back as "1-1 Azamachi Ono", and the
+  // same invented `字町` landed on four other unrelated towns in a 300-address
+  // sample (8 of 300 gained a koaza this way). Printing a place name nobody
+  // asked for is worse than the silent dropping this feature was built to fix.
+  if (machiAza?.koaza && recoveredKoazaNumber === undefined && inputNamesKoaza(input, machiAza)) {
     out.koaza = {
       ja: machiAza.koaza,
       kana: machiAza.koaza_k,
