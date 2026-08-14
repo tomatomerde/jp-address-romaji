@@ -108,6 +108,59 @@ export function useSuffixCategoryFixtureData(): void {
 }
 
 /**
+ * An eighth, separate fixture dataset holding one real municipality
+ * (北海道石狩郡当別町) whose administrative-suffix kana reading (町 read
+ * チョウ, i.e. "cho") itself contains a long vowel. See
+ * fixtures-longvowel-oh/README.md.
+ */
+export const LONGVOWEL_OH_FIXTURE_DATA_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'fixtures-longvowel-oh',
+  'data',
+);
+
+/** Point the library at the longVowel:'oh' municipality-suffix fixture dataset. */
+export function useLongVowelOhFixtureData(): void {
+  clearDataCache();
+  configureDataSource({ dataDir: LONGVOWEL_OH_FIXTURE_DATA_DIR });
+}
+
+/**
+ * A ninth, separate fixture dataset holding one real town (青森県青森市
+ * 大字駒込) that has a kana reading but no romaji field — about 10% of towns
+ * in the shipped dataset. See fixtures-kana-only-town/README.md.
+ */
+export const KANA_ONLY_TOWN_FIXTURE_DATA_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'fixtures-kana-only-town',
+  'data',
+);
+
+/** Point the library at the kana-only-town fixture dataset. */
+export function useKanaOnlyTownFixtureData(): void {
+  clearDataCache();
+  configureDataSource({ dataDir: KANA_ONLY_TOWN_FIXTURE_DATA_DIR });
+}
+
+/**
+ * A tenth, separate fixture dataset holding one real town (秋田県横手市
+ * 前郷一番町) whose kana reading spells a number as a digit while its romaji
+ * field spells the same number as a word. See
+ * fixtures-digit-word-mismatch/README.md.
+ */
+export const DIGIT_WORD_MISMATCH_FIXTURE_DATA_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'fixtures-digit-word-mismatch',
+  'data',
+);
+
+/** Point the library at the digit/word-mismatch fixture dataset. */
+export function useDigitWordMismatchFixtureData(): void {
+  clearDataCache();
+  configureDataSource({ dataDir: DIGIT_WORD_MISMATCH_FIXTURE_DATA_DIR });
+}
+
+/**
  * Run `fn` with `fetch` replaced by a stub that throws.
  *
  * Any network access — by our code or by the upstream normalizer — fails the
