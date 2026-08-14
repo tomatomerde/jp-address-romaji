@@ -19,7 +19,11 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { isPlausibleReading, isUsableRomajiField } from '../packages/core/src/romaji/validate.js';
+import {
+  isKoazaReadingComplete,
+  isPlausibleReading,
+  isUsableRomajiField,
+} from '../packages/core/src/romaji/validate.js';
 import { NUMBERED_KOAZA } from '../packages/core/src/normalizer.js';
 
 interface City { county?: string; city: string; ward?: string }
@@ -76,7 +80,15 @@ function main(): void {
   let koazaNamedWithKana = 0;
   let koazaNamedWithRomaji = 0;
   let koazaNamedWithNeither = 0;
+  // Of the NAMED koaza, how many does `isKoazaReadingComplete` (the fix for
+  // item 1 in docs/project-status.md) accept vs. refuse? This is the number
+  // that matters for calibrating the check against real data: too few
+  // refusals and a truncated reading like 南郷通's `一丁目北` is slipping
+  // through; too many and the check is refusing koaza it should accept.
+  let koazaNamedPassed = 0;
+  let koazaNamedRefused = 0;
   const koazaNamedSamples: string[] = [];
+  const koazaRefusedSamples: string[] = [];
   // Distinct towns per municipality that share one romanization.
   let ambiguousKeys = 0;
   let distinctKeys = 0;
@@ -131,13 +143,17 @@ function main(): void {
             if (town.koaza_k) koazaNamedWithKana++;
             if (town.koaza_r) koazaNamedWithRomaji++;
             if (!town.koaza_k && !town.koaza_r) koazaNamedWithNeither++;
-            if (koazaNamedSamples.length < 25) {
-              koazaNamedSamples.push(
-                `${pref.pref}${municipality}${town.oaza_cho}` +
-                `${town.chome_n !== undefined ? `${town.chome_n}丁目` : ''}` +
-                ` + koaza "${town.koaza}"` +
-                ` [kana ${town.koaza_k ?? '—'} / romaji ${town.koaza_r ?? '—'}]`,
-              );
+            const sampleLabel =
+              `${pref.pref}${municipality}${town.oaza_cho}` +
+              `${town.chome_n !== undefined ? `${town.chome_n}丁目` : ''}` +
+              ` + koaza "${town.koaza}"` +
+              ` [kana ${town.koaza_k ?? '—'} / romaji ${town.koaza_r ?? '—'}]`;
+            if (koazaNamedSamples.length < 25) koazaNamedSamples.push(sampleLabel);
+            if (isKoazaReadingComplete(town.koaza, town.koaza_k)) {
+              koazaNamedPassed++;
+            } else {
+              koazaNamedRefused++;
+              if (koazaRefusedSamples.length < 25) koazaRefusedSamples.push(sampleLabel);
             }
           }
         }
@@ -222,6 +238,20 @@ function main(): void {
   console.log('  Samples of NAMED koaza (not only the reading-less ones) — note that a');
   console.log('  present koaza_k is not automatically a FULL reading of the koaza:');
   koazaNamedSamples.forEach((s) => console.log(`    ${s}`));
+  console.log('');
+  console.log('-- assumption 6b: isKoazaReadingComplete — how many NAMED koaza can be romanized? --');
+  console.log('  This is what toRomaji actually does with each NAMED koaza above: PASSED means');
+  console.log('  it is romanized and included in the output; REFUSED means toRomaji returns');
+  console.log('  KOAZA_READING_INCOMPLETE rather than guess. Calibrate the check against these');
+  console.log('  numbers and samples — too few refused and a truncated reading like 南郷通\'s');
+  console.log('  「一丁目北」(see fixtures-koaza/README.md) is slipping through; too many and');
+  console.log('  ordinary koaza that should romanize fine are being refused unnecessarily.');
+  console.log(`  passed  : ${koazaNamedPassed} (${pct(koazaNamedPassed, koazaNamed)} of named)`);
+  console.log(`  refused : ${koazaNamedRefused} (${pct(koazaNamedRefused, koazaNamed)} of named)`);
+  console.log('  Samples of REFUSED named koaza — REVIEW THESE, the same way as assumption 3:');
+  console.log('  each one is a koaza-bearing address toRomaji will now refuse outright rather');
+  console.log('  than silently drop the koaza from (the pre-fix behavior) or guess at (unsafe):');
+  koazaRefusedSamples.forEach((s) => console.log(`    ${s}`));
   console.log('');
 
   // Fail loudly on anything that invalidates a design decision.

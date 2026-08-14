@@ -236,6 +236,33 @@ export function formatTown(
 }
 
 /**
+ * Render a named koaza (small-area subdivision) name.
+ *
+ * Deliberately the same shape as {@link formatTown} — a koaza is, for
+ * rendering purposes, just another stem to romanize; both route through
+ * {@link romanizeStem} so the two never diverge on source precedence,
+ * long-vowel handling, or transliterability rules. Kept as a separate,
+ * separately-named function (rather than reusing `formatTown` directly)
+ * because the two mean different things to a caller and may need to diverge
+ * later — e.g. a koaza has no administrative suffix to ever split off, so
+ * nothing here parallels `splitAdministrativeSuffix`.
+ *
+ * The caller (`toRomaji.ts`) is responsible for deciding WHETHER to call this
+ * at all: it must first confirm the reading is complete enough to trust (see
+ * `romaji/validate.ts`'s `isKoazaReadingComplete`). This function only
+ * renders; it does not judge completeness.
+ */
+export function formatKoaza(
+  kana: string | undefined,
+  romajiField: string | undefined,
+  style: LongVowelStyle,
+): string | undefined {
+  const cleanRomaji = romajiField?.trim() || undefined;
+  const stem = romanizeStem(kana, cleanRomaji, style);
+  return stem ? titleCase(stem) : undefined;
+}
+
+/**
  * Build the block-number sequence for western order.
  * `西新宿三丁目5番12号` -> `3-5-12`.
  */

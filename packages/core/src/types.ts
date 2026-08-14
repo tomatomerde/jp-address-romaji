@@ -76,6 +76,23 @@ export interface ParsedAddress {
   /** Town (machi-aza) without the chome suffix. */
   town?: AddressComponent;
   /**
+   * Named small-area subdivision (`小字`/koaza) inside the town, when the
+   * address has one AND the dataset's reading for it can be verified to
+   * cover the whole name (see `romaji/validate.ts`'s `isKoazaReadingComplete`).
+   *
+   * Absent in three distinct situations, none of which are distinguishable
+   * from this field alone:
+   *  - the address genuinely has no koaza (the common case);
+   *  - the koaza is purely numeric (`２地割`, `３号`) — that digit is folded
+   *    into `blockNumbers` instead by `normalizer.ts`'s `recoverKoazaNumber`,
+   *    which predates this field and is left untouched;
+   *  - the koaza is named, but `toRomaji` refused to guess an incomplete
+   *    reading for it and returned `KOAZA_READING_INCOMPLETE` instead of a
+   *    `ParsedAddress` (so this field never appears on a successful result
+   *    in that case at all).
+   */
+  koaza?: AddressComponent;
+  /**
    * Kyoto street phrase (`烏丸通四条上ル`), when the address uses one.
    *
    * Navigational rather than administrative: the official address is the town
@@ -124,6 +141,16 @@ export type FailureReason =
    * The requested long-vowel style needs a kana reading, and none is available.
    */
   | 'KANA_REQUIRED_FOR_LONG_VOWELS'
+  /**
+   * The town has a named koaza (small-area subdivision), but the dataset's
+   * reading for it cannot be verified to cover the whole name — for example
+   * a kana reading that stops short of a trailing directional kanji
+   * (`北`/`南`/`東`/`西`/`上`/`下`/`中`). Romanizing it anyway risks silently
+   * dropping part of the address, which this library refuses to do; see
+   * `romaji/validate.ts`'s `isKoazaReadingComplete` for the check and its
+   * evidence.
+   */
+  | 'KOAZA_READING_INCOMPLETE'
   /** More than one Japanese address matches the romaji input. */
   | 'AMBIGUOUS'
   /** Kyoto-style street-name addresses are not supported in this version. */

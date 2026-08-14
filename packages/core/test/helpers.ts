@@ -161,6 +161,26 @@ export function useDigitWordMismatchFixtureData(): void {
 }
 
 /**
+ * An eleventh, separate fixture dataset holding a named-koaza (小字)
+ * reproduction of the exact reported bug (長野県飯田市本町三丁目大横, the
+ * koaza sitting inside 本町) plus real evidence of a koaza reading that
+ * stops short of a trailing directional kanji (北海道札幌市白石区南郷通's
+ * `一丁目北`/`十二丁目南`, from `scripts/verify-data-assumptions.ts`
+ * assumption 6). See fixtures-koaza/README.md.
+ */
+export const KOAZA_FIXTURE_DATA_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'fixtures-koaza',
+  'data',
+);
+
+/** Point the library at the named-koaza fixture dataset. */
+export function useKoazaFixtureData(): void {
+  clearDataCache();
+  configureDataSource({ dataDir: KOAZA_FIXTURE_DATA_DIR });
+}
+
+/**
  * Run `fn` with `fetch` replaced by a stub that throws.
  *
  * Any network access — by our code or by the upstream normalizer — fails the

@@ -141,6 +141,17 @@ export interface NormalizedAddress {
   city?: { ja: string; kana?: string; romaji?: string };
   ward?: { ja: string; kana?: string; romaji?: string };
   town?: { ja: string; kana?: string; romaji?: string };
+  /**
+   * Named small-area subdivision (`小字`/koaza) inside the town, when the
+   * matched record has one that is NOT already handled by
+   * {@link recoverKoazaNumber} above (a bare number + suffix, folded into the
+   * leading digit of `rest` instead — see that function's own comment). This
+   * is surfaced unconditionally otherwise; it is `toRomaji.ts`'s job, not
+   * this module's, to decide whether the reading is complete enough to
+   * romanize (see `romaji/validate.ts`'s `isKoazaReadingComplete`) — this
+   * module only reports what the dataset carries.
+   */
+  koaza?: { ja: string; kana?: string; romaji?: string };
   chome?: number;
   /** Remaining text after the town: block numbers plus anything unparsed. */
   rest: string;
@@ -203,6 +214,20 @@ export async function normalizeJapanese(input: string): Promise<NormalizedAddres
     if (machiAza.chome_n !== undefined) out.chome = machiAza.chome_n;
   } else if (result.town) {
     out.town = { ja: result.town };
+  }
+
+  // A koaza that `recoverKoazaNumber` already consumed (folded into
+  // `rest`/`recoveredKoazaNumber` above) is fully represented there — do not
+  // ALSO surface it here, or its digit would appear twice. Every other koaza
+  // (named, like `三丁目大横`, or numbered-but-unrecoverable because a chome
+  // is also present) is reported so the caller can decide what to do with it,
+  // instead of it silently disappearing the way it used to.
+  if (machiAza?.koaza && recoveredKoazaNumber === undefined) {
+    out.koaza = {
+      ja: machiAza.koaza,
+      kana: machiAza.koaza_k,
+      romaji: machiAza.koaza_r,
+    };
   }
 
   return out;
