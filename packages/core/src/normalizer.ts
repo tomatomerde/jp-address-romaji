@@ -62,6 +62,22 @@ function resolveBundledDataDir(): string | undefined {
  */
 export function configureDataSource(options: DataSourceOptions = {}): void {
   if (options.endpoint) {
+    // Validate before storing: config.japaneseAddressesApi is read by both
+    // directions (this module's own dataAccess.ts for fromRomaji, and the
+    // upstream normalizer for toRomaji), and both concatenate it with a
+    // suffix and pass it to `new URL(...)`. A malformed value here — most
+    // often a filesystem path passed where a URL was expected, e.g.
+    // `{ endpoint: './address-data/ja' }` meant for `dataDir` — must not
+    // become an uncaught TypeError three calls later inside a conversion.
+    // An `http(s)` (or `file:`) endpoint, including one with a path and no
+    // scheme-relative shortcuts, still parses fine and keeps working
+    // unchanged; only a non-URL string is rejected here.
+    try {
+      new URL(options.endpoint);
+    } catch {
+      configured = false;
+      return;
+    }
     config.japaneseAddressesApi = options.endpoint;
   } else {
     const dir = options.dataDir ?? resolveBundledDataDir();

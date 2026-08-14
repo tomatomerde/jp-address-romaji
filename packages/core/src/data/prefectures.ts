@@ -89,14 +89,18 @@ const BY_ROMAJI = new Map<string, PrefectureEntry>();
 for (const p of PREFECTURES) {
   BY_ROMAJI.set(normalizeRomajiKey(p.romaji), p);
   BY_ROMAJI.set(normalizeRomajiKey(p.romajiMacron), p);
-  // Accept the administrative suffix too: "Tokyo-to", "Osaka-fu", "Aomori-ken".
+  // "Oh"-style passport spellings, e.g. "Ohsaka", "Tohkyoh".
+  const ohRomaji = p.romajiMacron.replace(/[ōŌ]/g, (m) => (m === 'Ō' ? 'Oh' : 'oh'));
+  BY_ROMAJI.set(normalizeRomajiKey(ohRomaji), p);
+  // Accept the administrative suffix too: "Tokyo-to", "Osaka-fu", "Aomori-ken",
+  // and the same for the "oh"-style spelling above: "Tohkyoh-to", "Ohsaka-fu",
+  // "Kohchi-ken".
   const suffix = p.ja.endsWith('都') ? 'to' : p.ja.endsWith('府') ? 'fu' : p.ja.endsWith('道') ? '' : 'ken';
   if (suffix) {
     BY_ROMAJI.set(normalizeRomajiKey(p.romaji + suffix), p);
     BY_ROMAJI.set(normalizeRomajiKey(p.romajiMacron + suffix), p);
+    BY_ROMAJI.set(normalizeRomajiKey(ohRomaji + suffix), p);
   }
-  // "Oh"-style passport spellings, e.g. "Ohsaka", "Tohkyoh".
-  BY_ROMAJI.set(normalizeRomajiKey(p.romajiMacron.replace(/[ōŌ]/g, (m) => (m === 'Ō' ? 'Oh' : 'oh'))), p);
 }
 
 /** Look up a prefecture by its Japanese name (with suffix). */

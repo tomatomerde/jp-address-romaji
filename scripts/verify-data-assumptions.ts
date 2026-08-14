@@ -219,7 +219,8 @@ function main(): void {
   console.log(`      with koaza_r           : ${koazaNamedWithRomaji} (${pct(koazaNamedWithRomaji, koazaNamed)} of named)`);
   console.log(`      with neither           : ${koazaNamedWithNeither} (${pct(koazaNamedWithNeither, koazaNamed)} of named)`);
   console.log('  A NAMED koaza is the one this library cannot fold into a block number.');
-  console.log('  "with neither" is the share that can only ever be an explicit refusal:');
+  console.log('  Samples of NAMED koaza (not only the reading-less ones) — note that a');
+  console.log('  present koaza_k is not automatically a FULL reading of the koaza:');
   koazaNamedSamples.forEach((s) => console.log(`    ${s}`));
   console.log('');
 

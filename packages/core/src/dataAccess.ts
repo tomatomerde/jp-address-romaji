@@ -48,6 +48,26 @@ export interface MachiAzaRecord {
   koaza_r?: string;
 }
 
+/**
+ * Max number of parsed dataset files (the prefecture index plus one file per
+ * municipality) kept in the in-process cache below.
+ *
+ * This is independent of the `cacheSize` option on `configureDataSource`
+ * (normalizer.ts): that option sizes only the upstream normalizer's own
+ * cache, for the forward (toRomaji) direction. This cache backs the reverse
+ * direction, has no upstream equivalent, and was previously unbounded — a
+ * long-running process doing `fromRomaji` nationwide would retain a parsed
+ * file per municipality forever (about 1,899 of them in the real dataset).
+ * Overridable only for tests, via {@link setDataCacheLimit}; not part of the
+ * public API.
+ */
+let cacheLimit = 500;
+
+/** Override the cache size limit (test-only; not exported from index.ts). */
+export function setDataCacheLimit(limit: number): void {
+  cacheLimit = limit;
+}
+
 const cache = new Map<string, unknown>();
 
 /** Read one dataset file relative to the configured endpoint. */
@@ -56,11 +76,27 @@ async function readDataFile<T>(suffix: string): Promise<T | undefined> {
   if (!endpoint) return undefined;
 
   const key = endpoint + suffix;
-  if (cache.has(key)) return cache.get(key) as T;
+  if (cache.has(key)) {
+    // Touch: delete-then-reinsert moves this key to the end of the Map's
+    // iteration order, which JS Maps preserve as insertion order — the
+    // usual trick for building an LRU cache on top of one. Eviction below
+    // then always removes the least-recently-used entry, not just the
+    // least-recently-inserted one.
+    const hit = cache.get(key) as T;
+    cache.delete(key);
+    cache.set(key, hit);
+    return hit;
+  }
 
-  const url = new URL(`${endpoint}${suffix}`);
   let parsed: T;
   try {
+    // `new URL` throws for a malformed endpoint (e.g. a filesystem path
+    // passed where a URL was expected — see configureDataSource's own
+    // validation in normalizer.ts). It belongs inside this try, not before
+    // it: a throw here must degrade to the same "no data available" outcome
+    // as a failed fetch or a missing file, not propagate as an uncaught
+    // TypeError out of every conversion.
+    const url = new URL(`${endpoint}${suffix}`);
     if (url.protocol === 'file:') {
       const text = await fs.readFile(fileURLToPath(url), 'utf-8');
       parsed = JSON.parse(text) as T;
@@ -75,7 +111,18 @@ async function readDataFile<T>(suffix: string): Promise<T | undefined> {
   }
 
   cache.set(key, parsed);
+  if (cache.size > cacheLimit) {
+    // Map iteration order is insertion order, so the first key here is the
+    // least-recently-used one (touches above keep hot entries at the end).
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
   return parsed;
+}
+
+/** Number of dataset files currently cached (test-only). */
+export function getDataCacheSize(): number {
+  return cache.size;
 }
 
 /** Clear the in-process dataset cache (used by tests). */
