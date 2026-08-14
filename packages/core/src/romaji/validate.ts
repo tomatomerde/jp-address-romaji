@@ -97,3 +97,96 @@ function stripAzaPrefix(ja: string, kana: string): { ja: string; kana: string } 
   }
   return { ja, kana };
 }
+
+/**
+ * Trailing positional kanji, mapped to every katakana reading a complete
+ * reading may end with when the koaza name ends with that kanji.
+ *
+ * The list per kanji is deliberately generous, because the check is only ever
+ * used to REFUSE: a reading ending in any listed alternative is accepted, and
+ * only one ending in none of them is treated as truncated. An over-long list
+ * costs a missed truncation of an unusual shape; an over-short one costs
+ * refusing ordinary names outright (see the note in
+ * {@link isKoazaReadingComplete} for the ones a single-reading table rejected).
+ *
+ * This is the one class of koaza-reading truncation we have direct evidence
+ * of. A sample from the dataset (assumption 6 in
+ * scripts/verify-data-assumptions.ts, GitHub Actions run 31782019121):
+ *
+ *   北海道札幌市白石区南郷通 + koaza "一丁目北"   [kana "１チョウメ"  / romaji —]
+ *   北海道札幌市白石区南郷通 + koaza "十二丁目南" [kana "１２チョウメ" / romaji —]
+ *
+ * In both, `koaza_k` stops at チョウメ ("chome") — the trailing 北/南 simply
+ * is not in the reading. This is invisible to {@link isPlausibleReading}: it
+ * only bounds a reading from ABOVE (too many mora for the kanji), and 4 kanji
+ * against 4 mora (「一丁目北」 / "ｲﾁﾁｮｳﾒ") sits comfortably inside that bound
+ * — a truncated reading can still look length-plausible. Transliterating it
+ * anyway would spell a real, different place (南郷通 minus its 北/南
+ * qualifier) as though it were the queried one — precisely the "different
+ * address" failure this fix exists to close, just relocated one field over.
+ *
+ * The rule only fires on this one specific, evidenced shape: a koaza whose
+ * LAST character is one of these seven kanji. It cannot detect other kinds of
+ * mid-string or differently-shaped truncation — no dataset evidence of those
+ * has been measured yet — so it is deliberately narrow rather than a general
+ * "does this reading look complete" heuristic. Extend the table (or the
+ * measurement) if a wider evidenced pattern turns up; do not add speculative
+ * entries.
+ */
+const TRAILING_POSITIONAL_KANJI: Record<string, readonly string[]> = {
+  北: ['キタ', 'ホク', 'ボク', 'ギタ'],
+  南: ['ミナミ', 'ナン', 'ナ'],
+  東: ['ヒガシ', 'トウ', 'アズマ', 'ドウ', 'ガシ'],
+  西: ['ニシ', 'サイ', 'セイ', 'ジシ'],
+  上: ['カミ', 'ウエ', 'ウワ', 'ジョウ', 'アゲ', 'ガミ', 'ノボリ'],
+  下: ['シモ', 'シタ', 'ゲ', 'ジモ', 'ジタ', 'オロシ', 'サガリ', 'クダリ'],
+  中: ['ナカ', 'チュウ', 'ジュウ', 'ウチ', 'ヂュウ'],
+};
+
+/**
+ * Can a koaza's dataset reading be trusted to cover the WHOLE name, not just
+ * a truncated prefix of it?
+ *
+ * This is a stricter, koaza-specific companion to {@link isPlausibleReading}:
+ * that function only catches a reading that is too LONG for its kanji (a
+ * shifted dataset row); it explicitly cannot catch a reading that is too
+ * SHORT (see {@link TRAILING_POSITIONAL_KANJI}'s comment for the measured
+ * example). Both checks run here because a koaza can fail either way: a
+ * shifted/corrupt row is just as unromanizable as a truncated one.
+ *
+ * No reading at all is the extreme case of "does not cover the name" and is
+ * refused the same way — measured at assumption 6 in
+ * scripts/verify-data-assumptions.ts, 100% of NAMED koaza in the shipped v2
+ * dataset carry `koaza_k`, so this branch is not expected to fire on real
+ * data, but a missing reading must fail closed rather than be silently
+ * skipped if that measurement ever changes.
+ *
+ * Deliberately conservative in the direction CLAUDE.md requires: a false
+ * positive here costs an explicit `KOAZA_READING_INCOMPLETE` refusal; a false
+ * negative costs a confidently wrong address (part of the koaza silently
+ * missing from the output, exactly like the original bug). When the two
+ * checks above do not settle it either way, this returns `true` — there is no
+ * further evidence to refuse on, and refusing every koaza outright (rather
+ * than only the ones with a known failure signature) would defeat the point
+ * of romanizing them at all. `scripts/verify-data-assumptions.ts` reports how
+ * many named koaza this accepts vs. refuses on the real dataset, so that
+ * balance can be checked against real data rather than assumed.
+ */
+export function isKoazaReadingComplete(ja: string, kana: string | undefined): boolean {
+  if (!kana || kana.trim().length === 0) return false;
+  if (!isPlausibleReading(ja, kana)) return false;
+
+  const lastChar = ja.normalize('NFKC').slice(-1);
+  const expectedTails = TRAILING_POSITIONAL_KANJI[lastChar];
+  // Refuse only when the reading ends with NONE of that kanji's readings. Each
+  // of these kanji has several, and pinning one per kanji refused a large
+  // class of perfectly complete readings: 宮下/ミヤシタ, 城下/シロシタ,
+  // 坂上/サカウエ, 府中/フチュウ, 大東/ダイトウ, 台北/ダイホク all end in a
+  // real reading of their last kanji that simply is not the positional one.
+  // Listing the alternatives keeps the check aimed at what it was built for —
+  // a reading that stops before the last kanji entirely, as 一丁目北/１チョウメ
+  // does — instead of at the kanji's mere presence.
+  if (expectedTails && !expectedTails.some((tail) => kana.endsWith(tail))) return false;
+
+  return true;
+}

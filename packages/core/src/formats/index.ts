@@ -60,11 +60,19 @@ function localityOf(parsed: ParsedAddress): string | undefined {
   return parts.length > 0 ? parts.join(', ') : undefined;
 }
 
-/** The street line: block numbers plus town. */
+/** The street line: block numbers, koaza (when present), and town. */
 function streetOf(parsed: ParsedAddress): string {
   const numbers = formatBlockNumbers(parsed.chome, parsed.blockNumbers);
   const town = parsed.town?.romaji ?? parsed.town?.ja ?? '';
-  return [numbers, town].filter(Boolean).join(' ').trim();
+  // Same placement `toRomaji.ts`'s `render()` uses, and for the same reason:
+  // a koaza silently missing from the street line here would be the same
+  // "different address" bug this fix closes, just relocated to a different
+  // renderer. `parsed.koaza` is only ever populated with a `romaji` field
+  // (toRomaji refuses the whole conversion rather than return a `koaza`
+  // whose reading it could not verify), so there is no `?? .ja` kanji
+  // fallback to add here the way `town` has.
+  const koaza = parsed.koaza?.romaji ?? '';
+  return [numbers, koaza, town].filter(Boolean).join(' ').trim();
 }
 
 /**

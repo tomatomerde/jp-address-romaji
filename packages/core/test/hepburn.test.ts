@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { kanaToRomaji, toKatakana, isTransliterableKana } from '../src/romaji/hepburn.js';
-import { romanizeStem } from '../src/romaji/format.js';
+import { romanizeStem, splitAdministrativeSuffix, formatMunicipality } from '../src/romaji/format.js';
 import {
   isUsableRomajiField,
   isPlausibleReading,
@@ -52,6 +52,14 @@ describe('kanaToRomaji', () => {
     expect(kanaToRomaji('ウエハラ町', 'none')).toBeUndefined();
   });
 
+  it('refuses to transliterate unattached prolonged-sound mark (ー)', () => {
+    // Regression test for Defect B: a leading or isolated ー is corrupt data.
+    // This must not silently drop the ー and return a plausible-but-wrong result.
+    expect(kanaToRomaji('ーア', 'none')).toBeUndefined();
+    expect(kanaToRomaji('ーサッポロ', 'none')).toBeUndefined();
+    expect(kanaToRomaji('サッー', 'none')).toBeUndefined();
+  });
+
   it('keeps an embedded digit rather than refusing the whole reading', () => {
     // Real v2 reading for Sapporo's 北十条西 (北海道札幌市北区): the block
     // number is spelled into the kana itself (キタ１０ジョウニシ, full-width
@@ -75,6 +83,25 @@ describe('isTransliterableKana', () => {
     // Real v2 corruption in 富山県高岡市: full-width Latin letters embedded
     // in an otherwise-katakana reading.
     expect(isTransliterableKana('ＩＣパーク')).toBe(false);
+  });
+
+  it('rejects an unattached prolonged-sound mark (ー) at the start', () => {
+    // Regression test for Defect B: leading ー is corrupt data and should be rejected.
+    expect(isTransliterableKana('ーア')).toBe(false);
+    expect(isTransliterableKana('ーサッポロ')).toBe(false);
+  });
+
+  it('rejects an unattached ー after a consonant-only syllable', () => {
+    // Regression test for Defect B: ー after ッ (sokuon) or ん cannot lengthen anything.
+    expect(isTransliterableKana('サッー')).toBe(false);
+    expect(isTransliterableKana('サンー')).toBe(false);
+  });
+
+  it('accepts a properly attached ー after a vowel-containing syllable', () => {
+    // Valid choonpu: ー lengthens the previous syllable's vowel.
+    expect(isTransliterableKana('ケーキ')).toBe(true);
+    expect(isTransliterableKana('サーッポロ')).toBe(true);
+    expect(isTransliterableKana('コー')).toBe(true);
   });
 });
 
@@ -175,6 +202,40 @@ describe('romanizeStem: long-vowel styles must apply the same transliterability 
     expect(romanizeStem(withDigit, undefined, 'macron')).toBe('kita10jōnishi');
     expect(romanizeStem(withDigit, undefined, 'circumflex')).toBe('kita10jônishi');
     expect(romanizeStem(withDigit, undefined, 'oh')).toBe('kita10johnishi');
+  });
+});
+
+describe('splitAdministrativeSuffix: kana settles the suffix reading when romaji is silent', () => {
+  // Regression (docs/project-status.md, "5"): when a municipality's romaji
+  // field is missing, the suffix reading used to be GUESSED via
+  // `spec.romaji[0]` (always "cho" for 町, never "machi") instead of being
+  // read off the kana tail, which already says which one applies. Currently
+  // unreachable with the shipped dataset (0 municipalities lack a romaji
+  // field), but a real latent defect: nothing about the *type* of a
+  // municipality record requires a romaji field to be present.
+  it("derives 出雲崎町's suffix from kana (マチ/'machi'), not the table's first entry ('cho')", () => {
+    const { suffix, stemKana } = splitAdministrativeSuffix('出雲崎町', 'イズモザキマチ', undefined);
+    expect(suffix).toBe('machi');
+    expect(stemKana).toBe('イズモザキ');
+  });
+
+  it("formatMunicipality renders it as 'Izumozaki-machi', not the guessed 'Izumozaki-cho'", () => {
+    expect(formatMunicipality('出雲崎町', 'イズモザキマチ', undefined, 'none')).toBe('Izumozaki-machi');
+  });
+
+  it('still falls back to the table default when NEITHER romaji nor kana settle it', () => {
+    // With no kana at all to read the suffix off of, this has nothing left
+    // to consult but the table's first (most common) reading.
+    const { suffix } = splitAdministrativeSuffix('出雲崎町', undefined, undefined);
+    expect(suffix).toBe('cho');
+  });
+
+  it('a romaji field that DOES resolve to a suffix still takes precedence over kana', () => {
+    // Sanity check that this change only affects the "romaji is silent"
+    // case: when the romaji field already names a valid reading, it still
+    // wins, even though the kana here would independently agree.
+    const { suffix } = splitAdministrativeSuffix('出雲崎町', 'イズモザキマチ', 'Izumozaki-machi');
+    expect(suffix).toBe('machi');
   });
 });
 

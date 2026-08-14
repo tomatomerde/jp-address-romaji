@@ -2,8 +2,10 @@
  * Rendering of romanized address components.
  *
  * Two jobs live here:
- *  1. Turning the dataset's ALL-CAPS, space-separated values (`SAPPORO SHI`)
- *     into conventional address casing (`Sapporo-shi`).
+ *  1. Turning the dataset's romaji field into conventional address casing
+ *     (`Sapporo-shi`). Both forms the dataset has shipped are accepted: the
+ *     older ALL-CAPS, space-separated style (`SAPPORO SHI`) and the v2 style
+ *     already close to conventional casing (`Sapporo-shi`).
  *  2. Choosing the reading of an administrative suffix. `町` is read either
  *     "machi" or "cho" and `村` either "mura" or "son" depending on the
  *     municipality; that choice is read out of the dataset, never guessed.
@@ -95,7 +97,25 @@ export function splitAdministrativeSuffix(
       }
     }
   }
-  // Fall back to the first (most common) reading when the dataset is silent.
+  // The romaji field didn't settle it (missing, or not recognized as one of
+  // the spec's readings). The kana tail already says which reading applies —
+  // read it off there before resorting to a guess. `大字`/`字`-style
+  // rewritten prefixes (see isPlausibleReading's comment in validate.ts)
+  // only ever sit in FRONT of the stem, never between the stem and the
+  // suffix, so a plain endsWith check against the kana is safe here.
+  if (!suffix && kana) {
+    for (const reading of spec.kana) {
+      if (kana.endsWith(reading) && kana.length > reading.length) {
+        suffix = spec.romaji[spec.kana.indexOf(reading)];
+        break;
+      }
+    }
+  }
+
+  // Last resort: neither the romaji field nor the kana settled it (e.g. no
+  // kana either). Fall back to the first (most common) reading. Unreached by
+  // the shipped dataset — every municipality has both fields — but kept so
+  // the function still returns something rather than failing outright.
   if (!suffix) suffix = spec.romaji[0];
 
   // Strip the corresponding reading off the kana.
@@ -119,6 +139,15 @@ export function splitAdministrativeSuffix(
 }
 
 /**
+ * Does `text` contain a digit? Checked after NFKC folding so a full-width
+ * `１` counts the same as an ASCII `1` — the same normalization
+ * {@link isTransliterableKana} applies before it looks for digits.
+ */
+function containsDigit(text: string): boolean {
+  return /[0-9]/.test(text.normalize('NFKC'));
+}
+
+/**
  * Romanize the stem of a component.
  *
  * Source precedence:
@@ -137,6 +166,25 @@ export function splitAdministrativeSuffix(
  * `circumflex` / `oh` while the same input correctly failed with
  * `NO_ROMAJI_DATA` under `'none'` — the opposite of the intended relationship,
  * since the long-vowel styles are documented as *requiring* the kana source.
+ *
+ * One more refusal lives in the long-vowel branch: for 17 towns nationwide
+ * (see docs/project-status.md item 4 and
+ * fixtures-digit-word-mismatch/README.md) the kana reading spells a number as
+ * a DIGIT while the dataset's own romaji field spells the very same number as
+ * a WORD — e.g. 前郷一番町: `マエゴウ１バンチョウ` vs `"Maego Ichibancho"`. Under
+ * `'none'` that is invisible, since the branch above never looks at the kana
+ * when the romaji field is usable. But every other style has no source *but*
+ * the kana (it alone carries vowel length), so transliterating it verbatim
+ * would spell the same town two different ways — not a diacritic difference,
+ * a different word — depending only on which `longVowel` style the caller
+ * picked, with nothing in the dataset to say which spelling, if either, is
+ * the one to trust. That is exactly the situation CLAUDE.md's "never guess a
+ * reading" value is about: an explicit failure the caller must handle beats a
+ * spelling that might be the wrong one. This only fires when the two sources
+ * actually disagree on digits — a reading like Sapporo's `キタ１０ジョウニシ`
+ * (`Kita10Jonishi`), whose romaji field agrees the number is a digit
+ * (`Kita10-Jonishi`), is unaffected, as is every reading with no romaji field
+ * to disagree with at all.
  */
 export function romanizeStem(
   stemKana: string | undefined,
@@ -148,6 +196,9 @@ export function romanizeStem(
     return stemKana ? kanaToRomaji(stemKana, 'none') : undefined;
   }
   if (!stemKana || !isTransliterableKana(stemKana)) return undefined;
+  if (isUsableRomajiField(stemRomaji) && containsDigit(stemKana) && !containsDigit(stemRomaji)) {
+    return undefined;
+  }
   const syllables = analyzeKana(stemKana);
   if (syllables.length === 0) return undefined;
   return renderSyllables(syllables, style) || undefined;
@@ -175,6 +226,33 @@ export function formatMunicipality(
  * folded into the block-number sequence by the caller.
  */
 export function formatTown(
+  kana: string | undefined,
+  romajiField: string | undefined,
+  style: LongVowelStyle,
+): string | undefined {
+  const cleanRomaji = romajiField?.trim() || undefined;
+  const stem = romanizeStem(kana, cleanRomaji, style);
+  return stem ? titleCase(stem) : undefined;
+}
+
+/**
+ * Render a named koaza (small-area subdivision) name.
+ *
+ * Deliberately the same shape as {@link formatTown} — a koaza is, for
+ * rendering purposes, just another stem to romanize; both route through
+ * {@link romanizeStem} so the two never diverge on source precedence,
+ * long-vowel handling, or transliterability rules. Kept as a separate,
+ * separately-named function (rather than reusing `formatTown` directly)
+ * because the two mean different things to a caller and may need to diverge
+ * later — e.g. a koaza has no administrative suffix to ever split off, so
+ * nothing here parallels `splitAdministrativeSuffix`.
+ *
+ * The caller (`toRomaji.ts`) is responsible for deciding WHETHER to call this
+ * at all: it must first confirm the reading is complete enough to trust (see
+ * `romaji/validate.ts`'s `isKoazaReadingComplete`). This function only
+ * renders; it does not judge completeness.
+ */
+export function formatKoaza(
   kana: string | undefined,
   romajiField: string | undefined,
   style: LongVowelStyle,

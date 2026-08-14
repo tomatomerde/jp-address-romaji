@@ -116,7 +116,14 @@ export function isTransliterableKana(input: string): boolean {
     const two = kana.slice(i, i + 2);
     if (DIGRAPHS[two]) { i++; continue; }
     const one = kana[i]!;
-    if (MONOGRAPHS[one] || one === 'ッ' || one === 'ン' || one === 'ー' || /[0-9]/.test(one)) continue;
+    // ー must follow a kana that produces a vowel (not at start, not after ッ or ン).
+    if (one === 'ー') {
+      if (i === 0) return false;  // Leading ー is invalid.
+      const prev = kana[i - 1]!;
+      if (!MONOGRAPHS[prev]) return false;  // Previous character doesn't have a vowel to lengthen.
+      continue;
+    }
+    if (MONOGRAPHS[one] || one === 'ッ' || one === 'ン' || /[0-9]/.test(one)) continue;
     return false;
   }
   return true;
@@ -153,7 +160,13 @@ function toSyllables(kana: string): Syllable[] {
     if (ch === 'ー') {
       // Choonpu lengthens the previous syllable's vowel rather than adding one.
       const prev = out[out.length - 1];
-      if (prev?.vowel) { prev.long = true; prev.src += ch; }
+      if (prev?.vowel) {
+        prev.long = true;
+        prev.src += ch;
+      } else {
+        // Unattached ー: include it verbatim so it doesn't vanish silently.
+        push(ch, ch);
+      }
       continue;
     }
 

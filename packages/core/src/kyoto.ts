@@ -27,7 +27,7 @@
  */
 
 /** Directional markers that terminate a Kyoto street phrase. */
-const DIRECTION = '上ル|上る|下ル|下る|東入ル|東入る|西入ル|西入る|東入|西入|東入る|西入る';
+const DIRECTION = '上ル|上る|下ル|下る|東入ル|東入る|西入ル|西入る|東入|西入';
 
 /**
  * A street phrase sitting between the ward and the town.

@@ -24,7 +24,7 @@ import {
 } from './dataAccess.js';
 import { kanaToRomaji } from './romaji/hepburn.js';
 import { isPlausibleReading } from './romaji/validate.js';
-import { SUFFIXES } from './romaji/format.js';
+import { SUFFIXES, formatMunicipality, formatTown } from './romaji/format.js';
 import { numberToKanji } from './kanjiNumbers.js';
 import { containsJapanese } from './script.js';
 
@@ -89,8 +89,38 @@ export function stemKey(token: string): string {
  * Keys come only from the record's kana and romaji fields — the Japanese name
  * is never transliterated, since inferring a reading from kanji is exactly the
  * guess this library refuses to make.
+ *
+ * `ja` is the record's Japanese name (e.g. `record.city`), needed only to key
+ * a municipality-style name — one whose Japanese form ends with an
+ * administrative-suffix kanji (`市`, `町`, `村`, ...) — the same way
+ * `formatMunicipality` (romaji/format.ts) actually renders it. That is NOT
+ * the same as transliterating `ja` itself: `formatMunicipality` still reads
+ * the *reading* only from `kana`/`romajiField`, `ja` only decides which
+ * suffix table entry applies. Omit `ja` for a name with no administrative
+ * suffix to key (e.g. a town's `oaza_cho`) — `formatTown` never splits one
+ * off, so there is nothing for this branch to mirror.
+ *
+ * Why this branch exists, not just the plain kana transliteration above:
+ * `formatMunicipality` renders a suffix-bearing name as `Stem-suffix`, where
+ * `style` is applied only to the STEM and `suffix` is always one of the
+ * SUFFIXES table's plain, style-invariant strings (`cho`, `machi`, ...) —
+ * literally appended, never itself passed through `renderLongVowel`. But the
+ * kana for some suffixes (町 read チョウ, i.e. `cho`) has its OWN internal
+ * long vowel (o+u), so transliterating the whole kana reading in one pass, as
+ * the block above does, renders that suffix as `choh` under 'oh' style — a
+ * spelling `formatMunicipality` never emits (it always emits literal `cho`).
+ * `normalizeRomajiKey` strips diacritics, so 'none'/'macron'/'circumflex'
+ * collapse the whole-string and split-then-render paths to the same key
+ * regardless; only 'oh' adds a literal ASCII `h` that survives normalization,
+ * which is why this only actually changes behavior for that one style — but
+ * all three are still generated here, both for symmetry with the block above
+ * and so a future change to any one style's rendering can't reopen this
+ * silently. Confirmed against the real bug this fixes: `toRomaji('北海道石狩郡当別町',
+ * {longVowel:'oh'})` renders 当別町 (トウベツチョウ) as `Tohbetsu-cho`, which
+ * `fromRomaji` could not read back before this branch existed — see
+ * municipalityLongVowelOh.test.ts.
  */
-export function candidateKeys(kana?: string, romajiField?: string): Set<string> {
+export function candidateKeys(kana?: string, romajiField?: string, ja?: string): Set<string> {
   const keys = new Set<string>();
   const add = (v: string | undefined) => {
     if (!v) return;
@@ -103,6 +133,11 @@ export function candidateKeys(kana?: string, romajiField?: string): Set<string> 
     add(kanaToRomaji(kana, 'none'));
     add(kanaToRomaji(kana, 'macron'));
     add(kanaToRomaji(kana, 'oh'));
+  }
+  if (ja) {
+    for (const style of ['none', 'macron', 'oh'] as const) {
+      add(formatMunicipality(ja, kana, romajiField, style));
+    }
   }
   keys.delete('');
   return keys;
@@ -407,6 +442,27 @@ export async function fromRomaji(
   return { ok: true, value: { formatted: renderJapanese(parsed), parsed }, ...(unparsed ? { unparsed } : {}) };
 }
 
+/**
+ * The romaji to attach to a matched town's `AddressComponent`.
+ *
+ * Prefers the dataset's own `oaza_cho_r` field verbatim, unchanged from
+ * before — this is not the place to relitigate its casing or formatting.
+ * When that field is absent (roughly 10% of towns; see CLAUDE.md's "データの
+ * 実情"), the town can still have been matched through its kana reading (see
+ * `matchTowns`/`candidateKeys` above) — in which case that same deterministic
+ * transliteration belongs on the result instead of being thrown away. Falls
+ * back to `undefined`, never a guess, when neither field is present.
+ *
+ * Without this, `parsed.town.romaji` silently went missing for exactly the
+ * towns matched via kana alone, and `formats/index.ts`'s `streetOf` then fell
+ * back to `town.ja`, putting kanji into an address declared
+ * `languageCode: "en"`. See docs/project-status.md item 3 and
+ * fixtures-kana-only-town/README.md.
+ */
+function resolveTownRomaji(record: MachiAzaRecord): string | undefined {
+  return record.oaza_cho_r ?? formatTown(record.oaza_cho_k, undefined, 'none');
+}
+
 function buildParsed(
   partial: Partial<ParsedAddress>,
   record: MachiAzaRecord,
@@ -415,6 +471,7 @@ function buildParsed(
   unparsed: string | undefined,
   postalCode: string | undefined,
 ): ParsedAddress {
+  const townRomaji = resolveTownRomaji(record);
   return {
     ...(postalCode ? { postalCode } : {}),
     ...(partial.prefecture ? { prefecture: partial.prefecture } : {}),
@@ -424,7 +481,7 @@ function buildParsed(
     town: {
       ja: record.oaza_cho ?? '',
       ...(record.oaza_cho_k ? { kana: record.oaza_cho_k } : {}),
-      ...(record.oaza_cho_r ? { romaji: record.oaza_cho_r } : {}),
+      ...(townRomaji ? { romaji: townRomaji } : {}),
     },
     ...(chome !== undefined ? { chome } : {}),
     blockNumbers,
@@ -531,8 +588,14 @@ type MatchQuality = 'exact' | 'stem';
  * combination is exactly why this function is exported: so a test can pin
  * the difference directly, rather than relying on a national sweep no unit
  * test runs.
+ *
+ * `ja` behaves exactly as documented on {@link candidateKeys} — pass the
+ * record's Japanese name to also key the administrative-suffix-aware
+ * rendering `formatMunicipality` actually emits (needed so e.g. `Tohbetsu-cho`
+ * counts as an EXACT match for 当別町, not merely a stem match, preserving
+ * `matchMunicipality`'s exact-over-stem tiebreaker under the 'oh' style).
  */
-export function exactKeys(kana?: string, romajiField?: string): Set<string> {
+export function exactKeys(kana?: string, romajiField?: string, ja?: string): Set<string> {
   const keys = new Set<string>();
   const add = (v: string | undefined) => {
     if (v) keys.add(normalizeRomajiKey(v));
@@ -542,6 +605,11 @@ export function exactKeys(kana?: string, romajiField?: string): Set<string> {
     add(kanaToRomaji(kana, 'none'));
     add(kanaToRomaji(kana, 'macron'));
     add(kanaToRomaji(kana, 'oh'));
+  }
+  if (ja) {
+    for (const style of ['none', 'macron', 'oh'] as const) {
+      add(formatMunicipality(ja, kana, romajiField, style));
+    }
   }
   keys.delete('');
   return keys;
@@ -624,8 +692,8 @@ function combine(a: MatchQuality, b: MatchQuality): MatchQuality {
 }
 
 function matchesMunicipality(record: CityRecord, tail: string[]): MatchQuality | undefined {
-  const cityExact = exactKeys(record.city_k, record.city_r);
-  const cityAll = candidateKeys(record.city_k, record.city_r);
+  const cityExact = exactKeys(record.city_k, record.city_r, record.city);
+  const cityAll = candidateKeys(record.city_k, record.city_r, record.city);
 
   if (tail.length === 1) {
     const only = tail[0]!;
@@ -639,16 +707,16 @@ function matchesMunicipality(record: CityRecord, tail: string[]): MatchQuality |
   const [first, second] = tail as [string, string];
   if (record.ward) {
     // Western order puts the smaller unit first: "Chuo-ku, Sapporo-shi".
-    const wardExact = exactKeys(record.ward_k, record.ward_r);
-    const wardAll = candidateKeys(record.ward_k, record.ward_r);
+    const wardExact = exactKeys(record.ward_k, record.ward_r, record.ward);
+    const wardAll = candidateKeys(record.ward_k, record.ward_r, record.ward);
     const wardQ = segmentQuality(wardExact, wardAll, first, record.ward);
     const cityQ = segmentQuality(cityExact, cityAll, second, record.city);
     if (wardQ && cityQ) return combine(wardQ, cityQ);
   }
   if (record.county) {
     // "Izumozaki-machi, Santo-gun"
-    const countyExact = exactKeys(record.county_k, record.county_r);
-    const countyAll = candidateKeys(record.county_k, record.county_r);
+    const countyExact = exactKeys(record.county_k, record.county_r, record.county);
+    const countyAll = candidateKeys(record.county_k, record.county_r, record.county);
     const cityQ = segmentQuality(cityExact, cityAll, first, record.city);
     const countyQ = segmentQuality(countyExact, countyAll, second, record.county);
     if (cityQ && countyQ) return combine(cityQ, countyQ);

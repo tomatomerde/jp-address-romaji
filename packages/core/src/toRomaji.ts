@@ -16,11 +16,12 @@ import { findPrefectureByJa } from './data/prefectures.js';
 import {
   applyCapitalization,
   formatBlockNumbers,
+  formatKoaza,
   formatMunicipality,
   formatTown,
 } from './romaji/format.js';
 import { splitKyotoStreet } from './kyoto.js';
-import { isPlausibleReading } from './romaji/validate.js';
+import { isKoazaReadingComplete, isPlausibleReading } from './romaji/validate.js';
 
 const DEFAULTS: Required<Omit<ToRomajiOptions, never>> = {
   longVowel: 'none',
@@ -177,6 +178,45 @@ export async function toRomaji(
     romaji: townRomaji,
   };
 
+  // A named koaza (small-area subdivision) sitting inside the town, e.g.
+  // 「本町三丁目大横」's koaza 「三丁目大横」. `recoverKoazaNumber`
+  // (normalizer.ts) already folded a purely-numeric koaza into the block
+  // numbers, so anything that reaches us here is text that must itself be
+  // romanized — or refused, never dropped. See CLAUDE.md's "never guess a
+  // reading" value and docs/project-status.md item 1 for the bug this closes:
+  // `toRomaji('長野県飯田市本町三丁目大横1-1', {})` used to silently return
+  // "1-1 Hommachi, Iida-shi, Nagano, Japan", a DIFFERENT, koaza-less address.
+  let koaza: AddressComponent | undefined;
+  if (normalized.koaza) {
+    if (!isKoazaReadingComplete(normalized.koaza.ja, normalized.koaza.kana)) {
+      return fail(
+        'KOAZA_READING_INCOMPLETE',
+        `"${normalized.town.ja}" has a named koaza "${normalized.koaza.ja}", but the dataset's ` +
+          `reading for it${normalized.koaza.kana ? ` ("${normalized.koaza.kana}")` : ''} cannot ` +
+          `be verified to cover the whole name. Refusing to romanize a possibly-truncated ` +
+          `reading rather than silently dropping part of the address.`,
+        { ...partial, town, koaza: { ja: normalized.koaza.ja }, level: normalized.level },
+      );
+    }
+    const koazaRomaji = formatKoaza(normalized.koaza.kana, normalized.koaza.romaji, opts.longVowel);
+    if (!koazaRomaji) {
+      const needsKana = opts.longVowel !== 'none';
+      return fail(
+        needsKana && normalized.koaza.romaji ? 'KANA_REQUIRED_FOR_LONG_VOWELS' : 'NO_ROMAJI_DATA',
+        needsKana && normalized.koaza.romaji
+          ? `The "${opts.longVowel}" long-vowel style needs a kana reading, and none is ` +
+            `available for the koaza "${normalized.koaza.ja}".`
+          : `The dataset has no usable romanization for the koaza "${normalized.koaza.ja}".`,
+        { ...partial, town, koaza: { ja: normalized.koaza.ja }, level: normalized.level },
+      );
+    }
+    koaza = {
+      ja: normalized.koaza.ja,
+      ...(normalized.koaza.kana ? { kana: normalized.koaza.kana } : {}),
+      romaji: koazaRomaji,
+    };
+  }
+
   const { blockNumbers, unparsed } = splitBlockNumbers(normalized.rest);
 
   const parsed: ParsedAddress = {
@@ -186,6 +226,7 @@ export async function toRomaji(
     city,
     ...(ward ? { ward } : {}),
     town,
+    ...(koaza ? { koaza } : {}),
     ...(kyotoStreet ? { kyotoStreet } : {}),
     ...(normalized.chome !== undefined ? { chome: normalized.chome } : {}),
     blockNumbers,
@@ -259,11 +300,17 @@ export function extractPostalCode(input: string): string | undefined {
 function render(parsed: ParsedAddress, opts: Required<ToRomajiOptions>): string {
   const numbers = formatBlockNumbers(parsed.chome, parsed.blockNumbers);
   const town = parsed.town?.romaji ?? '';
+  // Administratively, a koaza sits between the town and the chome/block
+  // numbers (town > koaza > chome > banchi), so it is placed immediately
+  // next to the town on the side that reflects that — adjacent to it in both
+  // orders, and always as its own space-separated word so it can never be
+  // mistaken for one of the hyphenated digits in `numbers`.
+  const koaza = parsed.koaza?.romaji;
   const segments: string[] = [];
 
   if (opts.order === 'western') {
     // Smallest unit first: "3-5-12 Nishi-Shinjuku, Shibuya-ku, Tokyo".
-    segments.push([numbers, town].filter(Boolean).join(' '));
+    segments.push([numbers, koaza, town].filter(Boolean).join(' '));
     if (parsed.ward?.romaji) segments.push(parsed.ward.romaji);
     if (parsed.city?.romaji) segments.push(parsed.city.romaji);
     if (parsed.county?.romaji) segments.push(parsed.county.romaji);
@@ -274,7 +321,7 @@ function render(parsed: ParsedAddress, opts: Required<ToRomajiOptions>): string 
     if (parsed.county?.romaji) segments.push(parsed.county.romaji);
     if (parsed.city?.romaji) segments.push(parsed.city.romaji);
     if (parsed.ward?.romaji) segments.push(parsed.ward.romaji);
-    segments.push([town, numbers].filter(Boolean).join(' '));
+    segments.push([town, koaza, numbers].filter(Boolean).join(' '));
   }
 
   let line = segments.filter(Boolean).join(', ');

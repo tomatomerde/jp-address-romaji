@@ -137,6 +137,15 @@ jobs:
       # -----------------------------------------------------------------
       - name: Determine release plan
         shell: bash
+        # RAW_CONCURRENCY carries the workflow_dispatch `concurrency` input
+        # (a free-text string) in via the environment rather than spliced
+        # directly into the script below. This job holds id-token: write and
+        # is the sole npm trusted publisher (see the permissions comment
+        # above) — an unquoted `${{ github.event.inputs.concurrency }}`
+        # inside `run:` would let that input be interpreted as shell syntax
+        # instead of a plain value.
+        env:
+          RAW_CONCURRENCY: ${{ github.event.inputs.concurrency }}
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             TAG="${{ github.ref_name }}"
@@ -253,7 +262,7 @@ jobs:
             *) echo "Unknown packages input: '$PACKAGES_INPUT'" >&2; exit 1 ;;
           esac
 
-          echo "CONCURRENCY=${{ github.event.inputs.concurrency || '8' }}" >> "$GITHUB_ENV"
+          echo "CONCURRENCY=${RAW_CONCURRENCY:-8}" >> "$GITHUB_ENV"
 
       # -----------------------------------------------------------------
       # Make the target version(s) visible even on the paths that don't
