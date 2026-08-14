@@ -118,6 +118,16 @@ function recoverKoazaNumber(koaza: string | undefined, chomeN: number | undefine
   return match?.[1];
 }
 
+/**
+ * Is this koaza just a numbering scheme (`２地割`, `１号`, ...) rather than a
+ * name? Mirrors the guard in {@link recoverKoazaNumber}: the same shape that
+ * function recovers into a block number is the one case where the koaza
+ * itself carries no naming information worth keeping.
+ */
+function isNumberedKoaza(koaza: string): boolean {
+  return NUMBERED_KOAZA.test(koaza.normalize('NFKC'));
+}
+
 /** Structured view of a normalization result, with readings attached. */
 export interface NormalizedAddress {
   pref?: { ja: string; kana?: string; romaji?: string };
@@ -125,6 +135,17 @@ export interface NormalizedAddress {
   city?: { ja: string; kana?: string; romaji?: string };
   ward?: { ja: string; kana?: string; romaji?: string };
   town?: { ja: string; kana?: string; romaji?: string };
+  /**
+   * Koaza (small-area name) that follows the town/chome, when the dataset
+   * carries one and it is not a bare numbering scheme (`２地割`, `１号`) — see
+   * {@link isNumberedKoaza}. This is part of the official address:
+   * `SingleMachiAza`'s own `machiAzaName()` helper defines the full town-字
+   * name as `oaza_cho + chome + koaza`. `toRomaji.ts` has no output field to
+   * put this in (unlike a purely numeric koaza's digit, which is folded into
+   * a block number above), so its presence here is a signal to refuse rather
+   * than silently drop it — see the comment at its one call site.
+   */
+  koaza?: { ja: string };
   chome?: number;
   /** Remaining text after the town: block numbers plus anything unparsed. */
   rest: string;
@@ -185,6 +206,19 @@ export async function normalizeJapanese(input: string): Promise<NormalizedAddres
       romaji: machiAza.oaza_cho_r,
     };
     if (machiAza.chome_n !== undefined) out.chome = machiAza.chome_n;
+    // A named koaza (小字) is part of the official address — machiAzaName()
+    // in @geolonia/japanese-addresses-v2 defines the full town-字 name as
+    // oaza_cho + chome + koaza. A koaza that is only a numbering scheme
+    // (isNumberedKoaza) carries no naming information; its digit is instead
+    // recovered into a block number above. Anything else is surfaced here so
+    // toRomaji.ts can refuse rather than silently drop it, which previously
+    // turned "本町三丁目大横" into plain "本町": a real, different, existing
+    // address one town over. Only `ja` is kept — toRomaji.ts's refusal
+    // message is the only consumer, and it has no output field to put a
+    // romanized koaza in regardless of whether one could be produced.
+    if (machiAza.koaza && !isNumberedKoaza(machiAza.koaza)) {
+      out.koaza = { ja: machiAza.koaza };
+    }
   } else if (result.town) {
     out.town = { ja: result.town };
   }

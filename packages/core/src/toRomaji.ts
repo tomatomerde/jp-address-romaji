@@ -171,6 +171,35 @@ export async function toRomaji(
     );
   }
 
+  // A koaza (小字) that follows the town is part of the official address —
+  // machiAzaName() in @geolonia/japanese-addresses-v2 defines the full
+  // town-字 name as oaza_cho + chome + koaza — so it cannot simply be
+  // dropped: doing so silently produces a different, shorter address, which
+  // may coincidentally be a different real town (see koazaName.test.ts for
+  // 長野県飯田市本町三丁目大横, which used to come back as plain 本町一丁目).
+  //
+  // `jp-address-romaji`'s ParsedAddress has no separate field to put a koaza
+  // in (unlike a purely numeric koaza's leading digit, which recoverKoazaNumber
+  // in normalizer.ts folds into blockNumbers), and this module cannot invent
+  // one without touching types.ts. Nor can the koaza be folded into `town`'s
+  // own ja/kana/romaji: fromRomaji.ts only ever matches a town name against
+  // its oaza_cho fields, never koaza, so an "ok" result combining the two
+  // could never be parsed back to the same address — trading one silent wrong
+  // address for another, unverifiable one. Refusing outright is the only
+  // option this module can both implement and prove correct.
+  if (normalized.koaza) {
+    const fullJa = `${normalized.town.ja}${normalized.koaza.ja}`;
+    return fail(
+      'NO_ROMAJI_DATA',
+      `"${normalized.town.ja}" resolves to a specific koaza (small-area name) ` +
+        `"${normalized.koaza.ja}" ("${fullJa}"), but this library has no output field for a ` +
+        `koaza and cannot safely combine it with the town name. Dropping it would silently ` +
+        `produce a different, shorter address ("${normalized.town.ja}" alone), so the ` +
+        `conversion is refused instead.`,
+      { ...partial, town: { ja: fullJa }, level: normalized.level },
+    );
+  }
+
   const town: AddressComponent = {
     ja: normalized.town.ja,
     ...(normalized.town.kana ? { kana: normalized.town.kana } : {}),

@@ -127,6 +127,24 @@ export function useOhSuffixBoundaryFixtureData(): void {
 }
 
 /**
+ * A ninth, separate fixture dataset holding a real town (長野県飯田市本町) that
+ * has both ordinary chome rows and named-koaza rows (`三丁目大横`, `四丁目大横`),
+ * plus a plain koaza-less control town (曙町) in the same city. See
+ * fixtures-koaza-name/README.md.
+ */
+export const KOAZA_NAME_FIXTURE_DATA_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'fixtures-koaza-name',
+  'data',
+);
+
+/** Point the library at the named-koaza fixture dataset. */
+export function useKoazaNameFixtureData(): void {
+  clearDataCache();
+  configureDataSource({ dataDir: KOAZA_NAME_FIXTURE_DATA_DIR });
+}
+
+/**
  * Run `fn` with `fetch` replaced by a stub that throws.
  *
  * Any network access — by our code or by the upstream normalizer — fails the
