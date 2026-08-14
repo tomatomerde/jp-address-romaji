@@ -43,6 +43,15 @@ other is now refused, because fixing it properly needs an API change this releas
   string finds the 町 of 川崎町 and refuses an ordinary address. Measured on the real dataset,
   sampling 400 koaza-bearing towns written without their koaza: zero change.
 
+  A koaza numbered in *kanji* counts as a named one, and this is where you are most likely to
+  meet the change: `兵庫県朝来市生野町口銀谷一丁目1-1` (koaza `字一丁目`, the town has no chome)
+  used to come back as `"1-1 Ikunocho Kuchiganaya"` with the `一丁目` gone, and
+  `京都府綾部市小畑町六条1-1` lost its `六条` the same way. Both are now refused. They cannot be
+  folded into a block number the way `0.1.3` folds `２地割`, because doing so would present a
+  koaza as a chome the town does not have. Written without the koaza — `生野町口銀谷1-1` — they
+  convert as before. Across a 23,486-address national round-trip, 43 addresses moved from a
+  wrong answer to a refusal on this shape.
+
   The numeric koaza handled in `0.1.3` (`青笹町青笹2-3`, where the digit becomes a block number)
   is unchanged. Giving koaza a real home in the output is left for a release that can change the
   API.
