@@ -108,6 +108,25 @@ export function useSuffixCategoryFixtureData(): void {
 }
 
 /**
+ * An eighth, separate fixture dataset holding two real municipalities
+ * (北海道石狩郡当別町 and 千葉県長生郡長南町) that reproduce the
+ * `longVowel: 'oh'` stem/suffix boundary bug: `fromRomaji` could not read
+ * back `formatMunicipality`'s own `'oh'`-style output. See
+ * fixtures-oh-suffix-boundary/README.md.
+ */
+export const OH_SUFFIX_BOUNDARY_FIXTURE_DATA_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'fixtures-oh-suffix-boundary',
+  'data',
+);
+
+/** Point the library at the oh-style suffix-boundary fixture dataset. */
+export function useOhSuffixBoundaryFixtureData(): void {
+  clearDataCache();
+  configureDataSource({ dataDir: OH_SUFFIX_BOUNDARY_FIXTURE_DATA_DIR });
+}
+
+/**
  * Run `fn` with `fetch` replaced by a stub that throws.
  *
  * Any network access — by our code or by the upstream normalizer — fails the

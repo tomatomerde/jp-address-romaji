@@ -24,7 +24,7 @@ import {
 } from './dataAccess.js';
 import { kanaToRomaji } from './romaji/hepburn.js';
 import { isPlausibleReading } from './romaji/validate.js';
-import { SUFFIXES } from './romaji/format.js';
+import { SUFFIXES, splitAdministrativeSuffix, romanizeStem } from './romaji/format.js';
 import { numberToKanji } from './kanjiNumbers.js';
 import { containsJapanese } from './script.js';
 
@@ -84,13 +84,51 @@ export function stemKey(token: string): string {
 }
 
 /**
+ * The "oh"-style key {@link formatMunicipality} actually emits for a
+ * municipality field, when it differs from oh-transliterating the whole
+ * kana reading (stem + suffix) as one word.
+ *
+ * `formatMunicipality` never "oh"-s the suffix: it romanizes the STEM alone
+ * in the caller's style and appends the suffix's literal reading straight
+ * from {@link SUFFIXES} (`Tohbetsu-cho`, never `Tohbetsuchoh`). Whole-word
+ * "oh" transliteration (via `kanaToRomaji(kana, 'oh')` above) instead treats
+ * the reading as one run of kana, which diverges from that split rendering
+ * whenever:
+ *  - the suffix's own kana has a long vowel (町 -> チョウ, "oh"-ed as a whole
+ *    word to `...choh`, never stemmable back to `...cho` by
+ *    {@link stemKey}'s literal `cho`/`machi`/... patterns), or
+ *  - a moraic ン sits right at the stem/suffix boundary: analyzed as part of
+ *    one continuous word it can assimilate to the suffix's leading consonant
+ *    (チョウナン+マチ -> `...nammachi`), but {@link romanizeStem} renders the
+ *    stem in isolation, with no following syllable to assimilate toward, so
+ *    it renders `n` (`Chohnan-machi`, matching what `formatMunicipality`
+ *    itself emits at every other style too).
+ *
+ * `ja` is required (the record's own kanji name, e.g. `record.city`) because
+ * it is what {@link splitAdministrativeSuffix} uses to pick the applicable
+ * suffix table entry; without it there is no way to know which suffix (if
+ * any) governs this reading. `formatTown` never splits a town name this way,
+ * so town-level matching intentionally omits `ja` and gets no such key.
+ */
+function ohSplitKey(ja: string | undefined, kana: string | undefined): string | undefined {
+  if (!ja || !kana) return undefined;
+  const { stemKana, suffix } = splitAdministrativeSuffix(ja, kana);
+  if (!stemKana || !suffix) return undefined;
+  const ohStem = romanizeStem(stemKana, undefined, 'oh');
+  return ohStem ? `${ohStem}${suffix}` : undefined;
+}
+
+/**
  * All romaji spellings a dataset record can reasonably be written as.
  *
  * Keys come only from the record's kana and romaji fields — the Japanese name
  * is never transliterated, since inferring a reading from kanji is exactly the
  * guess this library refuses to make.
+ *
+ * `ja` (the record's own kanji name) is optional and only meaningful for
+ * municipality-level fields (city/ward/county) — see {@link ohSplitKey}.
  */
-export function candidateKeys(kana?: string, romajiField?: string): Set<string> {
+export function candidateKeys(kana?: string, romajiField?: string, ja?: string): Set<string> {
   const keys = new Set<string>();
   const add = (v: string | undefined) => {
     if (!v) return;
@@ -103,6 +141,7 @@ export function candidateKeys(kana?: string, romajiField?: string): Set<string> 
     add(kanaToRomaji(kana, 'none'));
     add(kanaToRomaji(kana, 'macron'));
     add(kanaToRomaji(kana, 'oh'));
+    add(ohSplitKey(ja, kana));
   }
   keys.delete('');
   return keys;
@@ -532,7 +571,7 @@ type MatchQuality = 'exact' | 'stem';
  * the difference directly, rather than relying on a national sweep no unit
  * test runs.
  */
-export function exactKeys(kana?: string, romajiField?: string): Set<string> {
+export function exactKeys(kana?: string, romajiField?: string, ja?: string): Set<string> {
   const keys = new Set<string>();
   const add = (v: string | undefined) => {
     if (v) keys.add(normalizeRomajiKey(v));
@@ -542,6 +581,11 @@ export function exactKeys(kana?: string, romajiField?: string): Set<string> {
     add(kanaToRomaji(kana, 'none'));
     add(kanaToRomaji(kana, 'macron'));
     add(kanaToRomaji(kana, 'oh'));
+    // Same split-suffix reconstruction as candidateKeys — see ohSplitKey.
+    // This is still a full spelling WITH its suffix attached (never a bare
+    // stem), so adding it here does not reopen the stem-inclusiveness gap
+    // exactKeysExcludesStem.test.ts pins.
+    add(ohSplitKey(ja, kana));
   }
   keys.delete('');
   return keys;
@@ -624,8 +668,8 @@ function combine(a: MatchQuality, b: MatchQuality): MatchQuality {
 }
 
 function matchesMunicipality(record: CityRecord, tail: string[]): MatchQuality | undefined {
-  const cityExact = exactKeys(record.city_k, record.city_r);
-  const cityAll = candidateKeys(record.city_k, record.city_r);
+  const cityExact = exactKeys(record.city_k, record.city_r, record.city);
+  const cityAll = candidateKeys(record.city_k, record.city_r, record.city);
 
   if (tail.length === 1) {
     const only = tail[0]!;
@@ -639,16 +683,16 @@ function matchesMunicipality(record: CityRecord, tail: string[]): MatchQuality |
   const [first, second] = tail as [string, string];
   if (record.ward) {
     // Western order puts the smaller unit first: "Chuo-ku, Sapporo-shi".
-    const wardExact = exactKeys(record.ward_k, record.ward_r);
-    const wardAll = candidateKeys(record.ward_k, record.ward_r);
+    const wardExact = exactKeys(record.ward_k, record.ward_r, record.ward);
+    const wardAll = candidateKeys(record.ward_k, record.ward_r, record.ward);
     const wardQ = segmentQuality(wardExact, wardAll, first, record.ward);
     const cityQ = segmentQuality(cityExact, cityAll, second, record.city);
     if (wardQ && cityQ) return combine(wardQ, cityQ);
   }
   if (record.county) {
     // "Izumozaki-machi, Santo-gun"
-    const countyExact = exactKeys(record.county_k, record.county_r);
-    const countyAll = candidateKeys(record.county_k, record.county_r);
+    const countyExact = exactKeys(record.county_k, record.county_r, record.county);
+    const countyAll = candidateKeys(record.county_k, record.county_r, record.county);
     const cityQ = segmentQuality(cityExact, cityAll, first, record.city);
     const countyQ = segmentQuality(countyExact, countyAll, second, record.county);
     if (cityQ && countyQ) return combine(cityQ, countyQ);
