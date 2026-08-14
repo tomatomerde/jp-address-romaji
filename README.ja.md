@@ -115,6 +115,8 @@ Node.js 18 以上。オフラインデータをファイルシステムから読
 - **`fromRomaji` は西洋語順のみ**。都道府県が末尾にある前提です。`order: 'japanese'` の出力は
   表示用であり、そのまま入力に戻すことは想定していません（`PREFECTURE_NOT_FOUND` になります）。
   既定の西洋語順であればラウンドトリップします。
+- **ローマ字から koaza を復元すること**。`fromRomaji` は koaza 専用の索引を持たないため、元の
+  日本語住所にあった koaza はローマ字を経由した往復では復元できません（下記参照）。
 
 ### 京都市の通り名住所
 
@@ -137,6 +139,33 @@ await toRomaji('京都府京都市中京区烏丸通四条上ル笋町123');
 
 通り名は認識できたが後続の町字がデータに無い場合は、`KYOTO_STREET_ADDRESS` を返し、
 `partial.kyotoStreet` に通り名が入ります。
+
+### 小字（named koaza）
+
+町の下にさらに細かい区画名——小字——が付く住所があります。たとえば `長野県飯田市本町三丁目大横`
+の `三丁目大横` です。データセットの読みがその小字全体を覆っていると確認できたときは、
+ローマ字化して `parsed.koaza` に含めます:
+
+```ts
+await toRomaji('長野県飯田市本町三丁目大横1-1');
+// formatted:    '1-1 Sanchomeoyoko Hommachi, Iida-shi, Nagano, Japan'
+// parsed.koaza: { ja: '三丁目大横', kana: 'サンチョウメオオヨコ', romaji: 'Sanchomeoyoko' }
+```
+
+同梱データセット全体での実測（`scripts/verify-data-assumptions.ts` の assumption 6/6b）:
+638,567 件の町エントリのうち 437,014 件（68.437%）が koaza を持ちます。うち 18,409 件は数字のみで
+`blockNumbers` に畳み込まれ、残る 418,605 件が名前つきです。名前つきの全件がカナ読みを持ちますが、
+専用のローマ字フィールドを持つのは 781 件（0.187%）だけです。完全性チェックは名前つきのうち
+417,213 件（99.667%）を通し、1,392 件（0.333%）を拒否します。拒否されるものはすべて同じ形——
+末尾が方位を表す漢字（北/南/東/西/上/下/中）で、カナ読みがそこに届いていません。たとえば
+南郷通（札幌市白石区）の koaza `一丁目北` のカナ読みは `チョウメ` までしか届きません。こうした
+途中で切れた読みをローマ字化すると、別の実在する場所を静かに指してしまうため、
+`KOAZA_READING_INCOMPLETE` として拒否します。
+
+`fromRomaji` は koaza を復元しません——koaza 専用の索引が無いためです——ので、これは片方向だけの
+機能拡張です。koaza を含む住所をローマ字化した文字列を `fromRomaji` に戻しても、同じ日本語住所には
+なりません。多くは（`TOWN_NOT_FOUND` などで）失敗し、koaza の無い町に静かに解決されることは
+ありません。
 
 ### 実際に遭遇するデータ側の欠陥
 
@@ -271,6 +300,7 @@ toFormat(parsed, 'stripe');
 | `NO_ROMAJI_DATA` | 町字にローマ字もカナも無い。農村部の `大字` 名で頻出。 |
 | `CORRUPT_ROMAJI_DATA` | データの読みが自己矛盾しており棄却した。 |
 | `KANA_REQUIRED_FOR_LONG_VOWELS` | 長音表記を要求されたがカナ読みが無い。 |
+| `KOAZA_READING_INCOMPLETE` | 町に名前つきの koaza があるが、その読みが名前全体を覆っているか確認できない（[小字（named koaza）](#小字named-koaza)を参照）。読みが不完全なまま出す代わりに拒否する。 |
 | `AMBIGUOUS` | 複数の日本語住所が該当。`candidates` に格納。 |
 | `TOWN_NOT_FOUND` / `CITY_NOT_FOUND` / `PREFECTURE_NOT_FOUND` | その階層で解決が止まった。`partial` に判明分を格納。 |
 | `KYOTO_STREET_ADDRESS` | 通り名は認識できたが、後続の町字がデータに無い（[京都市の通り名住所](#京都市の通り名住所)）。 |

@@ -114,6 +114,8 @@ a built dataset (`pnpm coverage:measure --data ./address-data`), not an `npm ins
 - **`fromRomaji` reads western order only.** It expects the prefecture last. Output produced with
   `order: 'japanese'` is for display, not for feeding back in — `fromRomaji` will reject it with
   `PREFECTURE_NOT_FOUND`. Round-tripping works with the default western order.
+- **Reconstructing a koaza from romaji.** `fromRomaji` has no per-koaza index, so a koaza present in
+  the original Japanese address cannot be recovered by round-tripping through romaji — see below.
 
 ### Kyoto street-name addresses
 
@@ -138,6 +140,33 @@ romaji loses it.
 
 If the street phrase is recognized but the town after it is not in the dataset, you get
 `KYOTO_STREET_ADDRESS` with the phrase in `partial.kyotoStreet`.
+
+### Named koaza (小字)
+
+Some towns have a further, named subdivision below the town level — a small-area name such as
+`三丁目大横` in `長野県飯田市本町三丁目大横`. When the dataset's reading for it can be verified to
+cover the whole name, it is romanized and included on `parsed.koaza`:
+
+```ts
+await toRomaji('長野県飯田市本町三丁目大横1-1');
+// formatted:    '1-1 Sanchomeoyoko Hommachi, Iida-shi, Nagano, Japan'
+// parsed.koaza: { ja: '三丁目大横', kana: 'サンチョウメオオヨコ', romaji: 'Sanchomeoyoko' }
+```
+
+Measured over the whole dataset (`scripts/verify-data-assumptions.ts`, assumption 6/6b): 437,014 of
+638,567 town rows carry a koaza (68.437%). 18,409 of those are purely numeric and are folded into
+`blockNumbers` instead; of the remaining 418,605 named koaza, every one has a kana reading, but only
+781 (0.187%) also carry a dedicated romaji field. The completeness check passes 417,213 of the named
+ones (99.667%) and refuses 1,392 (0.333%). Every sampled refusal has the same shape: a koaza ending
+in a directional kanji (北/南/東/西/上/下/中) whose kana reading stops short of it — 南郷通
+(札幌市白石区)'s koaza `一丁目北`, for example, has a kana reading that reaches only `チョウメ`.
+Romanizing a truncated reading like that would silently name a different, real place, so it is
+refused with `KOAZA_READING_INCOMPLETE` instead.
+
+`fromRomaji` does not reconstruct a koaza — there is no per-koaza index to search — so this is a
+one-way enhancement. A koaza-bearing address that has been romanized cannot be read back to the same
+Japanese address; it fails (typically `TOWN_NOT_FOUND`) rather than silently resolving to the
+koaza-less town.
 
 ### Known dataset defects you will hit
 
@@ -278,6 +307,7 @@ the compiler makes you handle the failure case.
 | `NO_ROMAJI_DATA` | The town has neither a romaji field nor a kana reading. Common for rural `大字` names. |
 | `CORRUPT_ROMAJI_DATA` | The dataset's reading for this entry is self-inconsistent and was rejected. |
 | `KANA_REQUIRED_FOR_LONG_VOWELS` | A macron/circumflex/`oh` style was requested but no kana reading exists. |
+| `KOAZA_READING_INCOMPLETE` | The town has a named koaza, but its reading cannot be verified to cover the whole name (see [Named koaza](#named-koaza-小字)). Refused rather than romanized incomplete. |
 | `AMBIGUOUS` | Several Japanese addresses match. `candidates` holds them. |
 | `TOWN_NOT_FOUND` / `CITY_NOT_FOUND` / `PREFECTURE_NOT_FOUND` | Resolution stopped at that level. `partial` holds what was resolved. |
 | `KYOTO_STREET_ADDRESS` | The street phrase was understood but the town after it is not in the dataset (see [Kyoto street-name addresses](#kyoto-street-name-addresses)). |

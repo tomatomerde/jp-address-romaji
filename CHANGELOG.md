@@ -1,5 +1,116 @@
 # Changelog
 
+## 0.1.4 — 2026-08-14
+
+The headline fix restores address information `toRomaji` was silently discarding. Everything else
+under **Fixed** closes gaps outside the core conversion path — data loading, the public API's
+auxiliary functions, the entry-point router, and the release pipeline — none of which had been read
+end-to-end before this pass.
+
+### Fixed
+
+- **`toRomaji` silently dropped a named koaza (小字), returning a different address.**
+  `toRomaji('長野県飯田市本町三丁目大横1-1')` used to return `ok: true` with
+  `"1-1 Hommachi, Iida-shi, Nagano, Japan"` — `三丁目大横` gone without a trace. The upstream
+  normalizer reports `oaza_cho` and `koaza` as separate fields; only a purely numeric koaza
+  (`^([0-9]+)(丁目|番町|…)$`) was ever read, and folded into the block number. Anything else
+  vanished. A named koaza is now romanized and returned on the new `parsed.koaza` field whenever the
+  dataset's reading can be verified to cover the whole name — the same call now returns
+  `"1-1 Sanchomeoyoko Hommachi, Iida-shi, Nagano, Japan"` — and returns the new failure
+  `KOAZA_READING_INCOMPLETE` rather than a truncated guess when it cannot. Measured over the whole
+  dataset (`scripts/verify-data-assumptions.ts`, assumption 6/6b, GitHub Actions run 31788640706):
+  437,014 of 638,567 town rows carry a koaza (68.437%) — 18,409 purely numeric, already handled
+  since 0.1.3, and 418,605 named. Of the named ones, every one has a kana reading but only 781
+  (0.187%) also carry a dedicated romaji field, and the completeness check passes 417,213 of them
+  (99.667%) while refusing 1,392 (0.333%); every sampled refusal has the same shape — 南郷通
+  (札幌市白石区)'s koaza `一丁目北`/`十二丁目南`, whose kana reading stops at `チョウメ` and never
+  reaches the trailing 北/南. `fromRomaji` does not reconstruct a koaza — there is no per-koaza
+  index to search — so this is deliberately one-way: round-tripping a koaza-bearing address returns
+  a typed failure rather than a different address, never the koaza silently dropped again.
+- `longVowel: 'oh'` municipality output could not be read back by `fromRomaji`. `formatMunicipality`
+  oh-izes only the stem and appends the table's suffix literally (`当別町` → `"Tohbetsu-cho"`), but
+  the index `fromRomaji` searches oh-ized the whole reading including the suffix (`トウベツチョウ` →
+  `"tohbetsuchoh"`), whose trailing `choh` no longer matched the pattern used to strip a suffix — so
+  neither candidate-key set ever contained the string `formatMunicipality` actually produces. At
+  least 53 municipalities were affected nationwide (当別町, 共和町, 蔵王町, 遠野市, and others).
+- A town matched only through its kana reading lost its `romaji` on the parsed result, so
+  `toFormat` emitted kanji inside a payload declaring `languageCode: "en"`. The deterministic
+  transliteration used to make the match is now kept on `parsed.town.romaji`, for the roughly 10%
+  of towns that carry a kana reading but no romaji field.
+- 17 entries where the kana reading spells a number as a digit but the romaji field spells the same
+  number as a word (前郷一番町, 北兵村一区, and 15 others) used to romanize to a different spelling
+  depending on `longVowel` style. Under `'none'` the romaji field wins and nothing changes; under
+  `'macron'`, `'circumflex'`, and `'oh'` — which have no source but the kana — that disagreement is
+  now a typed failure instead of a guess at which spelling to trust.
+- The administrative-suffix reading (町 → *machi* or *cho*, 村 → *mura* or *son*) was guessed from
+  the first entry of a lookup table whenever a municipality's own romaji field was missing —
+  `出雲崎町` (イズモザキマチ) could render as `"Izumozaki-cho"` when the actual reading is *machi*.
+  It now reads the suffix off the end of the kana instead of guessing.
+- An unattached prolonged-sound mark (`ー`) — one not following a kana that produces a vowel — was
+  silently dropped instead of refused: `kanaToRomaji('ーア', 'none')` returned `"a"`. It now routes
+  through the same untranslatable-kana check every other unreadable character already uses, and
+  fails the same way they do.
+- `kanjiToNumber` (a public export) returned a *different number*, not a refusal, for input outside
+  the grammar `numberToKanji` actually produces: `十百` → 110, `一二` → 2. It now returns `undefined`
+  for anything outside that grammar; `一〇一` is refused rather than read as 101.
+- A malformed `endpoint` passed to `configureDataSource` (for example a filesystem path where a URL
+  was expected) made both conversion directions throw `TypeError` — the one place in the library
+  where a bad configuration surfaced as an exception instead of a typed failure. It now degrades to
+  `DATA_NOT_CONFIGURED`, the same outcome as no dataset being configured at all.
+- `parse()` routed any input containing a Japanese character to `toRomaji`, so it could not read
+  back the library's own `toRomaji` output when the address carried a Japanese building name —
+  `fromRomaji` is the one built to handle that case. It now checks whether the input has the
+  comma-separated, ends-in-a-known-prefecture shape a western-order romaji address takes, and routes
+  on that instead of on script alone.
+- Oh-style prefecture spellings with an administrative suffix (`"Ohsaka-fu"`, `"Tohkyoh-to"`) were
+  rejected by `fromRomaji` instead of resolving.
+- The reverse-direction (`fromRomaji`) dataset-file cache had no upper bound — a long-running
+  process that eventually read across the whole country would retain roughly 1,899 files forever.
+  It is now a bounded LRU cache (500 entries by default).
+
+### Added
+
+- `ParsedAddress.koaza` — the resolved koaza component, present when the address has one and its
+  reading was verifiably complete.
+- The `KOAZA_READING_INCOMPLETE` failure reason.
+
+### Changed
+
+Every item below turns a previously succeeding call into a typed failure, or changes a rendered
+string — check the ones that apply to you:
+
+- **`toRomaji` output changes for any address with a named koaza.** Previously the koaza was
+  silently omitted from both `formatted` and `parsed`; it is now present in both, or the call fails
+  with `KOAZA_READING_INCOMPLETE`. If you stored or matched against `formatted` strings for
+  koaza-bearing addresses, expect them to be longer and to include the koaza.
+- **Some `toRomaji` calls for koaza-bearing addresses that used to return `ok: true` now return
+  `KOAZA_READING_INCOMPLETE`.** This is 1,392 of the 418,605 named-koaza rows (0.333%) — every one
+  previously silently dropped the koaza rather than including it, so this trades a wrong address for
+  an explicit refusal.
+- **`toRomaji` under `longVowel: 'macron'` / `'circumflex'` / `'oh'` now fails for 17 town names**
+  where the kana and romaji fields disagree on whether a number is a digit or a word.
+  `longVowel: 'none'` output for the same towns is unchanged.
+- **`fromRomaji` now accepts `"Tohbetsu-cho, Hokkaido"` and the same shape for at least 53 other
+  municipalities**, and now accepts oh-style prefecture spellings with their administrative suffix
+  (`"Ohsaka-fu"`, `"Tohkyoh-to"`) — both used to fail with `CITY_NOT_FOUND` /
+  `PREFECTURE_NOT_FOUND`.
+- **`toFormat` output for towns matched only via a kana reading no longer mixes kanji into a
+  payload declaring `languageCode: "en"`.** `parsed.town.romaji` is now populated wherever the match
+  had a transliteration to offer.
+- **`configureDataSource({ endpoint: <malformed value> })` no longer throws.** Both `toRomaji` and
+  `fromRomaji` now return `DATA_NOT_CONFIGURED` instead of an uncaught `TypeError`.
+- **`kanjiToNumber` returns `undefined`, not a wrong number, for input outside `numberToKanji`'s
+  grammar.** Code that relied on an out-of-grammar result like `十百` → 110 gets `undefined` now;
+  check for it explicitly.
+- **`parse()` can now read back `toRomaji`'s own output when it includes a Japanese building
+  name.** That case previously routed to `toRomaji` and failed.
+
+### Internal
+
+- `release.yml` interpolated a free-string `workflow_dispatch` input directly into a shell script,
+  in the one job holding `id-token: write`. It now goes through `env:`, matching how the rest of the
+  file's free-string inputs are already handled.
+
 ## 0.1.3 — 2026-08-13
 
 A correctness release. Every item under **Fixed** was a case where a conversion returned
