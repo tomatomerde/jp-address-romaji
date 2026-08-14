@@ -489,6 +489,19 @@ stem）を回して、歴史的な 0.95/1.23 を再現する変種があるか�
 壊してはならない不変条件は `CONTRIBUTING.md` が扱う。ここにあるのは、実際に時間を奪った運用上の
 もの:
 
+- **`isDataConfigured()` の戻り値をテストで固定しないこと。** これは同梱の
+  `jp-address-romaji-data` にフォールバックする（設定なしで動くのはそのおかげ）ので、
+  `packages/data/data/` が在るかどうかで答えが変わる。そのディレクトリは gitignore された
+  生成物なので、**素のチェックアウトと CI では不在、リリース経路では在る**——`release.yml` は
+  テストの前にデータセットをビルドするため。`0.1.4` の
+  `malformedEndpoint.test.ts` が `expect(isDataConfigured()).toBe(false)` と書いており、
+  ローカルでも CI でも `Refresh address data and coverage` でも緑で、**publish を守るための
+  dry run でだけ落ちた**。テストが主張すべきなのは修正の本体（不正な値を保存しないこと・
+  例外を投げないこと）で、環境で変わる派生的な状態ではない。
+  同じ理由で、リリース経路を通す変更を入れたときは `packages/data/data/` を用意した状態でも
+  スイートを回すと早く気づける（フィクスチャを `cp -r packages/core/test/fixtures/data
+  packages/data/data` で置くだけで再現できる。gitignore されているのでコミットされない）。
+
 - **`npm publish` は semver のプレリリースでも `latest` dist-tag を動かす。** npm はプレリリース
   を特別扱いしないので、`--tag next` なしで公開された `0.1.0-rc.1` は全員がインストールする
   ものになる。両方の publish ステップはバージョンから tag を導出し（`*-*` → `next`）、run
