@@ -13,26 +13,34 @@
  * address to a third party.
  */
 
-import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
-import path from 'node:path';
-import fs from 'node:fs';
-
 import { config, normalize as geoloniaNormalize } from '@geolonia/normalize-japanese-addresses';
 import type { NormalizeResult } from '@geolonia/normalize-japanese-addresses';
+
+import { getPlatform } from './platform/current.js';
 
 /** How the address dataset is reached. */
 export interface DataSourceOptions {
   /**
    * Directory containing the address data (the parent of `ja.json` and `ja/`).
    * Everything stays on this machine.
+   *
+   * Node only. A browser has no filesystem to read it from, so this option
+   * leaves the library unconfigured there and conversions fail with
+   * `DATA_NOT_CONFIGURED` — use `endpoint` instead.
    */
   dataDir?: string;
   /**
-   * Explicit endpoint, for advanced setups such as a private mirror.
+   * Explicit endpoint, for advanced setups such as a private mirror — and the
+   * only way to supply data in a browser.
    *
-   * Setting this to an `http(s)` URL means every address you convert is sent
-   * to that host. Only do this if you control it.
+   * The dataset is read as `<endpoint>.json` (the prefecture/municipality
+   * index) and `<endpoint>/<prefecture>/<municipality>.json`, so an endpoint
+   * ends at `ja`.
+   *
+   * Setting this to an `http(s)` URL means the prefecture and municipality of
+   * every address you convert appear in a request URL sent to that host. The
+   * rest of the address — block numbers, building name, addressee — does not.
+   * Only do this if you control the host.
    */
   endpoint?: string;
   /** Size of the upstream in-memory cache. Defaults to 1000 entries. */
@@ -41,24 +49,13 @@ export interface DataSourceOptions {
 
 let configured = false;
 
-/** Resolve the optional companion data package, if it is installed. */
-function resolveBundledDataDir(): string | undefined {
-  try {
-    const require = createRequire(import.meta.url);
-    // The data package exposes its directory through its package.json.
-    const pkgPath = require.resolve('jp-address-romaji-data/package.json');
-    const dir = path.join(path.dirname(pkgPath), 'data');
-    return fs.existsSync(path.join(dir, 'ja.json')) ? dir : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Point the library at an address dataset.
  *
  * Call once at startup. If `jp-address-romaji-data` is installed, this is
  * done automatically on first use and you do not need to call it.
+ *
+ * In a browser only `endpoint` can be honoured — see {@link DataSourceOptions}.
  */
 export function configureDataSource(options: DataSourceOptions = {}): void {
   if (options.endpoint) {
@@ -80,14 +77,18 @@ export function configureDataSource(options: DataSourceOptions = {}): void {
     }
     config.japaneseAddressesApi = options.endpoint;
   } else {
-    const dir = options.dataDir ?? resolveBundledDataDir();
-    if (!dir) {
+    const platform = getPlatform();
+    const dir = options.dataDir ?? platform.resolveBundledDataDir();
+    // `dataDirToEndpoint` is `undefined` in a browser, where a local directory
+    // cannot be read at all. Leaving the library unconfigured is the honest
+    // outcome: the caller gets DATA_NOT_CONFIGURED instead of a dataset
+    // fetched from somewhere they did not name.
+    const endpoint = dir === undefined ? undefined : platform.dataDirToEndpoint(dir);
+    if (endpoint === undefined) {
       configured = false;
       return;
     }
-    // The upstream library concatenates `${api}${input}`, where input is
-    // ".json" or "/<pref>/<city>.json" — so the endpoint ends at "ja".
-    config.japaneseAddressesApi = pathToFileURL(path.join(dir, 'ja')).toString();
+    config.japaneseAddressesApi = endpoint;
   }
   if (options.cacheSize !== undefined) config.cacheSize = options.cacheSize;
   configured = true;
@@ -96,10 +97,13 @@ export function configureDataSource(options: DataSourceOptions = {}): void {
 /** Has a dataset been configured (explicitly or via the bundled package)? */
 export function isDataConfigured(): boolean {
   if (configured) return true;
-  const dir = resolveBundledDataDir();
+  const dir = getPlatform().resolveBundledDataDir();
   if (dir) {
     configureDataSource({ dataDir: dir });
-    return true;
+    // Report what configureDataSource actually decided rather than assuming it
+    // succeeded: it declines a directory it cannot turn into an endpoint, and
+    // answering `true` there would promise data that is not reachable.
+    return configured;
   }
   return false;
 }

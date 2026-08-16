@@ -31,6 +31,16 @@ looks right, which is worse than a refusal.
   it is the only thing standing between "documented as offline" and "actually offline." Addresses are
   personal data; this is the library's core privacy claim.
 
+- **Keep `node:` imports inside `packages/core/src/platform/node.ts`.** The package has two entry
+  points — `src/index.ts` for Node and `src/index.browser.ts` for the `browser` export condition —
+  and they differ only in which platform bindings they install. A `node:` import anywhere else puts
+  a Node builtin into the browser build's module graph, and the bundle stops building for every
+  front-end user. Nothing in the Node test suite can see that (Node resolves the import happily), so
+  the check that does is `scripts/browser-smoke.mjs`, which bundles the packed tarball for a browser
+  and converts an address in headless Chromium. It runs in CI and before every publish. If you need
+  something runtime-specific, add it to the `Platform` interface with a browser answer that refuses
+  rather than approximates.
+
 A few narrower traps worth knowing about before you touch the relevant code (fuller detail and the
 bugs that motivated each one are in `CLAUDE.md`'s "Landmines" section, and in code comments at the
 sites themselves):
@@ -57,7 +67,13 @@ pnpm lint                                   # ESLint
 pnpm typecheck                              # tsc --noEmit: both packages, plus tests/scripts/vitest.config.ts
 pnpm -r build                               # compile both packages
 pnpm test                                   # fixture-based test suite; hermetic, no data download needed
+node scripts/browser-smoke.mjs              # after `pnpm -r build`: bundles for the browser and runs it in Chromium
 ```
+
+The browser smoke test needs Chromium once (`pnpm exec playwright install chromium`) and, on the
+first run, registry access to install the packed tarball into a scratch project. It serves the
+repository's own fixtures over loopback, so it reaches no external host — and it fails if the page
+contacts one.
 
 `pnpm test` on its own runs entirely against small, committed test fixtures — it needs no real
 dataset and no network access. There's a second suite that runs against the real, full-size dataset:

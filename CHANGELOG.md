@@ -1,5 +1,48 @@
 # Changelog
 
+## core-0.1.6 — 2026-08-16
+
+`jp-address-romaji` only. The dataset package is unchanged and stays at `0.1.5`.
+
+### Added
+
+- **The library now runs in a browser.** `packages/core` imported `node:fs`, `node:module`,
+  `node:path` and `node:url` at module top level, so bundling it for the web failed outright — a
+  front-end address form could not use it at all. Those imports now live behind platform bindings
+  (`src/platform/`) reachable only from the Node entry point, and the package declares a `browser`
+  export condition that resolves to a second entry point. Any bundler that honours export
+  conditions (Vite, webpack, esbuild, Rollup, Parcel) picks it up with no configuration, and the
+  API is identical:
+
+  ```ts
+  import { configureDataSource, toRomaji } from 'jp-address-romaji';
+
+  configureDataSource({ endpoint: 'https://your-site.example/address-data/ja' });
+  await toRomaji('東京都新宿区西新宿三丁目5番12号');
+  ```
+
+  A page has no filesystem, so the dataset is served from an endpoint you host. The library reads
+  `<endpoint>.json` for the prefecture/municipality index and then one
+  `<endpoint>/<prefecture>/<municipality>.json` per conversion, so **the prefecture and the
+  municipality appear in a request URL on your server**. The block number, building name and
+  addressee are matched inside the page and never leave it. That is a weaker guarantee than the
+  Node path, where nothing leaves the process at all — the README says so where users will read it,
+  and so does the browser entry point's own documentation.
+
+  `configureDataSource({ dataDir })` cannot work in a browser and does not approximate one: it
+  leaves the library unconfigured, and conversions return `DATA_NOT_CONFIGURED`.
+
+  Nothing changes for Node consumers. The default entry point, the filesystem dataset, the
+  automatic discovery of `jp-address-romaji-data`, and the offline guarantee are all as they were.
+
+- **A browser smoke test that actually runs a browser** (`scripts/browser-smoke.mjs`), in CI on
+  every change and blocking before every publish. It packs the tarball, installs it into a scratch
+  project, bundles `import 'jp-address-romaji'` for the browser, and drives headless Chromium
+  through a conversion, a reverse conversion and a refusal. No Node test can catch the failure it
+  exists to catch — a `node:` import back in the shared module graph — because Node resolves one
+  happily. It also asserts that the page contacts no origin but its own, and that no address
+  component past the municipality ever reaches the server.
+
 ## 0.1.5 — 2026-08-14
 
 `0.1.4`'s headline fix did not fix the address it was reported for. This does.

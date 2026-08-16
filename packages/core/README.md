@@ -5,7 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/tomatomerde/jp-address-romaji/blob/main/LICENSE)
 [![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-brightgreen.svg)](#requirements)
 [![module: ESM only](https://img.shields.io/badge/module-ESM%20only-orange.svg)](#requirements)
-[![no network at runtime](https://img.shields.io/badge/network%20at%20runtime-none-brightgreen.svg)](#requirements)
+[![no network at runtime in Node](https://img.shields.io/badge/network%20at%20runtime%20%28Node%29-none-brightgreen.svg)](#requirements)
+[![browser: bring your own endpoint](https://img.shields.io/badge/browser-bring%20your%20own%20endpoint-blue.svg)](#in-the-browser)
 
 Bidirectional conversion between Japanese addresses and their romanized, western-order equivalents.
 
@@ -24,8 +25,9 @@ it:
 
 - **ESM only.** `package.json` is `"type": "module"` and the `exports` map has no `require`
   condition, so `require('jp-address-romaji')` does not work. CJS support is out of scope for now.
-- **Node.js 18+**, and **Node-only out of the box**: the default configuration reads the dataset
-  from the filesystem. Browser use needs you to serve the data from an endpoint you host yourself.
+- **Node.js 18+**, where the dataset is read from the filesystem. **Browsers are supported** through
+  the `browser` export condition, but a page has no filesystem: you serve the data yourself and
+  point the library at it. See [In the browser](#in-the-browser).
 - **The dataset package is required.** `jp-address-romaji-data` is a separate install (above);
   without it every conversion fails with `DATA_NOT_CONFIGURED` rather than silently going to the
   network.
@@ -41,6 +43,28 @@ await toRomaji('東京都新宿区西新宿三丁目5番12号');
 await fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo 160-0023');
 // → { ok: true, value: { formatted: '東京都新宿区西新宿三丁目5-12', … } }
 ```
+
+## In the browser
+
+Any bundler that honours export conditions picks the browser entry point automatically; the API is
+identical. A page has no filesystem, so the dataset comes from an endpoint you serve:
+
+```ts
+import { configureDataSource, toRomaji } from 'jp-address-romaji';
+
+configureDataSource({ endpoint: 'https://your-site.example/address-data/ja' });
+await toRomaji('東京都新宿区西新宿三丁目5番12号');
+```
+
+The library reads `<endpoint>.json` for the prefecture/municipality index and
+`<endpoint>/<prefecture>/<municipality>.json` for the towns of the one municipality it needs. Build
+the files with `npx jp-address-romaji-data build --out ./address-data` and serve them statically.
+
+**Be precise with your users about what this guarantees.** The municipality request puts the
+prefecture and the municipality in a URL on your server. The block number, building name and
+addressee are matched inside the page and never sent anywhere — but that is a weaker promise than
+the Node path, where nothing leaves the process at all. `configureDataSource({ dataDir })` cannot
+work in a browser and refuses rather than approximating: conversions return `DATA_NOT_CONFIGURED`.
 
 ## What it does and does not do
 
