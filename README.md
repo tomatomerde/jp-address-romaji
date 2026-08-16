@@ -144,14 +144,27 @@ If the street phrase is recognized but the town after it is not in the dataset, 
 ### Named koaza (小字)
 
 Some towns have a further, named subdivision below the town level — a small-area name such as
-`三丁目大横` in `長野県飯田市本町三丁目大横`. When the dataset's reading for it can be verified to
+`字天津川` in `三重県伊賀市西明寺字天津川`. When the dataset's reading for it can be verified to
 cover the whole name, it is romanized and included on `parsed.koaza`:
 
 ```ts
-await toRomaji('長野県飯田市本町三丁目大横1-1');
-// formatted:    '1-1 Sanchomeoyoko Hommachi, Iida-shi, Nagano, Japan'
-// parsed.koaza: { ja: '三丁目大横', kana: 'サンチョウメオオヨコ', romaji: 'Sanchomeoyoko' }
+await toRomaji('三重県伊賀市西明寺字天津川1-1');
+// formatted:    '1-1 Azamatsugawa Saimyoji, Iga-shi, Mie, Japan'
+// parsed.koaza: { ja: '字天津川', kana: 'アザアマツガワ', romaji: 'Azamatsugawa' }
 ```
+
+When the reading cannot be verified, the whole conversion refuses rather than dropping part of the
+address. The dataset gives `三丁目大横` in `長野県飯田市本町三丁目大横` the reading `３チョウメ`,
+which stops at the counter and never reaches `大横`:
+
+```ts
+await toRomaji('長野県飯田市本町三丁目大横1-1');
+// { ok: false, reason: 'KOAZA_READING_INCOMPLETE', … }
+```
+
+That is the address `0.1.4` shipped as `"1-1 3Chome Hommachi"` with `大横` missing. Both examples
+are pinned in `packages/core/test/realdata.test.ts`, because this section previously documented an
+output — `Sanchomeoyoko` — that the shipped dataset cannot produce.
 
 Measured over the whole dataset (`scripts/verify-data-assumptions.ts`, assumption 6/6b): 437,014 of
 638,567 town rows carry a koaza (68.437%). 18,409 of those are purely numeric and are folded into

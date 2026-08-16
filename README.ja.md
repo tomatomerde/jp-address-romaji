@@ -147,10 +147,24 @@ await toRomaji('京都府京都市中京区烏丸通四条上ル笋町123');
 ローマ字化して `parsed.koaza` に含めます:
 
 ```ts
-await toRomaji('長野県飯田市本町三丁目大横1-1');
-// formatted:    '1-1 Sanchomeoyoko Hommachi, Iida-shi, Nagano, Japan'
-// parsed.koaza: { ja: '三丁目大横', kana: 'サンチョウメオオヨコ', romaji: 'Sanchomeoyoko' }
+await toRomaji('三重県伊賀市西明寺字天津川1-1');
+// formatted:    '1-1 Azamatsugawa Saimyoji, Iga-shi, Mie, Japan'
+// parsed.koaza: { ja: '字天津川', kana: 'アザアマツガワ', romaji: 'Azamatsugawa' }
 ```
+
+読みを確認できないときは、住所の一部を落とすのではなく変換全体を失敗させます。冒頭に挙げた
+`長野県飯田市本町三丁目大横` の `三丁目大横` がまさにそれで、データセットの読みは `３チョウメ`
+——助数詞で止まっていて `大横` に届きません:
+
+```ts
+await toRomaji('長野県飯田市本町三丁目大横1-1');
+// { ok: false, reason: 'KOAZA_READING_INCOMPLETE', … }
+```
+
+この住所は `0.1.4` が `"1-1 3Chome Hommachi"`（`大横` が消えた形）で出荷してしまったもので、
+`0.1.5` は失敗を返すようにした。**この節は以前、同梱データセットからは作れない出力
+（`Sanchomeoyoko`）を例として載せていた**ため、両方の例を
+`packages/core/test/realdata.test.ts` で固定してある。
 
 同梱データセット全体での実測（`scripts/verify-data-assumptions.ts` の assumption 6/6b）:
 638,567 件の町エントリのうち 437,014 件（68.437%）が koaza を持ちます。うち 18,409 件は数字のみで

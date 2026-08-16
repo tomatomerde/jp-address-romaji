@@ -82,6 +82,32 @@ describe.skipIf(!available)('real dataset', () => {
     }
   });
 
+  // Both halves of the koaza rule are documented in the README by name, and
+  // both have been wrong there: 0.1.5 changed the refusing half and left the
+  // README showing `Sanchomeoyoko`, an output the shipped dataset cannot
+  // produce. Pin the two examples so the prose cannot drift from the code
+  // again without a test going red.
+  describe('the koaza examples in the README', () => {
+    it('romanizes a koaza whose reading covers the whole name', async () => {
+      const result = await toRomaji('三重県伊賀市西明寺字天津川1-1');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.formatted).toBe('1-1 Azamatsugawa Saimyoji, Iga-shi, Mie, Japan');
+      expect(result.value.parsed.koaza).toEqual({
+        ja: '字天津川',
+        kana: 'アザアマツガワ',
+        romaji: 'Azamatsugawa',
+      });
+    });
+
+    it('refuses when the reading stops short of the whole name', async () => {
+      const result = await toRomaji('長野県飯田市本町三丁目大横1-1');
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.reason).toBe('KOAZA_READING_INCOMPLETE');
+    });
+  });
+
   it('still refuses Kyoto street-name addresses', async () => {
     const result = await toRomaji('京都府京都市中京区四条通烏丸東入ル函谷鉾町');
     expect(result.ok).toBe(false);
