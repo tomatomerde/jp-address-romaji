@@ -228,6 +228,44 @@ describe('build-data', () => {
     await expect(readJson<OutTown>('ja', '東京都', '千代田区.json')).rejects.toThrow();
   });
 
+  // Both of the next two used to exit 0 against the wrong settings. A build
+  // that looks like it worked is worse than one that stops.
+  it('打ち間違えたフラグは既定値に落ちず、名前を挙げて終了コード1で落とす', async () => {
+    server = await startServer();
+    const result = await runBuild([
+      '--endpoint', server.url, '--out', outDir, '--conurrency', '8', ...FAST,
+    ]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('unknown flag --conurrency');
+    // A usage error should not read like a crash.
+    expect(result.stderr).not.toContain('at main');
+    await expect(readJson<OutTown>('ja', '東京都', '千代田区.json')).rejects.toThrow();
+  });
+
+  it('値を渡し忘れたフラグは、次のフラグを値として吸わない', async () => {
+    server = await startServer();
+    const result = await runBuild([
+      '--endpoint', server.url, '--out', '--concurrency', '5', ...FAST,
+    ]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('--out needs a value');
+    // The old parser resolved `--concurrency` as the output directory and
+    // wrote the entire dataset into it.
+    await expect(fs.stat(path.join(repoRoot, '--concurrency'))).rejects.toThrow();
+  });
+
+  it('--flag=value 形式も受ける', async () => {
+    server = await startServer();
+    const result = await runBuild([
+      `--endpoint=${server.url}`, `--out=${outDir}`, '--attempts=2', '--retry-delay=10',
+    ]);
+
+    expect(result.code).toBe(0);
+    await expect(readJson<OutTown>('ja', '東京都', '千代田区.json')).resolves.toBeTruthy();
+  });
+
   it('掃き取りでも回復しないものは、名前を挙げて終了コード1で落とす', async () => {
     server = await startServer(new Map([['東京都/中央区', Number.POSITIVE_INFINITY]]));
     const result = await runBuild(['--endpoint', server.url, '--out', outDir, ...FAST]);
