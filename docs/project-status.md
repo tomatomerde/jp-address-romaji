@@ -10,8 +10,13 @@
 ## 現在の状態
 
 **公開済み。** `jp-address-romaji` と `jp-address-romaji-data` は両方とも npm に公開されている。
-最新は `0.1.5`（2026-08-14）。`0.1.4` も同日、`0.1.3` は 2026-08-13、`0.1.0` は 2026-08-10、`0.1.1`・`0.1.2` は
-2026-08-12 リリースで、いずれも npm の provenance attestation 付き。各版の内容は CHANGELOG を参照。
+最新は `jp-address-romaji` が `0.1.6`（2026-08-16）、`jp-address-romaji-data` が `0.1.5`（2026-08-14）。
+`0.1.6` は**初めての `core-only` リリース**で、`core-v*` タグの経路——CHANGELOG のスコープ付き
+見出し（`## core-0.1.6`）、片方のパッケージだけの pack と publish、スコープ付きの GitHub
+Release——が実運用で通ったのはこれが最初（run `31961720562`、`cut_release: true` の dispatch）。
+それ以前は `0.1.5`・`0.1.4` が 2026-08-14、`0.1.3` が 2026-08-13、`0.1.0` が 2026-08-10、
+`0.1.1`・`0.1.2` が 2026-08-12 で、いずれも npm の provenance attestation 付き。各版の内容は
+CHANGELOG を参照。
 `0.1.0-rc.1` は `0.1.0` の数時間前にリハーサルとして `next` dist-tag で公開した — それが捉えた
 3件も CHANGELOG にある。
 
@@ -34,7 +39,7 @@ publish は `workflow_dispatch`（run `31616749939`）で通ったのに、**タ
 詳細は CHANGELOG の `0.1.5` の項。公開済みの `0.1.5` を取得して両方の住所で確認済み
 （`三丁目大横` は `KOAZA_READING_INCOMPLETE`、`大字小野1-1` は小字なしで往復する）。
 
-**`core-0.1.6` はブラウザ対応（未公開・このリポジトリの `main` にはある）。** `packages/core` が
+**`core-0.1.6` はブラウザ対応。** `packages/core` が
 `node:fs` / `node:module` / `node:path` / `node:url` をモジュール先頭で import していたため、
 ブラウザ向けにバンドルすると失敗し、フロントの住所フォームからは使えなかった。node 依存を
 `src/platform/` の実装に押し込み、`exports` に `browser` 条件と2つ目のエントリポイントを足した。
@@ -45,7 +50,16 @@ publish は `workflow_dispatch`（run `31616749939`）で通ったのに、**タ
 検証は `scripts/browser-smoke.mjs`: pack した tarball を使い捨てプロジェクトに install し、
 `browser` 条件でバンドルして、ヘッドレス Chromium で往復と拒否を実行する。CI と publish 前の
 両方でブロッキング。**Node のテストではこの経路の退行を検出できない**（Node は `node:` の
-import を普通に解決するため）ので、このスクリプトが唯一の砦。
+import を普通に解決するため）ので、このスクリプトが唯一の砦。実際に `node:path` の import を
+1行戻して、esbuild の解決エラーで exit 1 になることを確認してある。
+
+**公開後、レジストリの実物に対しても確認済み**（2026-08-16）: `npm install jp-address-romaji@0.1.6`
+した使い捨てプロジェクトを esbuild の `--platform=browser` でバンドルし、Chromium で
+`toRomaji('東京都新宿区西新宿三丁目5番12号')` → `"3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan"`、
+`fromRomaji` で元の日本語住所に戻ること、自オリジン以外へのリクエストが 0 件であることを確認した。
+公開された `exports` にも `browser` 条件が入っている。provenance attestation
+（`https://registry.npmjs.org/-/npm/v1/attestations/jp-address-romaji@0.1.6`）も
+`publish` と SLSA provenance の2件を返す。
 
 完了済み:
 
@@ -462,8 +476,13 @@ with source and build information from GitHub Actions` と sigstore の transpar
 `v0.1.0`・`data-v0.1.0`・`core-v0.1.0` は正しいスコープを選んで通る。`data-v0.2.0` と
 `core-v0.1.1` は、タグが選ぶパッケージだけを名指しするバージョンガードで落ちる。`vgarbage` と
 `data-vX` は認識されない形状として拒否される。これがカバー**しない**のは `data-v*` 実行の残り —
-packing、tarball の assert、そして2パッケージの片方だけが動く publish。それらは実際のスコープ
-付きリリースを待っている。
+packing、tarball の assert、そして2パッケージの片方だけが動く publish。
+
+**その残りは `core-0.1.6`（2026-08-16、run `31961720562`）で実際に通った** — core だけを pack し、
+data 側の pack・assert・publish はスキップされ、CHANGELOG はスコープ付き見出し
+（`## core-0.1.6`）から抽出され、GitHub Release は `core-v0.1.6` として作られた。`data-v*` の
+向きはまだ実行されていないが、スキップの分岐は同じ `PUBLISH_DATA`/`PUBLISH_CORE` の対で
+書かれている。
 
 **publish の直前に2つ目の npm バージョン assert が走るようになった**
 （`scripts/assert-npm-version.sh`、姉妹リポジトリとバイト単位で同一の共有）。このワークフローは
