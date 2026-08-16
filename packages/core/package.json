@@ -59,7 +59,7 @@
     "url": "https://github.com/tomatomerde/jp-address-romaji/issues"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
+    "@types/node": "^26.2.0",
     "jp-address-romaji-data": "workspace:*"
   },
   "publishConfig": {

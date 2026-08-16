@@ -47,7 +47,7 @@
     "prepublishOnly": "pnpm run build && pnpm run check:publishable"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0"
+    "@types/node": "^26.2.0"
   },
   "repository": {
     "type": "git",
