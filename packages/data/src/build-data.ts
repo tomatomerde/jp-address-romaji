@@ -70,11 +70,59 @@ interface Options {
   retryDelay: number;
 }
 
+/** Every flag this script accepts. Anything else is a typo, not a feature. */
+const KNOWN_FLAGS = ['endpoint', 'out', 'concurrency', 'attempts', 'retry-delay'] as const;
+
 function parseArgs(argv: string[]): Options {
-  const get = (name: string, fallback: string): string => {
-    const i = argv.indexOf(`--${name}`);
-    return i >= 0 && argv[i + 1] ? argv[i + 1]! : fallback;
-  };
+  /**
+   * Walk argv once instead of searching it per flag. `indexOf` could not see
+   * two ways of running against the wrong settings while looking healthy:
+   * `--conurrency 8` (a typo) silently fell back to the default, and a flag
+   * left without a value swallowed the next token, so `--out --concurrency 5`
+   * built the dataset into a directory literally named `--concurrency`. Both
+   * exit 0 with a plausible-looking run, which is the failure mode this
+   * project refuses everywhere else: guessing instead of saying no.
+   */
+  const given = new Map<string, string>();
+  for (let i = 0; i < argv.length; i += 1) {
+    const token = argv[i]!;
+    if (!token.startsWith('--')) {
+      throw new UsageError(
+        `unexpected argument ${JSON.stringify(token)}; every value must follow its --flag`,
+      );
+    }
+
+    const eq = token.indexOf('=');
+    const name = eq === -1 ? token.slice(2) : token.slice(2, eq);
+    if (!(KNOWN_FLAGS as readonly string[]).includes(name)) {
+      const known = KNOWN_FLAGS.map((flag) => `--${flag}`).join(', ');
+      throw new UsageError(`unknown flag --${name}; this script accepts ${known}`);
+    }
+
+    let value: string;
+    if (eq === -1) {
+      const next = argv[i + 1];
+      // A value that starts with `--` is a flag the caller forgot to pair, not
+      // a directory name. Refusing it is what stops the swallowing above.
+      if (next === undefined || next.startsWith('--')) {
+        throw new UsageError(`--${name} needs a value`);
+      }
+      value = next;
+      i += 1;
+    } else {
+      value = token.slice(eq + 1);
+      if (value === '') {
+        throw new UsageError(`--${name} needs a value`);
+      }
+    }
+
+    if (given.has(name)) {
+      throw new UsageError(`--${name} given more than once`);
+    }
+    given.set(name, value);
+  }
+
+  const get = (name: string, fallback: string): string => given.get(name) ?? fallback;
   /**
    * Reject junk rather than letting NaN through. `--concurrency nonsense` used
    * to reach mapLimit as NaN, which starts zero workers, downloads nothing, and
