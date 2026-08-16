@@ -1,9 +1,22 @@
 name: CI
 
 on:
+  # `branches: [main]`, not `['**']`: with `pull_request` also listening, every
+  # branch that has a pull request open used to run the whole suite twice for
+  # one push. Branches without a pull request are still covered — the run
+  # happens when the pull request opens.
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Supersede in-flight runs for the same pull request, but never cancel one on
+  # main -- a cancelled run there reads as a failure in the history.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -39,3 +52,72 @@ jobs:
       # just asserted in the README.
       - name: Test (offline guarantee enforced)
         run: pnpm test
+
+  # Both packages declare engines.node ">=18", but every step above runs on 22,
+  # so the oldest supported runtime was a promise shipped to users and never
+  # exercised. The dev toolchain cannot move down (vitest and the build scripts
+  # need newer), so this consumes the packed tarball on 18 the way a user does.
+  #
+  # `test` above must keep its name: it is the only required status check on
+  # main, and renaming it leaves every pull request waiting for a check that
+  # will never report. This is a separate job for that reason, not a matrix.
+  consume-on-node18:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r build
+
+      - name: Pack the publishable core tarball
+        # --pack-destination does not create the directory; pack fails with
+        # ENOENT if it is missing.
+        run: |
+          mkdir -p /tmp/pkg
+          cd packages/core
+          pnpm pack --pack-destination /tmp/pkg
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 18
+
+      - name: Install the tarball and convert an address on Node 18
+        run: |
+          set -eux
+          node --version
+          mkdir /tmp/consumer && cd /tmp/consumer
+          npm init -y >/dev/null
+
+          # --omit=peer: the peer dependency is the ~100 MB dataset. Pointing
+          # configureDataSource at the repository's fixture directory runs the
+          # same conversion path without downloading it.
+          npm install --omit=peer /tmp/pkg/*.tgz
+          cp -r "$GITHUB_WORKSPACE/packages/core/test/fixtures/data" ./fixture-data
+
+          cat > smoke.mjs <<'EOF'
+          import { configureDataSource, toRomaji, fromRomaji } from 'jp-address-romaji';
+
+          configureDataSource({ dataDir: new URL('./fixture-data', import.meta.url).pathname });
+
+          const forward = await toRomaji('東京都新宿区西新宿三丁目5番12号');
+          if (!forward.ok) throw new Error(`toRomaji failed: ${JSON.stringify(forward)}`);
+          if (forward.value.formatted !== '3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan') {
+            throw new Error(`toRomaji: ${forward.value.formatted}`);
+          }
+
+          const back = await fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo');
+          if (!back.ok) throw new Error(`fromRomaji failed: ${JSON.stringify(back)}`);
+          if (back.value.formatted !== '東京都新宿区西新宿三丁目5-12') {
+            throw new Error(`fromRomaji: ${back.value.formatted}`);
+          }
+
+          console.log('Node 18 round trip ok');
+          EOF
+          node smoke.mjs
