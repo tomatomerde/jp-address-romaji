@@ -5,7 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-brightgreen.svg)](#動作要件)
 [![ESM only](https://img.shields.io/badge/module-ESM%20only-orange.svg)](#動作要件)
-[![no network at runtime](https://img.shields.io/badge/network%20at%20runtime-none-brightgreen.svg)](#動作要件)
+[![no network at runtime in Node](https://img.shields.io/badge/network%20at%20runtime%20%28Node%29-none-brightgreen.svg)](#動作要件)
+[![browser: bring your own endpoint](https://img.shields.io/badge/browser-bring%20your%20own%20endpoint-blue.svg)](#ブラウザで使う)
 
 [English](./README.md) | **日本語**
 
@@ -50,9 +51,9 @@ npm install jp-address-romaji jp-address-romaji-data
 
 > **Node.js 18 以上、ESM 専用。** CommonJS ビルドは無く、追加する予定もありません——
 > `require('jp-address-romaji')` は `ERR_PACKAGE_PATH_NOT_EXPORTED` で失敗します。`import`、または
-> CommonJS からの動的 `import()` を使ってください。データセットはファイルシステムから
-> 読むため既定構成は Node 専用で、ブラウザで使うには自身がホストするエンドポイントが
-> 必要です。詳細は[動作要件](#動作要件)。
+> CommonJS からの動的 `import()` を使ってください。Node ではデータセットをファイルシステムから
+> 読み、住所は端末の外に出ません。ブラウザにも対応していますが、データは自分でホストする
+> 必要があります（[ブラウザで使う](#ブラウザで使う)）。詳細は[動作要件](#動作要件)。
 
 `jp-address-romaji-data` はオフライン用データセットです。任意ですが、入れておけば設定不要で
 動作します。自前のデータを指す場合:
@@ -70,10 +71,47 @@ npx jp-address-romaji-data build --out ./address-data
 
 このダウンロード時のみ Geolonia に接続します。**住所変換時は接続しません。**
 
+## ブラウザで使う
+
+ブラウザ用のエントリポイントを同梱しており、`exports` の `browser` 条件によって自動的に
+選択されます。エクスポート条件を解釈するバンドラ（Vite・webpack・esbuild・Rollup・Parcel）で
+あれば設定は不要です。API は Node と同一で、違うのはデータの供給元だけです——ページには
+ファイルシステムが無いので、データは自分で配信し、その場所を指定します。
+
+```ts
+import { configureDataSource, toRomaji } from 'jp-address-romaji';
+
+configureDataSource({ endpoint: 'https://your-site.example/address-data/ja' });
+
+await toRomaji('東京都新宿区西新宿三丁目5番12号');
+// → { ok: true, value: { formatted: '3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan', … } }
+```
+
+エンドポイントはデータセットのディレクトリに `/ja` を付けたものです。ライブラリはまず
+`<endpoint>.json`（都道府県・市区町村の索引）を読み、続いて必要な1市区町村分の
+`<endpoint>/<都道府県>/<市区町村>.json` だけを読みます。データセットは
+`npx jp-address-romaji-data build --out ./address-data` で生成し、`address-data/` を静的
+ファイルとして配信してください。全体は市区町村ごとに1ファイル（約1,900件）ですが、1回の変換で
+取得するのは2ファイルなので、必要な市区町村だけを配信することもできます。
+
+**プライバシー上の主張がここで何を意味するか。** 市区町村ファイルの取得により、
+**都道府県と市区町村は配信元サーバーのリクエスト URL に現れます**。それより後——番地・
+建物名・宛名——はページ内で処理され、どこにも送信されません。プロセスの外に何も出ない Node
+経路より弱い保証です。プライバシーを理由にこのライブラリを選ぶ利用者には、
+どちらの保証なのかを明示してください。
+
+`configureDataSource({ dataDir })` はブラウザでは動作しませんし、動作するふりもしません——
+未設定のままとなり、変換は `DATA_NOT_CONFIGURED` を返します。
+
+CI では変更のたびに、pack した tarball をブラウザ向けにバンドルしてヘッドレス Chromium で
+住所を変換しています（`scripts/browser-smoke.mjs`）。ページが自分のオリジン以外に接続しないこと
+も、そこで検証しています。
+
 ## 動作要件
 
-Node.js 18 以上。オフラインデータをファイルシステムから読むため、既定構成は Node 専用です。
-ブラウザで使う場合は、自身がホストするエンドポイント経由でデータを供給する必要があります。
+Node エントリポイントは Node.js 18 以上、ブラウザ用エントリポイントはエクスポート条件を解釈する
+バンドラが必要です。Node ではオフラインデータをファイルシステムから読み、ブラウザでは自身が
+ホストするエンドポイントから読みます（[ブラウザで使う](#ブラウザで使う)）。
 
 **ESM 専用で、CommonJS ビルドはありません。** 両パッケージとも `"type": "module"` で単一の ESM
 エントリポイントのみを提供しており、`require()` で読める `dist/*.cjs` は存在せず、今後追加する
@@ -117,6 +155,9 @@ Node.js 18 以上。オフラインデータをファイルシステムから読
   既定の西洋語順であればラウンドトリップします。
 - **ローマ字から koaza を復元すること**。`fromRomaji` は koaza 専用の索引を持たないため、元の
   日本語住所にあった koaza はローマ字を経由した往復では復元できません（下記参照）。
+- **データを自分でホストしないブラウザ利用**。フォールバック先のホスト型 API は意図的に
+  用意していないため、エンドポイントを指定しないページでは何も変換できません
+  （[ブラウザで使う](#ブラウザで使う)）。
 
 ### 京都市の通り名住所
 

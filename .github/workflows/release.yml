@@ -587,7 +587,15 @@ jobs:
           tar -tzf "$f" > "$listing"
 
           fail=false
-          for entry in package/dist/index.js package/dist/index.d.ts; do
+          # index.browser.* is what the `browser` export condition resolves to.
+          # It is unreachable from the Node entry point, so nothing else in
+          # this pipeline would notice it missing from the tarball — the
+          # failure would land on front-end users as an unresolvable import.
+          for entry in \
+            package/dist/index.js \
+            package/dist/index.d.ts \
+            package/dist/index.browser.js \
+            package/dist/index.browser.d.ts; do
             if ! grep -qx "$entry" "$listing"; then
               echo "::error::$f is missing $entry" >&2
               fail=true
@@ -597,7 +605,7 @@ jobs:
             exit 1
           fi
 
-          echo "Core tarball OK: package/dist/index.js + package/dist/index.d.ts present."
+          echo "Core tarball OK: Node and browser entry points (js + d.ts) present."
 
       # esm-only profile confirmed present in @arethetypeswrong/cli (checked
       # `--help`; exit 0 against this package's tarball with it, exit 1 under
@@ -643,6 +651,21 @@ jobs:
             node --input-type=module -e \
               "import('./packages/data/dist/index.js').then(m => console.log('data exports:', Object.keys(m)))"
           fi
+
+      # The import smoke test above proves the Node entry point loads. The
+      # browser entry point cannot be checked that way — Node resolves a stray
+      # `node:` import happily — so this bundles the packed tarball with the
+      # `browser` condition and converts an address in headless Chromium.
+      # Blocking, and deliberately before publish: a broken browser build is
+      # not detectable from the registry afterwards, and the version is
+      # permanent. The script does its own pack/install; it does not re-run
+      # setup-node, so the npm version asserted below is unaffected.
+      - name: Browser smoke test (core)
+        if: env.PUBLISH_CORE == 'true'
+        shell: bash
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          node scripts/browser-smoke.mjs
 
       # Nothing between the npm upgrade near the top of this job and here
       # re-runs setup-node today, so this should be a no-op — but it is the

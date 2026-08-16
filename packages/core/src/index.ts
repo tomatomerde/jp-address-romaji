@@ -1,55 +1,19 @@
 /**
- * jp-address-romaji
+ * jp-address-romaji — Node entry point (the package default).
  *
- * Bidirectional conversion between Japanese addresses and their romanized,
- * western-order equivalents.
+ * Installs the Node platform bindings and re-exports the API. The dataset is
+ * read from the filesystem here: `configureDataSource({ dataDir })` works, and
+ * an installed `jp-address-romaji-data` is found automatically, so nothing an
+ * address is converted against ever leaves the machine.
  *
- * Addresses are personal data, so this library runs entirely on your machine.
- * It reads a local copy of the address dataset and, by default, makes no
- * network requests at all — nothing you convert leaves the process.
- *
- * Address normalization itself is delegated to
- * @geolonia/normalize-japanese-addresses; this package implements the layer
- * above it. Romanizations always come from the dataset (a romaji field, or a
- * kana reading transliterated deterministically). When neither is available
- * the API returns an explicit failure instead of a plausible guess.
+ * Browsers get `index.browser.ts` instead, through the `browser` condition in
+ * this package's `exports` map. The two files differ only in these three
+ * lines; the API itself lives in `api.ts`.
  */
 
-export { toRomaji, extractPostalCode } from './toRomaji.js';
-export { fromRomaji, renderJapanese, type JapaneseAddress, type FromRomajiOptions } from './fromRomaji.js';
-export { parse, detectScript, containsJapanese, type AddressScript } from './parse.js';
-export {
-  toFormat,
-  type FormatTarget,
-  type FormatMap,
-  type GoogleI18nAddress,
-  type ShopifyAddress,
-  type StripeAddress,
-} from './formats/index.js';
+import { setPlatform } from './platform/current.js';
+import { nodePlatform } from './platform/node.js';
 
-export {
-  configureDataSource,
-  isDataConfigured,
-  type DataSourceOptions,
-} from './normalizer.js';
+setPlatform(nodePlatform);
 
-export { clearDataCache } from './dataAccess.js';
-
-export { kanaToRomaji, toKatakana } from './romaji/hepburn.js';
-export { numberToKanji, kanjiToNumber } from './kanjiNumbers.js';
-export { isKyotoStreetAddress, splitKyotoStreet, type KyotoSplit } from './kyoto.js';
-export { PREFECTURES, findPrefectureByJa, findPrefectureByRomaji } from './data/prefectures.js';
-
-export type {
-  AddressComponent,
-  AddressOrder,
-  Failure,
-  FailureReason,
-  LongVowelStyle,
-  NormalizationLevel,
-  ParsedAddress,
-  Result,
-  RomajiAddress,
-  Success,
-  ToRomajiOptions,
-} from './types.js';
+export * from './api.js';

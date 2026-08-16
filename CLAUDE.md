@@ -9,8 +9,9 @@
 `jp-address-romaji`（ライブラリ）と `jp-address-romaji-data`（オフラインデータセット）。
 住所は個人情報なので、ライブラリはそれをどこにも送らない: ホスト型 API なし、サインアップ
 なし、既定では住所データセットのローカルコピーを読み、**変換時にネットワークへのリクエストを
-一切行わない**。Node.js 18+ で動作。ブラウザで使う場合は、自分でホストするエンドポイント
-経由でデータを供給する必要がある。
+一切行わない**。Node.js 18+ で動作。ブラウザにも対応している（0.1.6〜）が、そちらは自分で
+ホストするエンドポイントからデータを供給する構成で、**都道府県と市区町村はそのリクエスト URL に
+出る**——Node 経路より弱い保証であることを、文書でも実装でも曖昧にしないこと。
 
 ## 差別化点（＝壊してはいけない価値）
 
@@ -57,8 +58,27 @@
   フックであり、日本郵便の `KEN_ALL` は同梱しない（別ライセンス・別更新周期の第2データ源を
   抱えるコストが、それで解消する完全形キー曖昧性 0.67% に見合わなかった——
   `scripts/measure-ambiguity.ts` による実測）。
-- **ホスト型データエンドポイント無しのブラウザ利用。** 既定の構成はデータセットを
-  ファイルシステムから読むので、そのままでは Node 専用。
+- **データを自分でホストしないブラウザ利用。** ブラウザ用エントリポイントはあるが、
+  フォールバック先のホスト型 API は用意しない。エンドポイントを指定しなければ
+  `DATA_NOT_CONFIGURED` で失敗する（`configureDataSource({ dataDir })` もブラウザでは同じ）。
+
+## エントリポイントは2つ（Node / ブラウザ）
+
+- `packages/core/src/index.ts`（Node・既定）と `packages/core/src/index.browser.ts`
+  （`exports` の `browser` 条件）。**違いは `src/platform/` のどちらの実装を入れるかだけ**で、
+  公開 API は `src/api.ts` に1つだけ置き、両方が同じものを再エクスポートする。
+- **`node:` の import は `src/platform/node.ts` の中だけ。** ほかの場所に書くと、ブラウザ
+  ビルドのモジュールグラフに Node の組み込みが入り、フロントエンド利用者のバンドルが
+  ビルドできなくなる。**Node のテストでは絶対に気づけない**（Node は普通に解決する）ので、
+  検出しているのは `scripts/browser-smoke.mjs`——pack した tarball を `browser` 条件で
+  バンドルし、ヘッドレス Chromium で住所を変換する。CI と publish 前の両方でブロッキング。
+- ランタイム依存の機能を足すときは `Platform` インターフェースに足し、**ブラウザ側の答えは
+  「近い値」ではなく拒否**にする（`dataDirToEndpoint` が `undefined` を返して
+  `DATA_NOT_CONFIGURED` になるのがその形）。
+- テストは内部モジュールを直接 import するので、エントリポイントを経由しない＝
+  Node の実装が入らない。`packages/core/test/setup.ts` が `src/index.ts` を import して
+  それを補っている（`setPlatform` を直接呼ばないのは、`index.ts` の配線を消したときに
+  スイート全体が赤くなるようにするため）。
 
 ## パッケージング: ESM 専用
 
@@ -120,6 +140,10 @@
 
 ## 環境
 
+- **ブラウザのスモークテストには Chromium が要る**（`pnpm exec playwright install chromium`）。
+  初回はレジストリにも接続する（pack した tarball を使い捨てプロジェクトに install するため）。
+  配信するのはリポジトリ内のフィクスチャで、外部ホストには触らない——**触ったら落ちる**
+  （ページが自分のオリジン以外へ出したリクエストを失敗として数える）。
 - **`japanese-addresses-v2.geoloniamaps.com` は制限付き開発環境から到達できないことがある。**
   ABR・digital.go.jp・日本郵便・Actions のアーティファクト blob ストレージも同様。そうした
   環境から実データに触るには **`Refresh address data and coverage`** ワークフローを回す——
@@ -133,6 +157,7 @@
 pnpm test                                   # フィクスチャのみ・外部要因なし
 JP_ADDRESS_ROMAJI_DATA_DIR=./address-data pnpm test   # + 実データ統合スイート
 pnpm typecheck && pnpm -r build             # -r だけでは test/scripts/vitest.config.ts が型検査されない
+node scripts/browser-smoke.mjs              # 要 pnpm -r build。バンドルして Chromium で実際に変換する
 npx tsx packages/data/src/build-data.ts --out ./address-data
 npx tsx scripts/verify-data-assumptions.ts --data ./address-data   # 出力を読むこと
 npx tsx scripts/measure-coverage.ts --data ./address-data > docs/coverage.md

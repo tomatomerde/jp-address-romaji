@@ -53,6 +53,37 @@ jobs:
       - name: Test (offline guarantee enforced)
         run: pnpm test
 
+  # The browser build cannot be checked by anything that is not a browser: Node
+  # resolves a stray `node:` import happily, so every test above would stay
+  # green while the bundle that front-end users build was broken. This job
+  # packs the tarball, bundles it with the `browser` export condition, and
+  # drives headless Chromium through the conversions. See the script's header.
+  #
+  # Not folded into `test`: that job's name is the only required status check
+  # on main, and it must keep reporting even while this one is being changed.
+  consume-in-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r build
+
+      # The runner image ships no browser binaries; the version installed here
+      # is the one pinned in package.json, so the two cannot drift apart.
+      - name: Install Chromium for Playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Convert an address in Chromium
+        run: node scripts/browser-smoke.mjs
+
   # Both packages declare engines.node ">=18", but every step above runs on 22,
   # so the oldest supported runtime was a promise shipped to users and never
   # exercised. The dev toolchain cannot move down (vitest and the build scripts

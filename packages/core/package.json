@@ -1,6 +1,6 @@
 {
   "name": "jp-address-romaji",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Bidirectional conversion between Japanese and romanized (international) addresses. Runs fully offline: address data never leaves your machine.",
   "keywords": [
     "japan",
@@ -21,9 +21,16 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "browser": {
+        "types": "./dist/index.browser.d.ts",
+        "default": "./dist/index.browser.js"
+      },
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
+  },
+  "browser": {
+    "./dist/index.js": "./dist/index.browser.js"
   },
   "files": [
     "dist",

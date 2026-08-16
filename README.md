@@ -5,7 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-brightgreen.svg)](#requirements)
 [![ESM only](https://img.shields.io/badge/module-ESM%20only-orange.svg)](#requirements)
-[![no network at runtime](https://img.shields.io/badge/network%20at%20runtime-none-brightgreen.svg)](#requirements)
+[![no network at runtime in Node](https://img.shields.io/badge/network%20at%20runtime%20%28Node%29-none-brightgreen.svg)](#requirements)
+[![browser: bring your own endpoint](https://img.shields.io/badge/browser-bring%20your%20own%20endpoint-blue.svg)](#in-the-browser)
 
 **English** | [日本語](./README.ja.md)
 
@@ -48,9 +49,9 @@ npm install jp-address-romaji jp-address-romaji-data
 
 > **Node.js 18+, ESM only.** There is no CommonJS build and none is planned —
 > `require('jp-address-romaji')` fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`. Use `import`, or a dynamic
-> `import()` from CommonJS code. The dataset is read from the filesystem, so the default
-> configuration is Node-only; browser use needs a data endpoint you host. Details under
-> [Requirements](#requirements).
+> `import()` from CommonJS code. In Node the dataset is read from the filesystem and nothing leaves
+> the machine. Browsers are supported too, with data you serve yourself — see
+> [In the browser](#in-the-browser). Details under [Requirements](#requirements).
 
 `jp-address-romaji-data` is optional but recommended: it is the offline dataset, and installing it
 means everything works with zero configuration. To point at your own copy instead:
@@ -68,10 +69,47 @@ npx jp-address-romaji-data build --out ./address-data
 
 That download contacts Geolonia once. Converting addresses never does.
 
+## In the browser
+
+The package ships a browser entry point, selected automatically through the `browser` condition in
+its `exports` map — any bundler that honours export conditions (Vite, webpack, esbuild, Rollup,
+Parcel) picks it up with no configuration. The API is identical. What differs is where the dataset
+comes from: a page has no filesystem, so you serve the data yourself and name it.
+
+```ts
+import { configureDataSource, toRomaji } from 'jp-address-romaji';
+
+configureDataSource({ endpoint: 'https://your-site.example/address-data/ja' });
+
+await toRomaji('東京都新宿区西新宿三丁目5番12号');
+// → { ok: true, value: { formatted: '3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan', … } }
+```
+
+The endpoint is the dataset directory with `/ja` on the end. The library reads `<endpoint>.json` for
+the prefecture and municipality index, then `<endpoint>/<prefecture>/<municipality>.json` for the
+towns of the one municipality it needs. Build the dataset with
+`npx jp-address-romaji-data build --out ./address-data` and serve `address-data/` as static files.
+The full set is one file per municipality — about 1,900 of them — but a conversion fetches two, so
+you can also publish only the municipalities you care about.
+
+**What the privacy claim means here, exactly.** The request for a municipality file puts the
+prefecture and the municipality in a URL that reaches your server. Everything past that — block
+number, building name, addressee — is matched inside the page and never sent anywhere. That is a
+weaker guarantee than the Node path, where nothing leaves the process at all. If your users are
+choosing this library for its privacy properties, tell them which of the two they are getting.
+
+`configureDataSource({ dataDir })` cannot work in a browser and does not pretend to: it leaves the
+library unconfigured, and conversions return `DATA_NOT_CONFIGURED`.
+
+CI bundles the packed tarball for the browser and converts an address in headless Chromium on every
+change (`scripts/browser-smoke.mjs`), including an assertion that the page contacts no origin but
+its own.
+
 ## Requirements
 
-Node.js 18+. The offline dataset is read from the filesystem, so the default configuration is
-Node-only; browser use requires supplying data through an endpoint you host.
+Node.js 18+ for the Node entry point; any bundler that resolves export conditions for the browser
+one. The offline dataset is read from the filesystem in Node — in a browser it comes from an
+endpoint you host (see [In the browser](#in-the-browser)).
 
 **ESM only, no CommonJS build.** Both packages ship `"type": "module"` with a single ESM entry
 point — there is no `require()`-compatible `dist/*.cjs`, and none is planned. Use `import` (or
@@ -116,6 +154,8 @@ a built dataset (`pnpm coverage:measure --data ./address-data`), not an `npm ins
   `PREFECTURE_NOT_FOUND`. Round-tripping works with the default western order.
 - **Reconstructing a koaza from romaji.** `fromRomaji` has no per-koaza index, so a koaza present in
   the original Japanese address cannot be recovered by round-tripping through romaji — see below.
+- **A browser without a dataset you host.** There is no hosted API to fall back on, by design, so a
+  page that names no endpoint converts nothing — see [In the browser](#in-the-browser).
 
 ### Kyoto street-name addresses
 

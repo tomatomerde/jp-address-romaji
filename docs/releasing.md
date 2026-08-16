@@ -422,6 +422,11 @@ exit 0 した。
   ステップ参照。
 - pack した各 tarball に対して `@arethetypeswrong/cli --profile esm-only` がクリーンであること。
 - 各パッケージのビルド済み `dist/index.js` が実際に `import()` に成功すること。
+- **core を出すときは、pack した tarball をブラウザ向けにバンドルして、ヘッドレス Chromium で
+  実際に住所を変換できること**（`scripts/browser-smoke.mjs`）。`import()` のスモークテストでは
+  ブラウザ用エントリポイントを検証できない——Node は `node:` の import を普通に解決してしまうので、
+  壊れたブラウザビルドは Node 側のどのチェックも素通りする。publish 後にレジストリから
+  検出する手段は無く、バージョンは取り消せないので、ここでブロックする。
 - npm が 11.5.1 以上であること。アップグレードステップの直後だけでなく、publish の直前にも
   再チェックする — trusted publishing の下限であり、古い npm はバージョンについて何も語らない
   認証エラーで失敗するから。

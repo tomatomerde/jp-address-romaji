@@ -34,16 +34,31 @@ publish は `workflow_dispatch`（run `31616749939`）で通ったのに、**タ
 詳細は CHANGELOG の `0.1.5` の項。公開済みの `0.1.5` を取得して両方の住所で確認済み
 （`三丁目大横` は `KOAZA_READING_INCOMPLETE`、`大字小野1-1` は小字なしで往復する）。
 
+**`core-0.1.6` はブラウザ対応（未公開・このリポジトリの `main` にはある）。** `packages/core` が
+`node:fs` / `node:module` / `node:path` / `node:url` をモジュール先頭で import していたため、
+ブラウザ向けにバンドルすると失敗し、フロントの住所フォームからは使えなかった。node 依存を
+`src/platform/` の実装に押し込み、`exports` に `browser` 条件と2つ目のエントリポイントを足した。
+公開 API は同一（`src/api.ts` に1つだけ置き、両エントリが再エクスポートする）。Node 利用者への
+影響は無い。データはページ側で配れないので `configureDataSource({ endpoint })` が必須で、
+**都道府県と市区町村は配信元サーバーのリクエスト URL に出る**——README にそう書いてある。
+`dataDir` はブラウザでは `DATA_NOT_CONFIGURED` になる（近い値を返さない）。
+検証は `scripts/browser-smoke.mjs`: pack した tarball を使い捨てプロジェクトに install し、
+`browser` 条件でバンドルして、ヘッドレス Chromium で往復と拒否を実行する。CI と publish 前の
+両方でブロッキング。**Node のテストではこの経路の退行を検出できない**（Node は `node:` の
+import を普通に解決するため）ので、このスクリプトが唯一の砦。
+
 完了済み:
 
 - `toRomaji` / `fromRomaji` / `parse` / `toFormat`。失敗は throw ではなく型付きの値として
   返す
+- ブラウザ対応（`browser` エクスポート条件 + `src/platform/`、`core-0.1.6`）
 - 京都の通り名住所: 通り名の句を正規化の前に切り出し、原文のまま保持し、決してローマ字化
   しない
 - `fromRomaji` の `postalCodeIndex` フック。呼び出し側が自前の郵便番号データで曖昧さを絞り込める
 - オフライン保証。`fetch` を throw するスタブに置き換えるテストで強制している
-- テスト 100 件がパス。加えて実データセットがあるときだけ走るテストが 5 件
-- CI（lint・typecheck・build・test）とデータ更新ワークフロー
+- テスト 205 件がパス（+15 スキップ = 実データセットがあるときだけ走るもの。2026-08-16 実測、
+  Node 22.22.2）
+- CI（lint・typecheck・build・test・Node 18 での消費・ブラウザでの消費）とデータ更新ワークフロー
 - 両パッケージの README、CHANGELOG、そして完全なデータセットなしにデータパッケージの公開を
   拒否する `prepublishOnly` ガード
 
@@ -486,12 +501,11 @@ stem）を回して、歴史的な 0.95/1.23 を再現する変種があるか�
 これらはいずれも検討のうえ意図的に先送りしたもので、見落としではない — したがってどれかを
 閉じる変更は、機構を足すだけでなく、トレードオフがなぜ動いたかを述べるべき。貢献歓迎:
 
-- **CI は Node 22 しかテストしていないのに、`engines` は `>=18` と言っている。**
-  「Node 18 で動く」は現状、パッケージと一緒に出荷される未検証の約束。build matrix で決着する。
-- CI に `permissions:` ブロックがなく、`GITHUB_TOKEN` はデフォルトスコープで走る
-- pull request 中のブランチでは CI が二重に走る（`push: ['**']` と `pull_request` の両方が
-  発火する）
-- issue・pull-request のテンプレート、`SECURITY.md`、`CODEOWNERS`、依存更新の自動化がない
+（この節にあった4件——Node 18 が CI で踏まれていない、CI に `permissions:` が無い、CI の二重
+起動、issue/PR テンプレート・`SECURITY.md`・`CODEOWNERS`・依存更新の自動化が無い——は、実体を
+確認したところすべて解消済みだったので 2026-08-16 に削除した。記録は CHANGELOG とコミット履歴に
+ある。）
+
 - **`formats/index.ts` の `toFormat` にある `parsed.prefecture?.romaji ?? parsed.prefecture?.ja`
   フォールバック。** ライブラリ自身が作る `ParsedAddress` は `prefecture.romaji` を必ず持つため
   実質到達しない。到達しうるのは呼び出し側が `romaji` を入れずに自分で組み立てた

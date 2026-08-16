@@ -10,8 +10,7 @@
  */
 
 import { config } from '@geolonia/normalize-japanese-addresses';
-import { fileURLToPath } from 'node:url';
-import fs from 'node:fs/promises';
+import { getPlatform } from './platform/current.js';
 
 /** Shape of the prefecture/city index (`ja.json`). */
 export interface CityRecord {
@@ -98,7 +97,11 @@ async function readDataFile<T>(suffix: string): Promise<T | undefined> {
     // TypeError out of every conversion.
     const url = new URL(`${endpoint}${suffix}`);
     if (url.protocol === 'file:') {
-      const text = await fs.readFile(fileURLToPath(url), 'utf-8');
+      // Local reads go through the platform bindings: in a browser there is no
+      // filesystem, and this resolves to `undefined` — the same "no data
+      // available" outcome as a missing file, never a fetch to somewhere else.
+      const text = await getPlatform().readFileUrl(url);
+      if (text === undefined) return undefined;
       parsed = JSON.parse(text) as T;
     } else {
       // Only reached when the caller explicitly configured a remote endpoint.
