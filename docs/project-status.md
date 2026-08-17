@@ -10,7 +10,10 @@
 ## 現在の状態
 
 **公開済み。** `jp-address-romaji` と `jp-address-romaji-data` は両方とも npm に公開されている。
-最新は `jp-address-romaji` が `0.1.6`（2026-08-16）、`jp-address-romaji-data` が `0.1.5`（2026-08-14）。
+最新は `jp-address-romaji` が `0.1.7`（2026-08-17）、`jp-address-romaji-data` が `0.1.5`（2026-08-14）。
+`0.1.7` は**デモが見つけた不具合の修正**（イシュー #58。下の「デモページ」の節を参照）で、
+2回目の `core-only` リリース（`cut_release: true` の dispatch、run `32008985284`）。
+
 `0.1.6` は**初めての `core-only` リリース**で、`core-v*` タグの経路——CHANGELOG のスコープ付き
 見出し（`## core-0.1.6`）、片方のパッケージだけの pack と publish、スコープ付きの GitHub
 Release——が実運用で通ったのはこれが最初（run `31961720562`、`cut_release: true` の dispatch）。
@@ -123,6 +126,11 @@ README（英日）のリンクと `packages/core` の `homepage` も設定した
 `0.1.7` は `normalizeJapanese` で catch し、上流を `{ level: 2 }` で呼び直して市区町村名を
 得たうえで `DATA_NOT_CONFIGURED` を返す（索引は失敗した試行がキャッシュ済みなので**追加の
 リクエストは出ない**——`missingTownFileEndpoint.test.ts` が実測して固定している）。
+**公開された 0.1.7 をレジストリから入れ直して、部分的なエンドポイントに対して確認済み**
+（両方向とも `DATA_NOT_CONFIGURED`、URL に番地・建物名・宛名は出ない）。
+デモの pin も 0.1.7 に上げ、パネル4の期待値を `throw` → `refuse` にした。
+**pin を 0.1.6 に戻すとデモの検査が落ちることも確認してある**——公開済みの版が退行したときに
+気づく経路は、このリポジトリにはこれしか無い。
 **`TOWN_NOT_FOUND` には倒していない**: 町ファイルが無いときも `level` は 2 で止まるので
 区別が付かないが、実在する町について「見つからない」と答えるのは、このライブラリが
 いちばん避けている「もっともらしい誤答」そのものだから。わざと戻して確認済み——

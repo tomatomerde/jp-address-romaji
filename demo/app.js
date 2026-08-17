@@ -145,8 +145,18 @@ function failureBox(result, lead) {
   return box;
 }
 
-/** The box shown when the call threw instead of returning a failure. */
-function throwBox(err, where) {
+/**
+ * The box shown when a call threw instead of returning a failure.
+ *
+ * Not expected to render. It exists because it once did: until 0.1.7 the
+ * forward direction threw for a municipality this page does not carry, which
+ * is the most likely thing a visitor does here (issue #58, found by building
+ * this demo). Keeping the box means a return of that shape shows up as itself
+ * rather than as a blank panel — and `scripts/verify-demo.mjs` asserts it stays
+ * absent, so it doubles as the check that the fix is still in the pinned
+ * version.
+ */
+function throwBox(err) {
   const { name, message } = errorParts(err);
   const box = el('div', 'warn warn-throw');
   const head = el('p', 'warn-head');
@@ -158,14 +168,13 @@ function throwBox(err, where) {
     el(
       'p',
       'err-message',
-      `jp-address-romaji ${CORE_VERSION} は、エンドポイントが持っていない市区町村ファイル` +
-        '（HTTP 404）を、型付きの失敗ではなく例外にします。' +
-        (where ? `ここで取りに行ったのは ${where.prefecture}${where.municipality} です。` : '') +
-        'これはこのデモを作る過程で見つかった本体側の不具合です:',
+      `これは起きてはいけません。このライブラリは失敗を例外ではなく ` +
+        `{ ok: false, reason } という値で返す設計で、それが呼び出し側に分岐を強制する仕組み` +
+        `だからです。jp-address-romaji ${CORE_VERSION} で出たのなら不具合です:`,
     ),
   );
-  const link = el('a', 'warn-link', 'イシュー #58 — toRomaji throws instead of returning a failure');
-  link.href = `${REPO_URL}/issues/58`;
+  const link = el('a', 'warn-link', 'イシューとして報告する');
+  link.href = `${REPO_URL}/issues`;
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
   box.append(link);
@@ -273,7 +282,7 @@ async function renderForward(lib, input, options, out) {
   try {
     result = await lib.toRomaji(input, options);
   } catch (err) {
-    out.append(throwBox(err, undefined));
+    out.append(throwBox(err));
     return;
   }
 
@@ -368,7 +377,7 @@ async function renderReverse(lib, input, out) {
   try {
     result = await lib.fromRomaji(input);
   } catch (err) {
-    out.append(throwBox(err, undefined));
+    out.append(throwBox(err));
     return;
   }
 
@@ -693,10 +702,11 @@ const INPUT_CASES = [
       },
       {
         expr: `toRomaji('東京都渋谷区神南一丁目1-1')`,
-        expect: 'throw',
+        expect: 'refuse',
         note:
-          '同じ状況なのに、順方向は例外になる。正規化を委譲している上流が 404 の本文を ' +
-          'JSON として読もうとするため。本体側の不具合（イシュー #58）で、直れば上の行と同じ refuse になる',
+          '順方向も同じ理由で断る。0.1.6 まではここが例外になっていた（イシュー #58。' +
+          '正規化を委譲している上流が 404 の本文を JSON として読もうとするため）。' +
+          '0.1.7 で、市区町村名を添えた DATA_NOT_CONFIGURED になった',
         run: (lib) => lib.toRomaji('東京都渋谷区神南一丁目1-1'),
       },
     ],

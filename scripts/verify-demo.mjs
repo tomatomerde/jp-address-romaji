@@ -384,28 +384,29 @@ try {
     'the demo-limit box should name the municipality it does not carry',
   );
 
-  /* 13b. The forward direction's throw is contained and explained.
+  /* 13b. The forward direction answers an unserved municipality the same way
+   *      the reverse one does, and does not throw.
    *
-   *      This is the published library's one uncaught exception (issue #58),
-   *      and it fires on the most likely first interaction: a visitor typing
-   *      an address the demo does not carry data for. The page must survive it
-   *      and name it, rather than going blank or blaming the address. When the
-   *      library stops throwing, the input case in panel 4 flips first and
-   *      this assertion is what says the box is no longer reachable. */
+   *      This is the assertion that keeps issue #58 fixed in whatever version
+   *      is pinned. Until 0.1.7 this exact interaction — the most likely first
+   *      thing a visitor does, typing their own address — escaped as an
+   *      uncaught SyntaxError from the upstream normalizer parsing a 404 page.
+   *      Panel 4 pins the library's behaviour; this pins the page's, because a
+   *      demo that renders a stack trace for the common case is broken even
+   *      when the library underneath is not. */
   await page.fill('#forward-input', '東京都渋谷区神南一丁目1-1');
-  await page.waitForSelector('#forward-output .warn-throw', { timeout: 30_000 });
-  const throwBox = page.locator('#forward-output .warn-throw');
+  await page.waitForSelector('#forward-output .warn-demo', { timeout: 30_000 });
   assert.match(
-    await throwBox.textContent(),
-    /#58/,
-    'the throw should be attributed to the issue tracking it, not left as a raw stack',
+    await page.locator('#forward-output .warn-demo').textContent(),
+    /東京都渋谷区/,
+    'the forward direction should name the municipality this demo does not carry',
   );
   assert.equal(
-    await page.locator("#forward-output .warn-throw a[target='_blank'][rel*='noopener']").count(),
-    1,
-    'the issue link in the throw box should open in a new tab with rel=noopener',
+    await page.locator('#forward-output .warn-throw').count(),
+    0,
+    'the forward direction threw for an unserved municipality — issue #58 has regressed in the pinned version',
   );
-  // The page keeps working afterwards: a caught throw must not wedge the panel.
+  // The page keeps working afterwards: a refusal must not wedge the panel.
   await page.fill('#forward-input', '東京都新宿区西新宿三丁目5番12号');
   await page.waitForSelector('#forward-output .verdict-ok', { timeout: 30_000 });
 
@@ -419,12 +420,17 @@ try {
   const beforeTyping = requests.length;
   await page.fill('#forward-input', '');
   await page.locator('#forward-input').pressSequentially('東京都渋谷区神南一丁目1-1', { delay: 30 });
-  await page.waitForSelector('#forward-output .warn-throw', { timeout: 30_000 });
+  await page.waitForSelector('#forward-output .warn-demo', { timeout: 30_000 });
   await page.waitForTimeout(700);
   const typingRequests = requests.slice(beforeTyping);
   assert.ok(
     typingRequests.length <= 2,
     `typing an address should settle into at most 2 requests, made ${typingRequests.length}: ${JSON.stringify(typingRequests.map((u) => decodeURIComponent(u)))}`,
+  );
+  assert.equal(
+    await page.locator('#forward-output .warn-throw').count(),
+    0,
+    'typing an unserved address produced an uncaught throw',
   );
   await page.fill('#forward-input', '東京都新宿区西新宿三丁目5番12号');
   await page.waitForSelector('#forward-output .verdict-ok', { timeout: 30_000 });
