@@ -464,6 +464,18 @@ function classifyRequest(url) {
 /** Every request the page has made, oldest first. Filled by the observer. */
 const REQUESTS = [];
 
+/**
+ * How many rows of the request list are rendered.
+ *
+ * Normal use cannot reach this: the page's own assets plus both directions of
+ * all served municipalities is about 24. It is reachable by typing addresses in
+ * municipalities this demo does not carry, because a 404 is not cached — each
+ * attempt is a fresh request. Rather than let the list grow without limit, the
+ * oldest rows are dropped and the omission is stated with its count. A list
+ * offered as "everything this page sent" must not silently become "some of it".
+ */
+const REQUEST_ROW_LIMIT = 40;
+
 function renderRequests(out) {
   out.replaceChildren();
 
@@ -488,8 +500,21 @@ function renderRequests(out) {
     ),
   );
 
+  const omitted = Math.max(0, REQUESTS.length - REQUEST_ROW_LIMIT);
+  if (omitted > 0) {
+    out.append(
+      el(
+        'p',
+        'summary summary-truncated',
+        `↑ 古いほうの ${omitted} 件は表示を省略しています（新しい ${REQUEST_ROW_LIMIT} 件だけを出しています）。` +
+          '省略されるのはたいてい、このデモが配っていない市区町村への繰り返しのリクエストです——' +
+          '404 はキャッシュされないので、入力するたびに1件ずつ増えます。',
+      ),
+    );
+  }
+
   const list = el('ol', 'requests');
-  for (const entry of REQUESTS) {
+  for (const entry of REQUESTS.slice(-REQUEST_ROW_LIMIT)) {
     const li = el('li', 'request' + (entry.info.alarm ? ' request-alarm' : ''));
     li.append(el('span', `req-kind req-${entry.info.kind}`, entry.info.label));
     li.append(el('code', 'req-url', entry.display));
@@ -770,6 +795,28 @@ function renderFacts(lib) {
 
 /* ---------- wiring ---------- */
 
+/**
+ * Runs `fn` once the visitor stops typing.
+ *
+ * Not a nicety. A municipality this demo does not carry answers 404, and a 404
+ * is not cached anywhere — so without this, every keystroke of an address the
+ * page has no data for costs a request: typing 東京都渋谷区神南一丁目1-1 one
+ * character at a time produced nine. That is noise in the very list this page
+ * asks visitors to read, and it is also what any real address form would avoid.
+ * Conversions inside a served municipality are free either way, because the
+ * town file is cached after the first fetch.
+ */
+function debounce(fn, ms) {
+  let timer;
+  return () => {
+    clearTimeout(timer);
+    timer = setTimeout(fn, ms);
+  };
+}
+
+/** Long enough to swallow a burst of typing, short enough to feel immediate. */
+const TYPING_SETTLE_MS = 250;
+
 function makePresets(container, presets, apply) {
   for (const preset of presets) {
     const button = el('button', 'preset');
@@ -862,12 +909,15 @@ async function main() {
   const runForward = () =>
     renderForward(lib, forwardInput.value, forwardOptions(), forwardOutput);
 
+  // Presets run immediately; typing waits for a pause. A preset is one
+  // deliberate action, and delaying it would only make the page feel slow.
   makePresets(document.getElementById('forward-presets'), PRESET_FORWARD, (v) => {
     forwardInput.value = v;
     void runForward();
   });
-  for (const node of [forwardInput, optLongVowel, optOrder, optCapitalization, optIncludeCountry]) {
-    node.addEventListener('input', () => void runForward());
+  const forwardSettled = debounce(() => void runForward(), TYPING_SETTLE_MS);
+  forwardInput.addEventListener('input', forwardSettled);
+  for (const node of [optLongVowel, optOrder, optCapitalization, optIncludeCountry]) {
     node.addEventListener('change', () => void runForward());
   }
 
@@ -879,8 +929,7 @@ async function main() {
     reverseInput.value = v;
     void runReverse();
   });
-  reverseInput.addEventListener('input', () => void runReverse());
-  reverseInput.addEventListener('change', () => void runReverse());
+  reverseInput.addEventListener('input', debounce(() => void runReverse(), TYPING_SETTLE_MS));
 
   // Prefilled on purpose: the page must show real results — including at least
   // one refusal — before the visitor touches anything.

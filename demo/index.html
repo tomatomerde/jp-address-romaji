@@ -40,7 +40,7 @@
   <p class="request-meter" id="request-meter">
     <span class="meter-label">このページが出したリクエスト</span>
     <output class="meter-value" id="request-count" for="forward-input reverse-input">0 件</output>
-    <span class="meter-note">操作しながらこの数字を見てください。増えるのは<strong>まだ取得していない市区町村を初めて使ったとき</strong>だけで、同じ市区町村を続けて変換しても増えません（読んだファイルはページ内にキャッシュされます）。<strong>ただしこれはページ自身が数えた値です</strong>——鵜呑みにしたくない場合は、ブラウザの開発者ツール（<kbd>F12</kbd>）の Network タブを開いたまま操作すると、同じことを外側から確認できます。</span>
+    <span class="meter-note">操作しながらこの数字を見てください。増えるのは<strong>その市区町村の町データをまだ持っていないとき</strong>だけで、取得済みならいくら変換しても増えません。ただし<strong>方向ごとに1回ずつ</strong>出ます（順方向と逆方向は別々のキャッシュを持っているため）。<strong>この数字はページ自身が数えた値です</strong>——鵜呑みにしたくない場合は、ブラウザの開発者ツール（<kbd>F12</kbd>）の Network タブを開いたまま操作すると、同じことを外側から確認できます。</span>
   </p>
 </header>
 
@@ -116,7 +116,7 @@
 
 <section class="panel" id="panel-network" hidden>
   <h2>3. このページが送ったリクエスト</h2>
-  <p class="panel-lead">ページを開いてから<strong>いままでに発生した通信を全部</strong>並べています（<code>PerformanceObserver</code> が見ているので、<code>fetch</code> でも <code>&lt;script&gt;</code> でも画像でも、リクエストを1つ使うものは全部出ます）。上で入力した番地・建物名・宛名が<strong>この一覧に出てこない</strong>ことが、このライブラリの主張そのものです。出ていたら、それは不具合です。</p>
+  <p class="panel-lead">ページを開いてから<strong>いままでに発生した通信</strong>を並べています（<code>PerformanceObserver</code> が見ているので、<code>fetch</code> でも <code>&lt;script&gt;</code> でも画像でも、リクエストを1つ使うものは全部出ます）。上で入力した番地・建物名・宛名が<strong>この一覧に出てこない</strong>ことが、このライブラリの主張そのものです。出ていたら、それは不具合です。なお入力欄は<strong>打ち終わって 0.25 秒</strong>で変換します——1文字ごとに変換すると、このデモが配っていない市区町村ではキーストロークのぶんだけリクエストが出て、読むための一覧が埋まってしまうためです。</p>
 
   <div id="network-output" class="output"></div>
 

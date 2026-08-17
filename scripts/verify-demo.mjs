@@ -162,11 +162,15 @@ try {
   const shippedIndex = JSON.parse(await readFile(path.join(SITE, 'data/ja.json'), 'utf8'));
   const municipalityCount = shippedIndex.data.reduce((n, p) => n + p.cities.length, 0);
   const totalBytes = SERVED_MUNICIPALITIES.reduce((sum, m) => sum + m.bytes, 0);
+  // Mirrors app.js's formatBytes, both branches. Reproducing only the MB one
+  // would turn a trimmed slice into a failing check about nothing.
+  const formatBytes = (bytes) =>
+    bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
   const expectedFacts = {
     'prefecture-count': String(bundled.PREFECTURES.length),
     'municipality-count': municipalityCount.toLocaleString('ja-JP'),
     'served-count': String(SERVED_MUNICIPALITIES.length),
-    'slice-kb': `${(totalBytes / 1024 / 1024).toFixed(1)} MB`,
+    'slice-kb': formatBytes(totalBytes),
   };
   assert.equal(
     shippedIndex.data.length,
@@ -300,16 +304,39 @@ try {
     }
   }
 
-  /* 11. Converting inside a municipality already fetched costs nothing. The
-   *     page tells visitors the counter stops moving; if the cache regressed
-   *     it would keep climbing while the copy said otherwise. */
+  /* 11. What the meter's copy claims about caching, measured rather than
+   *     assumed. The page says two things: a municipality already fetched costs
+   *     nothing, and the two directions each pay once because they cache
+   *     separately. Both are asserted, because stating only the first would be
+   *     a rule a visitor's own browser contradicts on the second click — press
+   *     a reverse preset, then convert the same municipality forward, and a
+   *     request appears next to copy saying it would not. */
   const beforeRepeat = requests.length;
   await page.fill('#forward-input', '大阪府大阪市北区梅田2-2-2');
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(900);
   assert.deepEqual(
     requests.slice(beforeRepeat),
     [],
-    'a second conversion in the same municipality made a request — the page says it does not',
+    'a second conversion in the same direction and municipality made a request — the page says it does not',
+  );
+
+  const beforeCrossDirection = requests.length;
+  await page.fill('#reverse-input', '2-2 Umeda, Kita-ku, Osaka-shi, Osaka');
+  await page.waitForTimeout(900);
+  const crossDirection = requests.slice(beforeCrossDirection).map((u) => decodeURIComponent(u));
+  assert.equal(
+    crossDirection.length,
+    1,
+    `the other direction should fetch the same municipality exactly once more (separate caches), got ${JSON.stringify(crossDirection)}`,
+  );
+  assert.match(crossDirection[0], /大阪市北区\.json/);
+  const beforeCrossRepeat = requests.length;
+  await page.fill('#reverse-input', '3-3 Umeda, Kita-ku, Osaka-shi, Osaka');
+  await page.waitForTimeout(900);
+  assert.deepEqual(
+    requests.slice(beforeCrossRepeat),
+    [],
+    'the second direction should also cache after its first fetch',
   );
 
   /* 12. The on-page list agrees with what the browser did. Playwright's view is
@@ -382,6 +409,26 @@ try {
   await page.fill('#forward-input', '東京都新宿区西新宿三丁目5番12号');
   await page.waitForSelector('#forward-output .verdict-ok', { timeout: 30_000 });
 
+  /* 13c. Typing costs one request, not one per character.
+   *
+   *      The page states that the input settles for a quarter second before
+   *      converting, and that claim exists because of this measurement: inside
+   *      a municipality the demo does not carry, every keystroke used to be its
+   *      own fetch — typing this address one character at a time produced nine
+   *      requests, all 404, filling the list this page asks people to read. */
+  const beforeTyping = requests.length;
+  await page.fill('#forward-input', '');
+  await page.locator('#forward-input').pressSequentially('東京都渋谷区神南一丁目1-1', { delay: 30 });
+  await page.waitForSelector('#forward-output .warn-throw', { timeout: 30_000 });
+  await page.waitForTimeout(700);
+  const typingRequests = requests.slice(beforeTyping);
+  assert.ok(
+    typingRequests.length <= 2,
+    `typing an address should settle into at most 2 requests, made ${typingRequests.length}: ${JSON.stringify(typingRequests.map((u) => decodeURIComponent(u)))}`,
+  );
+  await page.fill('#forward-input', '東京都新宿区西新宿三丁目5番12号');
+  await page.waitForSelector('#forward-output .verdict-ok', { timeout: 30_000 });
+
   /* 14. Every off-site link opens in a new tab with rel=noopener, and every
    *     local link is a .txt — Pages serves an unknown extension as a
    *     download, so an attribution notice nobody can open is no notice. */
@@ -414,6 +461,59 @@ try {
   assert.ok(
     attribution.includes('Geolonia'),
     'the shipped attribution notice does not mention Geolonia',
+  );
+
+  /* 15b. The two coverage percentages the page quotes exist in the generated
+   *      coverage report.
+   *
+   *      These are the only figures on the page that a page cannot compute for
+   *      itself — counting them means reading all 638,567 town rows, and the
+   *      demo carries nine municipalities. So they are quoted, and a quoted
+   *      measurement goes stale the moment the dataset is refreshed unless
+   *      something compares it. `docs/coverage.md` is generated by
+   *      scripts/measure-coverage.ts, which makes it the one place they can be
+   *      checked against. */
+  const coverage = await readFile(path.join(root, 'docs/coverage.md'), 'utf8');
+  const quoted = (await page.locator('.notes').first().textContent()).match(/\d+\.\d+%/g) ?? [];
+  assert.ok(quoted.length >= 2, `expected the page to quote coverage figures, got ${quoted.length}`);
+  for (const figure of quoted) {
+    assert.ok(
+      coverage.includes(figure),
+      `the page quotes ${figure}, which docs/coverage.md does not report — refresh one of the two`,
+    );
+  }
+
+  /* 16. The request list truncates, and says so.
+   *
+   *     Left last, because it deliberately dirties the state the assertions
+   *     above read. Reaching the limit takes work — the page's own assets plus
+   *     both directions of every served municipality is about 24 — but a
+   *     visitor typing addresses this demo has no data for gets there, since a
+   *     404 is cached by nobody and each attempt is a fresh request. A list
+   *     offered as "everything this page sent" must not quietly turn into some
+   *     of it, so the omission is rendered with its count and checked here.
+   *     Without this the truncation branch would never run in CI, and a check
+   *     that cannot fire is worth as much as one that cannot pass. */
+  const UNSERVED = ['Shibuya-ku', 'Nakano-ku', 'Toshima-ku', 'Ota-ku'];
+  for (let i = 0; requests.length < 46 && i < 40; i++) {
+    await page.fill('#reverse-input', `${i + 1}-1 Jinnan, ${UNSERVED[i % UNSERVED.length]}, Tokyo`);
+    await page.waitForTimeout(450);
+  }
+  const total = Number(await page.evaluate(() => document.body.dataset.requestCount));
+  assert.ok(total > 40, `expected to push the request list past its limit, reached ${total}`);
+  const rows = await page.locator('#network-output .request').count();
+  assert.equal(rows, 40, `the list should cap at 40 rows, rendered ${rows}`);
+  const truncated = page.locator('#network-output .summary-truncated');
+  assert.equal(await truncated.count(), 1, 'the page truncated its request list without saying so');
+  assert.match(
+    await truncated.textContent(),
+    new RegExp(`古いほうの ${total - 40} 件`),
+    'the truncation note should state how many rows were dropped',
+  );
+  assert.match(
+    (await page.locator('#network-output .summary').first().textContent()).trim(),
+    new RegExp(`合計 ${total} 件`),
+    'the total must keep counting everything even while the list shows part of it',
   );
 
   assert.deepEqual(pageErrors, [], 'uncaught page errors during interaction');

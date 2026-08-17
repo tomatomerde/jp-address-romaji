@@ -270,6 +270,14 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1p
 .output { margin-top: 1.1rem; }
 
 .summary { font-size: .85rem; color: var(--muted); margin: 1rem 0 .5rem; }
+/* Truncation is stated, so it is styled to be read rather than skimmed past. */
+.summary-truncated {
+  border-left: 3px solid var(--warn-line);
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-radius: 4px;
+  padding: .4rem .6rem;
+}
 
 /* The headline answer. */
 .verdict {
