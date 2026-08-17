@@ -97,7 +97,11 @@ the prefecture and municipality index, then `<endpoint>/<prefecture>/<municipali
 towns of the one municipality it needs. Build the dataset with
 `npx jp-address-romaji-data build --out ./address-data` and serve `address-data/` as static files.
 The full set is one file per municipality — about 1,900 of them — but a conversion fetches two, so
-you can also publish only the municipalities you care about.
+you can also publish only the municipalities you care about. If you do, an address in a
+municipality you did not publish comes back as `DATA_NOT_CONFIGURED` naming that municipality —
+a failure value like any other, not a thrown error. That needs `0.1.7` or newer; handle it the way
+you handle the rest of the failure reasons rather than treating it as a broken install, because on
+a partial dataset it is ordinary traffic.
 
 **What the privacy claim means here, exactly.** The request for a municipality file puts the
 prefecture and the municipality in a URL that reaches your server. Everything past that — block
@@ -213,17 +217,22 @@ await toRomaji('長野県飯田市本町三丁目大横1-1');
 // { ok: false, reason: 'KOAZA_READING_INCOMPLETE', … }
 ```
 
-That is the address `0.1.4` shipped as `"1-1 3Chome Hommachi"` with `大横` missing. Both examples
-are pinned in `packages/core/test/realdata.test.ts`, because this section previously documented an
-output — `Sanchomeoyoko` — that the shipped dataset cannot produce.
+Refusing this one needs `0.1.5` or newer. Both examples are pinned in
+`packages/core/test/realdata.test.ts`.
 
 Measured over the whole dataset (`scripts/verify-data-assumptions.ts`, assumption 6/6b): 437,014 of
 638,567 town rows carry a koaza (68.437%). 18,409 of those are purely numeric and are folded into
 `blockNumbers` instead; of the remaining 418,605 named koaza, every one has a kana reading, but only
-781 (0.187%) also carry a dedicated romaji field. The completeness check passes 417,213 of the named
-ones (99.667%) and refuses 1,392 (0.333%). Every sampled refusal has the same shape: a koaza ending
-in a directional kanji (北/南/東/西/上/下/中) whose kana reading stops short of it — 南郷通
-(札幌市白石区)'s koaza `一丁目北`, for example, has a kana reading that reaches only `チョウメ`.
+781 (0.187%) also carry a dedicated romaji field. The completeness check passes 417,206 of the named
+ones (99.666%) and refuses 1,399 (0.334%). Refusals take two shapes, and in both the reading stops
+before the name does:
+
+- **The reading stops short of a trailing positional kanji** (北/南/東/西/上/下/中). 南郷通
+  (札幌市白石区)'s koaza `一丁目北` has a kana reading that reaches only `チョウメ`.
+- **The reading stops at a counter** (`丁目`, `条`, `号`, `地割`, …) while the name continues past
+  it. `三丁目大横` above is this shape — `横` is not one of the seven positional kanji, so a check
+  aimed only at those does not catch it.
+
 Romanizing a truncated reading like that would silently name a different, real place, so it is
 refused with `KOAZA_READING_INCOMPLETE` instead.
 
