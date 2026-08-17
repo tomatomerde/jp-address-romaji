@@ -61,7 +61,7 @@
     "url": "git+https://github.com/tomatomerde/jp-address-romaji.git",
     "directory": "packages/core"
   },
-  "homepage": "https://github.com/tomatomerde/jp-address-romaji#readme",
+  "homepage": "https://tomatomerde.github.io/jp-address-romaji/",
   "bugs": {
     "url": "https://github.com/tomatomerde/jp-address-romaji/issues"
   },

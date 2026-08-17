@@ -95,9 +95,18 @@ pin して読み込む（`demo/pinned-version.txt` / `demo/pinned-data-version.t
 `scripts/verify-demo.mjs` が Chromium で建物名と宛名つきの住所を実際に打ち込み、
 ブラウザが出した全 URL を走査して断片が混じっていないことを検査する。
 
-**人間の操作が1つだけ残る**: Settings → Pages → Source を「GitHub Actions」にすること。
-`actions/configure-pages` は `GITHUB_TOKEN` に管理者権限が無いため失敗する（姉妹2案件で実測）。
-有効化後は `Demo (GitHub Pages)` を `workflow_dispatch` で回せばデプロイまで進む。
+**公開まで通った（2026-08-17）。** 所有者が Settings → Pages → Source を「GitHub Actions」に
+したあと（`actions/configure-pages` は `GITHUB_TOKEN` に管理者権限が無いため必ず失敗する。
+姉妹2案件でも同じ）、`workflow_dispatch` をセッションから叩いて build・deploy とも緑
+（run `32003989392`）。
+
+**そのあと本番の実物を検証した。** 18ファイルすべてを取得して手元のビルドと `sha256` が
+**全件一致**し、そのバイト列をローカルに配って Chromium で全チェックを通した
+（`tomatomerde.github.io` は `curl` では通るが Chromium からは `ERR_CONNECTION_RESET` になる）。
+配信ヘッダも実測済み——`.txt` は `text/plain; charset=utf-8` で `Content-Disposition` は付かず
+（ダウンロード扱いにならない）、`.json` は `application/json`、版のプレースホルダは置換済み。
+README（英日）のリンクと `packages/core` の `homepage` も設定した。
+残るはリポジトリの Website 欄だけ（API からは設定できない）。
 
 ### デモが見つけた本体の不具合（イシュー #58、未修正）
 
