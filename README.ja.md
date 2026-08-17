@@ -7,6 +7,7 @@
 [![ESM only](https://img.shields.io/badge/module-ESM%20only-orange.svg)](#動作要件)
 [![no network at runtime in Node](https://img.shields.io/badge/network%20at%20runtime%20%28Node%29-none-brightgreen.svg)](#動作要件)
 [![browser: bring your own endpoint](https://img.shields.io/badge/browser-bring%20your%20own%20endpoint-blue.svg)](#ブラウザで使う)
+[![Live demo](https://img.shields.io/badge/demo-live-1c5d99.svg)](https://tomatomerde.github.io/jp-address-romaji/)
 
 [English](./README.md) | **日本語**
 
@@ -18,6 +19,12 @@
 登録も不要です。住所データのローカルコピーを読み込み、既定では一切ネットワークアクセスを
 行いません。この保証は `fetch` を例外を投げるスタブに差し替えたテストで検証されており、
 ネットワークに到達する退行が入れば CI が落ちます。
+
+**[ブラウザで試す](https://tomatomerde.github.io/jp-address-romaji/)** —— 公開版のパッケージを
+そのままページ内で動かし、データはそのページ自身のオリジンから配っています。デモは
+**出したリクエストを全部並べる**ので、ブラウザで使う場合の唯一の注意点——都道府県と市区町村は
+URL に出て、それより後は出ない——を、文章ではなく実物で確かめられます。
+[ブラウザで使う](#ブラウザで使う)を参照。
 
 （英語版が原本です: [README.md](./README.md)）
 
@@ -99,6 +106,10 @@ await toRomaji('東京都新宿区西新宿三丁目5番12号');
 建物名・宛名——はページ内で処理され、どこにも送信されません。プロセスの外に何も出ない Node
 経路より弱い保証です。プライバシーを理由にこのライブラリを選ぶ利用者には、
 どちらの保証なのかを明示してください。
+
+[デモ](https://tomatomerde.github.io/jp-address-romaji/)がまさにこの構成です（一部の市区町村ぶんだけを
+ページ自身のオリジンから配っています）。出したリクエストを全部並べてあるので、上の段落は
+信用してもらうものではなく、確かめてもらえるものになっています。
 
 `configureDataSource({ dataDir })` はブラウザでは動作しませんし、動作するふりもしません——
 未設定のままとなり、変換は `DATA_NOT_CONFIGURED` を返します。

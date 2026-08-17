@@ -7,6 +7,7 @@
 [![ESM only](https://img.shields.io/badge/module-ESM%20only-orange.svg)](#requirements)
 [![no network at runtime in Node](https://img.shields.io/badge/network%20at%20runtime%20%28Node%29-none-brightgreen.svg)](#requirements)
 [![browser: bring your own endpoint](https://img.shields.io/badge/browser-bring%20your%20own%20endpoint-blue.svg)](#in-the-browser)
+[![Live demo](https://img.shields.io/badge/demo-live-1c5d99.svg)](https://tomatomerde.github.io/jp-address-romaji/)
 
 **English** | [日本語](./README.ja.md)
 
@@ -18,6 +19,12 @@ written in Latin script.
 and no service to sign up for. It reads a local copy of the address dataset and, by default, makes
 no network requests at all — enforced by a test that replaces `fetch` with a stub that throws, so a
 regression that reaches the network fails CI.
+
+**[Try it in your browser](https://tomatomerde.github.io/jp-address-romaji/)** — the published
+package, running on the page, with the dataset served from that page's own origin. The demo lists
+every request it makes, which is how you can check the one caveat this library has in a browser:
+the prefecture and the municipality appear in a URL, and nothing past them does. See
+[In the browser](#in-the-browser).
 
 ```ts
 import { toRomaji, fromRomaji } from 'jp-address-romaji';
@@ -97,6 +104,10 @@ prefecture and the municipality in a URL that reaches your server. Everything pa
 number, building name, addressee — is matched inside the page and never sent anywhere. That is a
 weaker guarantee than the Node path, where nothing leaves the process at all. If your users are
 choosing this library for its privacy properties, tell them which of the two they are getting.
+
+The [demo](https://tomatomerde.github.io/jp-address-romaji/) is this exact setup — a handful of
+municipalities served from the page's own origin — and it lists every request the page has made, so
+the paragraph above can be checked rather than taken on trust.
 
 `configureDataSource({ dataDir })` cannot work in a browser and does not pretend to: it leaves the
 library unconfigured, and conversions return `DATA_NOT_CONFIGURED`.
