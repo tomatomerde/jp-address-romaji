@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jp-address-romaji デモ — 日本の住所とローマ字を、ブラウザの中で双方向に変換する</title>
+<meta name="description" content="日本語住所とローマ字（国際・西洋語順）表記を双方向に変換する npm ライブラリ jp-address-romaji のデモ。読みを推測せず、確認できないときは理由つきで断ります。番地・建物名・宛名はこのページから出ません（都道府県と市区町村はデータ取得の URL に出ます）。">
+<!-- Empty data URI, not a file: without this the browser requests
+     /favicon.ico, and this page's whole argument is a complete list of the
+     requests it makes. Cheaper to not make the request than to explain it. -->
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./style.css">
+<!-- Japanese paragraphs below are written as one source line each. A newline
+     between two Japanese characters renders as a space, so wrapping this copy
+     for the editor's benefit puts gaps in the middle of sentences. -->
+</head>
+<body>
+
+<header class="page-head">
+  <h1>jp-address-romaji <span class="version">v__CORE_VERSION__</span></h1>
+  <p class="lead">「東京都新宿区西新宿三丁目5番12号」と「3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan」を<strong>双方向に</strong>変換します。そして<strong>読みを推測しません</strong>——データに裏付けが無ければ、それらしい綴りを返さずに理由つきで断ります。</p>
+  <p class="links">
+    <a href="https://www.npmjs.com/package/jp-address-romaji" target="_blank" rel="noopener noreferrer">npm</a>
+    <a href="https://github.com/tomatomerde/jp-address-romaji" target="_blank" rel="noopener noreferrer">GitHub</a>
+    <a href="https://github.com/tomatomerde/jp-address-romaji#readme" target="_blank" rel="noopener noreferrer">README</a>
+    <a href="https://github.com/tomatomerde/jp-address-romaji/blob/main/README.ja.md" target="_blank" rel="noopener noreferrer">README（日本語）</a>
+    <a href="https://zenn.dev/tomatomerde/articles/jp-address-romaji-offline" target="_blank" rel="noopener noreferrer">解説記事</a>
+  </p>
+
+  <!-- The honest note. Same wording as README.ja.md's ブラウザで使う section and
+       the article: a demo that blurs this is worse than no demo, because
+       privacy is the reason someone would pick this library at all. -->
+  <div class="privacy" id="privacy-note">
+    <h2>このページで、住所はどこまで外に出るか</h2>
+    <p>変換そのものは<strong>すべてこのページの中</strong>で行われます。ただし<strong>データの取得だけは通信します</strong>。ブラウザにはファイルシステムが無いので、住所データはこのページ自身が配信しているものを取りに行きます。</p>
+    <p class="privacy-key">その結果、<strong>都道府県と市区町村は、リクエスト URL に現れます</strong>（<code>…/data/ja/東京都/新宿区.json</code> のような形で、GitHub Pages のアクセスログに残ります）。それより後——<strong>番地・建物名・宛名は、どこにも送信されません</strong>。下の「<a href="#panel-network">このページが送ったリクエスト</a>」に、実際に出た URL を全部並べてあります。</p>
+    <p><strong>npm から Node で使う場合は、これも起きません。</strong>データセットはローカルのファイルから読むので、プロセスの外に何も出ません。ブラウザ経路は Node 経路より<strong>一段弱い保証</strong>です。プライバシーを理由にこのライブラリを選ぶなら、どちらの話なのかを区別してください。</p>
+  </div>
+
+  <p class="request-meter" id="request-meter">
+    <span class="meter-label">このページが出したリクエスト</span>
+    <output class="meter-value" id="request-count" for="forward-input reverse-input">0 件</output>
+    <span class="meter-note">操作しながらこの数字を見てください。増えるのは<strong>その市区町村の町データをまだ持っていないとき</strong>だけで、取得済みならいくら変換しても増えません。ただし<strong>方向ごとに1回ずつ</strong>出ます（順方向と逆方向は別々のキャッシュを持っているため）。<strong>この数字はページ自身が数えた値です</strong>——鵜呑みにしたくない場合は、ブラウザの開発者ツール（<kbd>F12</kbd>）の Network タブを開いたまま操作すると、同じことを外側から確認できます。</span>
+  </p>
+</header>
+
+<main>
+
+<section class="panel panel-guide">
+  <h2>このデモの見方</h2>
+  <p class="panel-lead">どのボタンを押しても、確かめてほしいのは次の3つです。<strong>各ボタンの下に「見どころ」を1行書いてあります。</strong></p>
+  <ol class="guide">
+    <li><strong>断ったケースを見る。</strong>このライブラリの主張は「正しく変換できること」ではなく<strong>「確認できないものを変換しないこと」</strong>です。宛名ラベルは、断られるより間違っているほうが困ります。プリセットには<strong>失敗するものが混ぜてあります</strong>——失敗は例外ではなく <code>{ ok: false, reason }</code> という値で返るので、呼び出し側は必ず分岐することになります</li>
+    <li><strong>「<a href="#panel-network">このページが送ったリクエスト</a>」を見る。</strong>出ているのは都道府県と市区町村までで、番地から先は出ていないことを、URL の一覧そのもので確かめられます</li>
+    <li><strong>このデモが配っているのは<span class="fact" data-fact="served-count">…</span>市区町村ぶんだけ</strong>だということ。全国は<span class="fact" data-fact="municipality-count">…</span>市区町村あり、データセットはその1つ1つが別ファイルです。ここに無い市区町村を入れると、ライブラリの答えではなく<strong>このデモの都合で</strong>失敗します。そのときはそう表示します（下の「<a href="#served-list">配っている市区町村</a>」に一覧があります）</li>
+  </ol>
+</section>
+
+<p id="loading" class="loading" role="status">ライブラリを読み込んでいます…</p>
+<p id="load-error" class="load-error" role="alert" hidden></p>
+
+<section class="panel" id="panel-forward" hidden>
+  <h2>1. 日本語 → ローマ字<code>toRomaji()</code></h2>
+  <p class="panel-lead">住所を入れると、西洋語順のローマ字表記と、その内訳を返します。全角数字・漢数字・<code>丁目/番/号</code> とハイフンの揺れ・都道府県の省略は、<a href="https://github.com/geolonia/normalize-japanese-addresses" target="_blank" rel="noopener noreferrer">@geolonia/normalize-japanese-addresses</a>（同梱している版は <span class="fact" data-fact="normalizer">…</span>）が吸収します。このライブラリが作っているのは<strong>その上のローマ字化・語順・出力形式</strong>だけです。</p>
+
+  <div class="presets" id="forward-presets"></div>
+
+  <label class="field">
+    <span class="field-label">日本語の住所</span>
+    <input id="forward-input" type="text" autocomplete="off" spellcheck="false"
+           value="東京都新宿区西新宿三丁目5番12号">
+  </label>
+
+  <fieldset class="field options">
+    <legend class="field-label">オプション</legend>
+    <label><span>longVowel</span>
+      <select id="opt-long-vowel">
+        <option value="none">none（既定・パスポート式）</option>
+        <option value="macron">macron（Tōkyō）</option>
+        <option value="circumflex">circumflex（Tôkyô）</option>
+        <option value="oh">oh（Ohsaka 式）</option>
+      </select>
+    </label>
+    <label><span>order</span>
+      <select id="opt-order">
+        <option value="western">western（既定）</option>
+        <option value="japanese">japanese（表示用）</option>
+      </select>
+    </label>
+    <label><span>capitalization</span>
+      <select id="opt-capitalization">
+        <option value="title">title（既定）</option>
+        <option value="upper">upper</option>
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" id="opt-include-country" checked> <span>includeCountry</span></label>
+  </fieldset>
+
+  <div id="forward-output" class="output"></div>
+</section>
+
+<section class="panel" id="panel-reverse" hidden>
+  <h2>2. ローマ字 → 日本語<code>fromRomaji()</code></h2>
+  <p class="panel-lead">逆方向です。<strong>外側から内側へ厳密に解決します</strong>（都道府県 → 市区町村 → 町名）。あるローマ字表記が実在の複数の町に当たるときは、勝手に1つ選ばず <code>AMBIGUOUS</code> を<strong>候補付きで</strong>返します——どれなのかを知っているのは、文脈を持っている呼び出し側だからです。</p>
+
+  <div class="presets" id="reverse-presets"></div>
+
+  <label class="field">
+    <span class="field-label">ローマ字の住所（都道府県が最後）</span>
+    <input id="reverse-input" type="text" autocomplete="off" spellcheck="false"
+           value="3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo">
+  </label>
+
+  <div id="reverse-output" class="output"></div>
+</section>
+
+<section class="panel" id="panel-network" hidden>
+  <h2>3. このページが送ったリクエスト</h2>
+  <p class="panel-lead">ページを開いてから<strong>いままでに発生した通信</strong>を並べています（<code>PerformanceObserver</code> が見ているので、<code>fetch</code> でも <code>&lt;script&gt;</code> でも画像でも、リクエストを1つ使うものは全部出ます）。上で入力した番地・建物名・宛名が<strong>この一覧に出てこない</strong>ことが、このライブラリの主張そのものです。出ていたら、それは不具合です。なお入力欄は<strong>打ち終わって 0.25 秒</strong>で変換します——1文字ごとに変換すると、このデモが配っていない市区町村ではキーストロークのぶんだけリクエストが出て、読むための一覧が埋まってしまうためです。</p>
+
+  <div id="network-output" class="output"></div>
+
+  <h3 class="sub" id="served-list">配っている市区町村</h3>
+  <p class="panel-lead">データセットは<strong>市区町村ごとに1ファイル</strong>で、<span class="fact" data-fact="prefecture-count">…</span>都道府県・全国<span class="fact" data-fact="municipality-count">…</span>市区町村ぶんあります。このデモが配っているのは、そのうち下の<span class="fact" data-fact="served-count">…</span>件だけです（合計 <span class="fact" data-fact="slice-kb">…</span>）。索引（<code>ja.json</code>、<span class="fact" data-fact="index-kb">…</span>）は<strong>削らずにそのまま</strong>配っています——索引を削ると、実在する市区町村をライブラリが「存在しない」と答えることになり、それは欠落ではなく<strong>誤答</strong>だからです。</p>
+  <div id="served-output" class="output"></div>
+</section>
+
+<section class="panel" id="panel-cases" hidden>
+  <h2>4. 受け付ける形と、受け付けない形</h2>
+  <p class="panel-lead"><strong>このページを開いた時点で実際に実行した結果です。</strong>受け付けないほうが多いのは手抜きではありません——住所の変換で怖いのは例外ではなく、<strong>それらしい別の住所が自信を持って返ってくること</strong>だからです。各ケースには「受けるはず／断るはず」を持たせてあり、<strong>食い違ったらこのページが警告を出し、CI が落ちます</strong>。デモは npm 公開版を読み込んでいるので、<strong>公開済みの版の挙動が変わったときに気づく仕掛けは、これしかありません</strong>。</p>
+
+  <div id="cases-output" class="output"></div>
+</section>
+
+<section class="panel panel-note">
+  <h2>このライブラリが「しない」こと</h2>
+  <ul class="notes">
+    <li><strong>読みを推測しない。</strong>ローマ字はすべてデータ由来です——データのローマ字フィールドか、かな読みの決定的な翻字か、そのどちらか。どちらも無ければ <code>NO_ROMAJI_DATA</code> で失敗します。同梱データでローマ字フィールドを持つのは 89.51%、かなを持つのは 99.55% なので、<strong>約1割は翻字経路で出ています</strong>（上のプリセット「北海道札幌市中央区円山1-1」がそれです）</li>
+    <li><strong>住所正規化を再発明しない。</strong>表記ゆれの吸収は <code>@geolonia/normalize-japanese-addresses</code> に全面的に委譲しています。このパッケージはその上のレイヤーだけです</li>
+    <li><strong>京都の通り名をローマ字化しない。</strong>通り名は正規化の前に切り離して <code>parsed.kyotoStreet</code> に<strong>原文のまま</strong>保持します。データに通り名の読みが無く、読みを推測することこそこのライブラリが拒否していることだからです</li>
+    <li><strong>建物名・部屋番号・宛名を翻訳しない。</strong><code>unparsed</code> として分離し、手を付けずに素通しします。型にこれらの <code>romaji</code> フィールドが無いのは設計です</li>
+    <li><strong>ジオコーディングを主張しない。</strong>町レベルの座標は同梱データから意図的に落としてあります（約19万レコードぶんのサイズ）</li>
+    <li><strong>郵便番号データを同梱しない。</strong><code>postalCodeIndex</code> は呼び出し側が自前データを差し込むフックで、日本郵便の <code>KEN_ALL</code> は持ちません</li>
+    <li><strong>ホスト型 API を用意しない。</strong>ブラウザでエンドポイントを指定しなければ <code>DATA_NOT_CONFIGURED</code> で失敗します。フォールバック先を持たないのは設計で、持った瞬間に「住所を外に出さない」が嘘になるからです</li>
+    <li><strong>正しさを保証しない。</strong>MIT ライセンスの "AS IS" 提供です。このライブラリが保証しているのは<strong>「確認できないものを変換しないこと」</strong>であって、「答えが正しいこと」ではありません</li>
+  </ul>
+</section>
+
+<section class="panel panel-note">
+  <h2>使う</h2>
+<pre class="install"><code>npm install jp-address-romaji@__CORE_VERSION__ jp-address-romaji-data@__DATA_VERSION__</code></pre>
+<pre class="install"><code>import { toRomaji, fromRomaji } from 'jp-address-romaji';
+
+await toRomaji('東京都新宿区西新宿三丁目5番12号');
+// → { ok: true, value: { formatted: '3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan', … } }
+
+await fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo');
+// → { ok: true, value: { formatted: '東京都新宿区西新宿三丁目5-12', … } }</code></pre>
+  <p class="panel-lead">Node ではこれだけで動きます。データはローカルのファイルから読み、変換時にネットワークへ出ません。<strong>このページと同じことをブラウザでやる</strong>なら、データを自分で配信してその場所を指定します:</p>
+<pre class="install"><code>import { configureDataSource, toRomaji } from 'jp-address-romaji';
+
+configureDataSource({ endpoint: 'https://your-site.example/address-data/ja' });</code></pre>
+  <p class="panel-lead">ライブラリが読むのは <code>&lt;endpoint&gt;.json</code>（都道府県・市区町村の索引）と、必要な1市区町村ぶんの <code>&lt;endpoint&gt;/&lt;都道府県&gt;/&lt;市区町村&gt;.json</code> だけなので、<strong>必要な市区町村だけを配信する</strong>こともできます——このページがまさにそれです。ESM 専用・Node 18 以上。<code>configureDataSource({ dataDir })</code> はブラウザでは動作せず、<code>DATA_NOT_CONFIGURED</code> になります（「近い挙動」に倒さないため）。</p>
+</section>
+
+</main>
+
+<footer class="page-foot">
+  <h2>出典とライセンス</h2>
+  <p>住所データの出典はデジタル庁<a href="https://www.digital.go.jp/policies/base_registry_address" target="_blank" rel="noopener noreferrer">アドレス・ベース・レジストリ</a>、加工・配信は <a href="https://github.com/geolonia/japanese-addresses-v2" target="_blank" rel="noopener noreferrer">Geolonia（@geolonia/japanese-addresses-v2）</a> です。帰属表示の全文は <a href="./vendor/ATTRIBUTION.txt" target="_blank" rel="noopener">ATTRIBUTION</a> にあります。このページが配っているのは <code>jp-address-romaji-data@__DATA_VERSION__</code> の中身の一部をそのままコピーしたものです。</p>
+  <p>コードは MIT です（<a href="./vendor/LICENSE.txt" target="_blank" rel="noopener">jp-address-romaji</a> / <a href="./vendor/DATA-LICENSE.txt" target="_blank" rel="noopener">jp-address-romaji-data</a>）。</p>
+  <p class="foot-meta">このページは npm 公開版の jp-address-romaji v__CORE_VERSION__（gzip 約 __BUNDLE_GZIP_KB__ KB）と jp-address-romaji-data v__DATA_VERSION__ を読み込んでいます。ページのソースは <a href="https://github.com/tomatomerde/jp-address-romaji/tree/main/demo" target="_blank" rel="noopener noreferrer">リポジトリの demo/</a>。</p>
+</footer>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -78,6 +78,41 @@ import を普通に解決するため）ので、このスクリプトが唯一�
 
 `main` は上記すべてを含む。
 
+## デモページ（2026-08-17）
+
+`demo/` にブラウザだけで動くデモがあり、`.github/workflows/pages.yml` が
+build → ブラウザ検証 → GitHub Pages へのデプロイまでを行う。公開先は
+<https://tomatomerde.github.io/jp-address-romaji/>。npm 公開版のライブラリとデータセットを
+pin して読み込む（`demo/pinned-version.txt` / `demo/pinned-data-version.txt`）ので、
+**リリースのたびに pin を上げること**——手順は `docs/releasing.md`「リリースを切る」の 5、
+判断の一覧は `demo/README.md`。
+
+この案件固有の作りは、データをページ自身が配ること。全国約1,900の市区町村ファイルのうち
+`demo/municipalities.txt` に挙げた9件だけを配り、索引 `ja.json` は削らずに丸ごと置く
+（削ると実在する市区町村を「存在しない」と答える＝欠落ではなく誤答になる）。
+姉妹デモと違ってリクエストが 0 件にならないので、ページは
+**出したリクエストを全部並べて、番地から先がそこに無いことを見せる**形にしてある。
+`scripts/verify-demo.mjs` が Chromium で建物名と宛名つきの住所を実際に打ち込み、
+ブラウザが出した全 URL を走査して断片が混じっていないことを検査する。
+
+**人間の操作が1つだけ残る**: Settings → Pages → Source を「GitHub Actions」にすること。
+`actions/configure-pages` は `GITHUB_TOKEN` に管理者権限が無いため失敗する（姉妹2案件で実測）。
+有効化後は `Demo (GitHub Pages)` を `workflow_dispatch` で回せばデプロイまで進む。
+
+### デモが見つけた本体の不具合（イシュー #58、未修正）
+
+**エンドポイントが持っていない市区町村ファイル（HTTP 404）に対して、`toRomaji` が型付きの
+失敗ではなく例外を投げる。** 逆方向の `fromRomaji` は同じ状況を `DATA_NOT_CONFIGURED` として
+正しく返す。経路が違うため——逆方向は自前の `dataAccess.ts` が `response.ok` を見るが、
+順方向は正規化を委譲した上流が 404 の本文を `response.json()` に渡す。
+`normalizer.ts` の `normalizeJapanese` がそれを捕まえていない。
+
+**README が勧めている構成で起きる**（「必要な市区町村だけを配信することもできます」）ので、
+404 は異常系ではなく通常の運用。「失敗は例外ではなく値」という中心的な約束が、そこだけ破れる。
+デモ側は例外を捕まえて「このデモが配っていない市区町村です」と表示し、パネル4が
+`expect: 'throw'` として現状を固定している——直した版を pin した時点でページが警告を出し、
+`pnpm test:demo` が落ちるので、追従漏れは起きない。
+
 ## 2つのセッションが同時に触った（2026-08-14）
 
 `0.1.4` と `0.1.5` は別々のセッションが並行して進めた。どちらも dev-standards を

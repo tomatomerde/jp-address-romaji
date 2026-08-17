@@ -10,3 +10,7 @@ packages/data/*.tgz
 
 # Local caches for data generation
 .cache/
+
+# Generated demo site and its build scratch directory (demo/build.sh).
+demo/_site/
+demo/_work/
