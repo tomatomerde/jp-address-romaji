@@ -1,6 +1,6 @@
 # Changelog
 
-## core-0.1.7 — unreleased
+## core-0.1.7 — 2026-08-17
 
 `jp-address-romaji` only. The dataset package is unchanged and stays at `0.1.5`.
 
