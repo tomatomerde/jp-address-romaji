@@ -1,5 +1,45 @@
 # Changelog
 
+## core-0.1.7 — unreleased
+
+`jp-address-romaji` only. The dataset package is unchanged and stays at `0.1.5`.
+
+### Fixed
+
+- **`toRomaji` threw instead of returning a failure when the dataset had no town file for the
+  municipality** ([#58](https://github.com/tomatomerde/jp-address-romaji/issues/58)). It now
+  returns `DATA_NOT_CONFIGURED`, naming the municipality, the way `fromRomaji` already did for the
+  identical situation:
+
+  ```ts
+  // An endpoint that serves ja.json plus a few municipalities, not 渋谷区.
+  await toRomaji('東京都渋谷区神南一丁目1-1');
+  // before: SyntaxError: Unexpected token '<', "<h1>404</h1>" is not valid JSON
+  // now:    { ok: false, reason: 'DATA_NOT_CONFIGURED',
+  //           message: 'The dataset has no readable town data for 東京都渋谷区. Reading it failed: …',
+  //           partial: { prefecture: {…}, city: { ja: '渋谷区', … } } }
+  ```
+
+  The two directions reach the dataset through different code, which is why only one of them was
+  broken: `fromRomaji` reads it through this package's own `dataAccess.ts`, which checks the
+  response before parsing, while `toRomaji` delegates normalization to
+  `@geolonia/normalize-japanese-addresses`, which fetches the town file itself and hands the
+  response to `JSON.parse`. Nothing caught that, so the error escaped a function whose entire
+  contract is that failures come back as values — the one rule the rest of this API is built on.
+
+  **This is reachable from documented usage, not from a broken install.** The README tells callers
+  serving data to a browser that a conversion fetches two files, "so you can also publish only the
+  municipalities you care about". Anyone who does that hits this on the first address outside their
+  slice. It also occurs in Node with a partial `dataDir` (an `ENOENT` rather than a parse error),
+  and transiently whenever a host answers with something that is not the JSON that was asked for.
+
+  The failure deliberately is **not** `TOWN_NOT_FOUND`. With no town file the normalization stops at
+  municipality level, which is indistinguishable from "this town is not in this municipality" if you
+  only look at the level — and answering that about a town that does exist is precisely the
+  confident-wrong-answer this library refuses to produce. Recovering the municipality's name costs
+  no extra request: it re-runs the normalizer at municipality level, which reads only the prefecture
+  index that the failed attempt already cached.
+
 ## core-0.1.6 — 2026-08-16
 
 `jp-address-romaji` only. The dataset package is unchanged and stays at `0.1.5`.
