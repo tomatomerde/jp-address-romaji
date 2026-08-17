@@ -189,16 +189,67 @@ export interface NormalizedAddress {
   rest: string;
   level: 0 | 1 | 2 | 3 | 8;
   raw: NormalizeResult;
+  /**
+   * Set when the municipality's town file could not be read at all, as opposed
+   * to being read and not containing the address.
+   *
+   * The two look identical from `level` alone — both stop at 2 — but they are
+   * different answers: "this town is not in the dataset" versus "this part of
+   * the dataset was not available". Reporting the first when the second
+   * happened is the kind of confident wrong answer this library exists to
+   * avoid, so the distinction is carried out of here rather than inferred.
+   *
+   * `reason` is the underlying error's message, kept verbatim. This module
+   * does not know *why* the read failed — a 404 from a partially published
+   * endpoint is the expected case (see `DataSourceOptions.endpoint`), but a
+   * malformed file or a transient server error land here too, and claiming
+   * one of them would be a guess.
+   */
+  townDataUnavailable?: { reason: string };
 }
+
+/** The upstream normalization level that stops at the municipality. */
+const MUNICIPALITY_LEVEL = 2;
 
 /**
  * Normalize a Japanese address and surface the dataset's readings.
  *
- * Throws only if the underlying library throws; a missing town is reported
- * through `level`, not an exception.
+ * Returns a value in every case, including when the dataset cannot be read.
+ * The upstream normalizer fetches the municipality's town file itself and
+ * hands the response to `JSON.parse` without checking the status, so an
+ * endpoint that does not carry that municipality makes it throw — and serving
+ * only some municipalities is a configuration this package documents and
+ * recommends (see `DataSourceOptions.endpoint`), which makes that a normal
+ * outcome rather than an exceptional one. Letting it propagate would break the
+ * one promise the whole API is shaped around: failures come back as values.
+ *
+ * The recovery re-runs the normalizer at municipality level, which reads only
+ * the prefecture index — already fetched and cached by the attempt that just
+ * failed, so this costs no additional request — and is what lets the caller
+ * name the municipality whose data is missing.
  */
 export async function normalizeJapanese(input: string): Promise<NormalizedAddress> {
-  const result = await geoloniaNormalize(input);
+  try {
+    return buildNormalized(input, await geoloniaNormalize(input));
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    try {
+      const shallow = await geoloniaNormalize(input, { level: MUNICIPALITY_LEVEL });
+      return { ...buildNormalized(input, shallow), townDataUnavailable: { reason } };
+    } catch {
+      // Even the index could not be read. Nothing about the address was
+      // resolved, so nothing about it is reported.
+      return {
+        rest: '',
+        level: 0,
+        raw: { other: input, level: 0, metadata: { input } },
+        townDataUnavailable: { reason },
+      };
+    }
+  }
+}
+
+function buildNormalized(input: string, result: NormalizeResult): NormalizedAddress {
   const meta = result.metadata ?? {};
   const machiAza = meta.machiAza;
   const cityMeta = meta.city;

@@ -11,7 +11,12 @@ import type {
   Failure,
   LongVowelStyle,
 } from './types.js';
-import { isDataConfigured, normalizeJapanese, splitBlockNumbers } from './normalizer.js';
+import {
+  isDataConfigured,
+  normalizeJapanese,
+  splitBlockNumbers,
+  type NormalizedAddress,
+} from './normalizer.js';
 import { findPrefectureByJa } from './data/prefectures.js';
 import {
   applyCapitalization,
@@ -58,6 +63,57 @@ function prefectureRomaji(ja: string, style: LongVowelStyle): string | undefined
 }
 
 /**
+ * The municipality as the dataset names it, for an error message.
+ *
+ * Built the same way the dataset's own file paths are (county + city + ward),
+ * so the name in the message is the one a reader can look for in their data
+ * directory. Falls back to describing what little was resolved rather than
+ * printing an empty string.
+ */
+function municipalityLabel(normalized: NormalizedAddress): string {
+  const parts = [
+    normalized.pref?.ja,
+    normalized.county?.ja,
+    normalized.city?.ja,
+    normalized.ward?.ja,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join('') : 'this address';
+}
+
+/**
+ * Whatever was resolved down to the municipality, as a `partial`.
+ *
+ * Deliberately does not require a romanization for any of it: this is
+ * diagnostic output for a failure that has nothing to do with readings, and
+ * dropping a component because its romaji is missing would hide the very
+ * field the caller needs to know which file to publish.
+ */
+function resolvedMunicipality(
+  normalized: NormalizedAddress,
+  style: LongVowelStyle,
+  postalCode?: string,
+): Partial<ParsedAddress> | undefined {
+  const partial: Partial<ParsedAddress> = { blockNumbers: [] };
+  if (normalized.pref) {
+    const romaji = prefectureRomaji(normalized.pref.ja, style);
+    partial.prefecture = {
+      ja: normalized.pref.ja,
+      ...(normalized.pref.kana ? { kana: normalized.pref.kana } : {}),
+      ...(romaji ? { romaji } : {}),
+    };
+  }
+  const county = buildMunicipality(normalized.county, style);
+  const city = buildMunicipality(normalized.city, style);
+  const ward = buildMunicipality(normalized.ward, style);
+  if (county) partial.county = county;
+  if (city) partial.city = city;
+  if (ward) partial.ward = ward;
+  if (postalCode) partial.postalCode = postalCode;
+  partial.level = normalized.level;
+  return partial.prefecture ? partial : undefined;
+}
+
+/**
  * Convert a Japanese address into a romanized address for international use.
  *
  * Returns a failure rather than a guess whenever a component cannot be backed
@@ -87,6 +143,24 @@ export async function toRomaji(
   // otherwise be read as chome 4 of an unrelated town. See kyoto.ts.
   const { street: kyotoStreet, rest: withoutStreet } = splitKyotoStreet(withoutPostal);
   const normalized = await normalizeJapanese(withoutStreet);
+
+  // Handled before anything else reads `normalized`, because every other
+  // branch below would describe this state as something it is not: with no
+  // town file, `level` stops at 2 and the flow falls through to
+  // TOWN_NOT_FOUND — "the town could not be identified" — about a town that
+  // may well be in the dataset on a host that carries it. `fromRomaji`
+  // already answers this situation with DATA_NOT_CONFIGURED; the two
+  // directions reach the dataset through different code and used to disagree,
+  // with this one throwing outright (#58).
+  if (normalized.townDataUnavailable) {
+    const where = municipalityLabel(normalized);
+    return fail(
+      'DATA_NOT_CONFIGURED',
+      `The dataset has no readable town data for ${where}. Reading it failed: ` +
+        `${normalized.townDataUnavailable.reason}`,
+      resolvedMunicipality(normalized, opts.longVowel, postalCode),
+    );
+  }
 
   if (!normalized.pref) {
     return fail('PREFECTURE_NOT_FOUND', `Could not identify a prefecture in "${japaneseAddress}".`);
