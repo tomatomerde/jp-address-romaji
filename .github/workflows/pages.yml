@@ -1,0 +1,157 @@
+name: Demo (GitHub Pages)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'demo/**'
+      - 'scripts/verify-demo.mjs'
+      - '.github/workflows/pages.yml'
+  pull_request:
+    paths:
+      - 'demo/**'
+      - 'scripts/verify-demo.mjs'
+      - '.github/workflows/pages.yml'
+  # Lets a redeploy be triggered by hand after a release bumps a pin, and after
+  # Pages is enabled for the first time.
+  workflow_dispatch:
+  # The build warns when a pin has fallen behind the registry, but a release
+  # touches neither demo/ nor this file, so the paths filters above mean the
+  # warning is never printed: the page can sit on an old version indefinitely
+  # with nothing going red. This schedule is what turns that warning into
+  # something a human sees.
+  schedule:
+    - cron: '41 3 * * 1'
+
+# The paths filters above are safe here because this workflow is not a required
+# status check. Making a paths-filtered workflow required leaves every pull
+# request that misses the filter waiting forever on a check that was never
+# created.
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      # No `version:` here on purpose. pnpm's version lives only in the root
+      # package.json's `packageManager` field; setting it in both places makes
+      # this action refuse to start.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Fetches both published packages from the registry — the demo runs what
+      # `npm install jp-address-romaji jp-address-romaji-data` gives a visitor,
+      # not a build of this working tree, so the page cannot show behaviour the
+      # released version does not have.
+      - name: Build the demo
+        run: ./demo/build.sh
+
+      # The runner image ships no browser binaries; the version installed here
+      # is the one pinned in package.json, so the two cannot drift apart.
+      - name: Install Chromium for Playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      # The page tells visitors that results appear without typing, that it
+      # refuses what it cannot verify, and — the claim that matters — that the
+      # prefecture and municipality are the only parts of an address that reach
+      # a server. All three are asserted in a real browser here, so a demo that
+      # contradicts the library never reaches Pages.
+      - name: Verify the demo in a browser
+        run: pnpm test:demo
+
+      - uses: actions/upload-pages-artifact@v5
+        if: github.event_name != 'pull_request'
+        with:
+          path: demo/_site
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Tries to switch the repository's Pages source to GitHub Actions over
+      # the API. Measured in the sibling projects 2026-08-16: this fails with
+      # `Resource not accessible by integration`, because creating a Pages
+      # *site* needs repository admin rights and GITHUB_TOKEN never has them.
+      # It is kept because it costs one second and succeeds once the site
+      # exists — and because failing here, after the demo has already been
+      # built and verified, keeps the blockage separate from "the demo is
+      # broken".
+      - name: Configure Pages
+        id: configure
+        continue-on-error: true
+        uses: actions/configure-pages@v6
+        with:
+          enablement: true
+
+      - name: Say what a human has to do
+        if: steps.configure.outcome == 'failure'
+        run: |
+          echo "::error title=GitHub Pages is not enabled::The demo was built and verified, but it cannot be published until Pages is turned on. A repository admin has to do it once: Settings -> Pages -> Source -> GitHub Actions. Then re-run this workflow (Actions -> Demo (GitHub Pages) -> Run workflow)."
+          exit 1
+
+      - id: deployment
+        uses: actions/deploy-pages@v5
+
+  # Deliberately a separate job from build/deploy: a stale pin means the page is
+  # behind, not broken, so the deployed page must keep matching the pins.
+  # Failing here makes the drift visible without publishing something nobody
+  # verified.
+  pin-freshness:
+    # Not on pull requests. Between a release and the commit that bumps the
+    # pin, this job is legitimately red — but that is a state of main, not of
+    # anyone's branch, and failing it on a pull request would block a
+    # contributor on something they cannot fix from their own diff.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Both pins, not just the library's. The dataset is half of what this
+      # demo shows — a page running the current library against last year's
+      # addresses would look entirely healthy.
+      - name: The pinned demo versions should be the registry's latest
+        run: |
+          set -eu
+          stale=0
+          check() {
+            pinned="$(tr -d '[:space:]' < "$2")"
+            latest="$(npm view "$1" version)"
+            echo "$1: pinned=$pinned latest=$latest"
+            if [ "$pinned" != "$latest" ]; then
+              echo "::error::$2 pins $pinned but the registry's latest $1 is $latest."
+              stale=1
+            fi
+          }
+          check jp-address-romaji demo/pinned-version.txt
+          check jp-address-romaji-data demo/pinned-data-version.txt
+          if [ "$stale" != "0" ]; then
+            echo "::error::Bump the pin(s) (docs/releasing.md) so the demo runs what a visitor installs."
+            exit 1
+          fi

@@ -9,7 +9,9 @@
     "test:watch": "vitest",
     "typecheck": "pnpm -r typecheck && tsc -p tsconfig.tests.json",
     "lint": "eslint .",
-    "coverage:measure": "tsx scripts/measure-coverage.ts"
+    "coverage:measure": "tsx scripts/measure-coverage.ts",
+    "test:demo": "node scripts/verify-demo.mjs",
+    "demo:build": "./demo/build.sh"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",

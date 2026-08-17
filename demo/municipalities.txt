@@ -1,0 +1,54 @@
+# Municipalities whose town data the demo serves from its own origin.
+#
+# The browser build reads two files per conversion: `<endpoint>.json` (the
+# nationwide prefecture/municipality index) and
+# `<endpoint>/<prefecture>/<municipality>.json` (the towns of that one
+# municipality). The index is shipped whole, unmodified, because trimming it
+# would make the library report a real municipality as non-existent. The town
+# files are not: the full set is about 1,900 files and 100 MB, and a demo does
+# not need to be a mirror of the dataset.
+#
+# Each line is `<prefecture>/<municipality>` exactly as the file is named in
+# the published `jp-address-romaji-data` package — county and ward included,
+# because that is how the dataset paths are built (`cityPathName`).
+#
+# Every entry earns its place by demonstrating something the page states.
+# demo/build.sh copies exactly these and generates the manifest the page
+# renders, so the list here is the only place to change the slice.
+# scripts/verify-demo.mjs checks the manifest against the files on disk.
+#
+# Blank lines and `#` comments are ignored.
+
+# The round trip in the README and in the article.
+東京都/新宿区
+
+# Kyoto street-name addresses (烏丸通四条上ル). Also the largest municipality
+# file in the dataset by a wide margin, which is worth showing: one file per
+# municipality is not one *small* file per municipality.
+京都府/京都市中京区
+
+# KOAZA_READING_INCOMPLETE — 本町三丁目大横, whose kana reading stops at the
+# counter and never reaches 大横.
+長野県/飯田市
+
+# NO_ROMAJI_DATA — 菊水上町 carries neither a romaji field nor a kana reading.
+# Notable because it is central Sapporo, not the rural oaza the error message
+# talks about.
+北海道/札幌市白石区
+
+# 円山 has kana but no romaji field, so it goes through the kana
+# transliteration path; 北一条東 exercises the trailing-digit rule
+# (Kita1-Johigashi).
+北海道/札幌市中央区
+
+# AMBIGUOUS on the reverse direction: "Toya" is both 字遠野 and 遠矢.
+北海道/釧路郡釧路町
+
+# A named koaza that does romanize (字天津川 → Azamatsugawa).
+三重県/伊賀市
+
+# A second plain round trip, from a different prefecture.
+大阪府/大阪市北区
+
+# A town written in hiragana (おもろまち).
+沖縄県/那覇市

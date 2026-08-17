@@ -277,6 +277,17 @@ publish すると、`npm install jp-address-romaji` がすべての利用者に�
 4. run を見守る（`gh run watch`、または Actions タブ）。ステップサマリーにはリリース計画
    （トリガー、dry_run、これから publish される正確なバージョン）、pack した tarball の内容、
    pack 済み tarball の内容 assertion、データセット前提レポートが載る。green でも読むこと。
+5. **デモの pin を上げる。** 公開したのがライブラリなら `demo/pinned-version.txt`、
+   データセットなら `demo/pinned-data-version.txt`（`both` なら両方）。デモは
+   <https://tomatomerde.github.io/jp-address-romaji/> で npm 公開版を読み込んでいるので、
+   上げないと**古い版の挙動を宣伝し続ける**。`demo/**` への push が `Demo (GitHub Pages)`
+   ワークフローを起動し、build → ブラウザ検証 → デプロイまで自動で進む。
+
+   忘れても静かに壊れるだけなので、検知は2段構えにしてある: `demo/build.sh` が
+   レジストリの `latest` と食い違うときに warning を出し、`pages.yml` の週次
+   `pin-freshness` ジョブが2つの pin を両方照合して赤くする。**リリースは `demo/**` を
+   触らないので、週次のほうが本命**（`paths:` フィルタだけでは pin のずれに永久に
+   気づけない）。判断の一覧は `demo/README.md`。
 
 ワークフロー実行時にパッケージ名/バージョンが既にレジストリにある場合 — たとえば部分失敗の後に
 タグを再 push した場合 — そのパッケージの publish ステップは `npm view` でそれを検出し、エラーに
