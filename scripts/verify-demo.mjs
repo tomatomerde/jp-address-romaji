@@ -39,6 +39,47 @@ function resolveExecutablePath() {
   return undefined;
 }
 
+/**
+ * Asserts that an annotation on a sample line agrees with what the bundle
+ * returned for that line.
+ *
+ * Matched as a *subset*, not for equality. The annotations elide with `…` on
+ * purpose — `{ ok: true, value: { formatted: '…', … } }` is what makes the
+ * block readable, and spelling out every field of a result to satisfy a check
+ * would make the page worse. So the elision marker is dropped and every key
+ * the annotation does write has to be present in the real value and equal to
+ * it. A key the annotation invents fails the same way a wrong value does,
+ * because the real value simply has no such key.
+ */
+function assertClaimed(expr, claimed, actual) {
+  // `…` (or `...`) as the last entry of an object or array means "and more
+  // fields"; anywhere else it is not something this can read, and the
+  // Function below will say so rather than skipping the line.
+  const literal = claimed.replace(/,\s*(?:\.\.\.|…)\s*(?=[}\]])/gu, '');
+  let expected;
+  try {
+    expected = new Function(`return (${literal});`)();
+  } catch (e) {
+    assert.fail(`the annotation on \`${expr}\` is not a value: ${claimed} — ${e.message}`);
+  }
+  const walk = (want, got, at) => {
+    if (want !== null && typeof want === 'object') {
+      assert.ok(
+        got !== null && typeof got === 'object',
+        `the sample claims \`${expr}\`${at} is ${JSON.stringify(want)}, but it is ${JSON.stringify(got)}`,
+      );
+      for (const key of Object.keys(want)) walk(want[key], got[key], `${at}.${key}`);
+      return;
+    }
+    assert.deepEqual(
+      got,
+      want,
+      `the sample claims \`${expr}\`${at} is ${JSON.stringify(want)}, but it is ${JSON.stringify(got)}`,
+    );
+  };
+  walk(expected, actual, '');
+}
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SITE = path.join(root, 'demo/_site');
 const PINNED = (await readFile(path.join(root, 'demo/pinned-version.txt'), 'utf8')).trim();
@@ -236,6 +277,53 @@ try {
     bodyText.includes(`jp-address-romaji-data@${PINNED_DATA}`),
     'the page should name the pinned dataset version',
   );
+
+  /* 7b. The copy-pasteable sample block says what the loaded bundle returns.
+   *
+   *     This is the one part of the page a visitor runs instead of reading,
+   *     and it is the part nothing else on the page touches, so it drifts in
+   *     silence: the sibling project's sample kept its 0.1.x output through
+   *     the release whose entire reason for existing was changing that
+   *     output, on a page whose own prose described the new behaviour.
+   *     Evaluating the lines against the bundle the page actually loaded is
+   *     the only thing that notices.
+   *
+   *     Evaluated in the page rather than here, because that bundle is the one
+   *     app.js already pointed at this origin's data — the sample's `await`
+   *     is the library's real browser path, not a re-creation of it.
+   */
+  const samples = await page.evaluate(async () => {
+    const lib = await import('./vendor/jp-address-romaji.js');
+    const out = [];
+    for (const block of document.querySelectorAll('pre.install code')) {
+      const lines = block.textContent.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        // `expression;` on one line, `// → claimed value` on the next.
+        const annotation = lines[i].match(/^\s*\/\/\s*→\s*(.+?)\s*$/);
+        if (!annotation) continue;
+        const call = (lines[i - 1] ?? '').match(/^(\S.*);\s*$/);
+        // Skipped rather than guessed at — the count below is what turns an
+        // unreadable pair into a failure instead of a silent pass.
+        if (!call) continue;
+        const [, expr] = call;
+        out.push({
+          expr,
+          claimed: annotation[1],
+          actual: await new Function('lib', `with (lib) { return (async () => (${expr}))(); }`)(lib),
+        });
+      }
+    }
+    return out;
+  });
+  // An exact count, not a floor. Every way this check can quietly stop
+  // checking — a line reworded past the pattern, the block replaced, the
+  // annotations dropped — shows up here as a number rather than as a pass.
+  assert.equal(
+    samples.length,
+    2,
+    `expected 2 annotated lines in the sample block, evaluated ${samples.length}: ${JSON.stringify(samples.map((s) => s.expr))}`,
+  );
+  for (const { expr, claimed, actual } of samples) assertClaimed(expr, claimed, actual);
 
   /* 8. The dataset requests carry a prefecture and a municipality, and nothing
    *    else. Structural, so it cannot pass by coincidence: a URL under
