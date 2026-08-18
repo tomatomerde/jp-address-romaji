@@ -45,8 +45,8 @@ const keep = process.argv.includes('--keep');
 
 /** Addresses the page must handle, and what it must answer. Asserted below. */
 const EXPECTED = {
-  forward: '3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan',
-  reverse: '東京都新宿区西新宿三丁目5-12',
+  forward: '2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo, Japan',
+  reverse: '東京都新宿区西新宿二丁目8-1',
   refusalReason: 'NO_ROMAJI_DATA',
   unconfiguredReason: 'DATA_NOT_CONFIGURED',
 };
@@ -110,13 +110,13 @@ try {
   // 1. A dataDir cannot work in a page. It must refuse, not half-configure.
   configureDataSource({ dataDir: '/address-data' });
   out.steps.dataDirConfigured = isDataConfigured();
-  out.steps.unconfigured = await toRomaji('東京都新宿区西新宿三丁目5番12号');
+  out.steps.unconfigured = await toRomaji('東京都新宿区西新宿二丁目8番1号');
 
   // 2. Data served from this origin.
   configureDataSource({ endpoint: window.location.origin + '/data/ja' });
   out.steps.endpointConfigured = isDataConfigured();
-  out.steps.forward = await toRomaji('東京都新宿区西新宿三丁目5番12号');
-  out.steps.reverse = await fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo');
+  out.steps.forward = await toRomaji('東京都新宿区西新宿二丁目8番1号');
+  out.steps.reverse = await fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo');
 
   // 3. A town whose dataset row carries no usable reading is still refused.
   out.steps.refused = await toRomaji('青森県青森市大字三内字丸山1-1');

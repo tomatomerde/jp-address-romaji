@@ -58,8 +58,9 @@ import を普通に解決するため）ので、このスクリプトが唯一�
 
 **公開後、レジストリの実物に対しても確認済み**（2026-08-16）: `npm install jp-address-romaji@0.1.6`
 した使い捨てプロジェクトを esbuild の `--platform=browser` でバンドルし、Chromium で
-`toRomaji('東京都新宿区西新宿三丁目5番12号')` → `"3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan"`、
-`fromRomaji` で元の日本語住所に戻ること、自オリジン以外へのリクエストが 0 件であることを確認した。
+`toRomaji()` が西洋順のローマ字を返し、`fromRomaji` で元の日本語住所に戻ること、
+自オリジン以外へのリクエストが 0 件であることを確認した（当時の例示住所で実施。
+その住所は 2026-08-18 に公共施設のものへ差し替えた）。
 公開された `exports` にも `browser` 条件が入っている。provenance attestation
 （`https://registry.npmjs.org/-/npm/v1/attestations/jp-address-romaji@0.1.6`）も
 `publish` と SLSA provenance の2件を返す。

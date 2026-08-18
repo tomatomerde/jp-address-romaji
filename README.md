@@ -29,11 +29,11 @@ the prefecture and the municipality appear in a URL, and nothing past them does.
 ```ts
 import { toRomaji, fromRomaji } from 'jp-address-romaji';
 
-await toRomaji('東京都新宿区西新宿三丁目5番12号');
-// → { ok: true, value: { formatted: '3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan', … } }
+await toRomaji('東京都新宿区西新宿二丁目8番1号');
+// → { ok: true, value: { formatted: '2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo, Japan', … } }
 
-await fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo 160-0023');
-// → { ok: true, value: { formatted: '東京都新宿区西新宿三丁目5-12', … } }
+await fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo 160-0023');
+// → { ok: true, value: { formatted: '東京都新宿区西新宿二丁目8-1', … } }
 ```
 
 ## What this is, and what it is not
@@ -88,8 +88,8 @@ import { configureDataSource, toRomaji } from 'jp-address-romaji';
 
 configureDataSource({ endpoint: 'https://your-site.example/address-data/ja' });
 
-await toRomaji('東京都新宿区西新宿三丁目5番12号');
-// → { ok: true, value: { formatted: '3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan', … } }
+await toRomaji('東京都新宿区西新宿二丁目8番1号');
+// → { ok: true, value: { formatted: '2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo, Japan', … } }
 ```
 
 The endpoint is the dataset directory with `/ja` on the end. The library reads `<endpoint>.json` for

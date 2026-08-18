@@ -58,7 +58,7 @@
   import { configureDataSource, toRomaji } from 'jp-address-romaji';
 
   configureDataSource({ endpoint: 'https://your-site.example/address-data/ja' });
-  await toRomaji('東京都新宿区西新宿三丁目5番12号');
+  await toRomaji('東京都新宿区西新宿二丁目8番1号');
   ```
 
   A page has no filesystem, so the dataset is served from an endpoint you host. The library reads

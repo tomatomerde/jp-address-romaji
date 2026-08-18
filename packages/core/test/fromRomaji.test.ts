@@ -6,16 +6,16 @@ beforeAll(() => useFixtureData());
 
 describe('fromRomaji: reconstructs Japanese', () => {
   it('handles the canonical western-order form', async () => {
-    const result = await fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo 160-0023');
+    const result = await fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo 160-0023');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.parsed.prefecture?.ja).toBe('東京都');
     expect(result.value.parsed.city?.ja).toBe('新宿区');
     expect(result.value.parsed.town?.ja).toBe('西新宿');
-    expect(result.value.parsed.chome).toBe(3);
-    expect(result.value.parsed.blockNumbers).toEqual([5, 12]);
+    expect(result.value.parsed.chome).toBe(2);
+    expect(result.value.parsed.blockNumbers).toEqual([8, 1]);
     expect(result.value.parsed.postalCode).toBe('160-0023');
-    expect(result.value.formatted).toBe('東京都新宿区西新宿三丁目5-12');
+    expect(result.value.formatted).toBe('東京都新宿区西新宿二丁目8-1');
   });
 
   it('accepts a trailing country name', async () => {
@@ -148,13 +148,13 @@ describe('fromRomaji: building names', () => {
   // Regression: only Japanese-script building names were separated out, so a
   // romaji one — the common case for a western-order address typed by hand —
   // was fed into the town lookup and produced TOWN_NOT_FOUND.
-  const expected = { town: '西新宿', chome: 3, blocks: [5, 12] };
+  const expected = { town: '西新宿', chome: 2, blocks: [8, 1] };
 
   it.each([
-    ['building after the street', '3-5-12 Nishishinjuku, Sunshine Building 5F, Shinjuku-ku, Tokyo', 'Sunshine Building 5F'],
-    ['building before the street', 'Sunshine Building 5F, 3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo', 'Sunshine Building 5F'],
-    ['building with no separating comma', '3-5-12 Nishishinjuku Sunshine Bldg 5F, Shinjuku-ku, Tokyo', 'Sunshine Bldg 5F'],
-    ['Japanese building name', '3-5-12 Nishishinjuku, サンプルビル301, Shinjuku-ku, Tokyo', 'サンプルビル301'],
+    ['building after the street', '2-8-1 Nishishinjuku, Sunshine Building 5F, Shinjuku-ku, Tokyo', 'Sunshine Building 5F'],
+    ['building before the street', 'Sunshine Building 5F, 2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo', 'Sunshine Building 5F'],
+    ['building with no separating comma', '2-8-1 Nishishinjuku Sunshine Bldg 5F, Shinjuku-ku, Tokyo', 'Sunshine Bldg 5F'],
+    ['Japanese building name', '2-8-1 Nishishinjuku, サンプルビル301, Shinjuku-ku, Tokyo', 'サンプルビル301'],
   ])('separates a %s', async (_label, input, building) => {
     const result = await fromRomaji(input);
     expect(result.ok).toBe(true);
@@ -173,7 +173,7 @@ describe('fromRomaji: building names', () => {
   });
 
   it('leaves unparsed undefined when there is no building name', async () => {
-    const result = await fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo');
+    const result = await fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.parsed.unparsed).toBeUndefined();

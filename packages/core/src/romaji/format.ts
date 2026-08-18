@@ -264,7 +264,7 @@ export function formatKoaza(
 
 /**
  * Build the block-number sequence for western order.
- * `西新宿三丁目5番12号` -> `3-5-12`.
+ * `西新宿二丁目8番1号` -> `2-8-1`.
  */
 export function formatBlockNumbers(chome: number | undefined, blocks: readonly number[]): string {
   const parts = [...(chome !== undefined ? [chome] : []), ...blocks];

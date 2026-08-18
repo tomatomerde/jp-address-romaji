@@ -146,7 +146,7 @@ export function candidateKeys(kana?: string, romajiField?: string, ja?: string):
 /**
  * Convert a western-order romaji address back into Japanese.
  *
- * Example input: `"3-5-12 Nishi-Shinjuku, Shinjuku-ku, Tokyo 160-0023"`.
+ * Example input: `"2-8-1 Nishi-Shinjuku, Shinjuku-ku, Tokyo 160-0023"`.
  */
 export async function fromRomaji(
   romajiAddress: string,
@@ -298,7 +298,7 @@ export async function fromRomaji(
   //
   // We cannot assume the town is in any fixed position: a western-order
   // address may write the building before the street ("Sunshine Bldg 5F,
-  // 3-5-12 Nishishinjuku, ...") or after it, with or without a comma. So each
+  // 2-8-1 Nishishinjuku, ...") or after it, with or without a comma. So each
   // segment is tested against the dataset, and the one that actually names a
   // town wins. Segments are tried in order, so the earliest real match is
   // taken.
@@ -772,8 +772,8 @@ interface LocatedTown {
  * longest word sequence to the shortest, so a building name that was written
  * without a separating comma still resolves:
  *
- *   "3-5-12 Nishishinjuku Sunshine Bldg 5F"
- *     -> numbers [3,5,12], town "Nishishinjuku", extra "Sunshine Bldg 5F"
+ *   "2-8-1 Nishishinjuku Sunshine Bldg 5F"
+ *     -> numbers [2,8,1], town "Nishishinjuku", extra "Sunshine Bldg 5F"
  *
  * Longest-first matters: town names can legitimately contain spaces
  * ("Miyanomori 1-Jo"), so the most specific match has to win over a shorter
@@ -833,8 +833,8 @@ function matchTowns(towns: MachiAzaRecord[], name: string): MachiAzaRecord[] {
 /**
  * Separate leading/trailing numbers from the town name.
  *
- * `"3-5-12 Nishi-Shinjuku"` -> numbers [3,5,12], name "Nishi-Shinjuku"
- * `"Nishi-Shinjuku 3-5-12"` -> the same
+ * `"2-8-1 Nishi-Shinjuku"` -> numbers [2,8,1], name "Nishi-Shinjuku"
+ * `"Nishi-Shinjuku 2-8-1"` -> the same
  */
 function splitNumbersAndName(input: string): {
   numbers: number[];

@@ -10,7 +10,7 @@
  * import { configureDataSource, toRomaji } from 'jp-address-romaji';
  *
  * configureDataSource({ endpoint: 'https://example.com/address-data/ja' });
- * await toRomaji('東京都新宿区西新宿三丁目5番12号');
+ * await toRomaji('東京都新宿区西新宿二丁目8番1号');
  * ```
  *
  * `configureDataSource({ dataDir })` cannot work here and does not pretend to:

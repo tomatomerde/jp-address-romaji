@@ -120,13 +120,13 @@ try {
   const forwardHead = (await page.locator('#forward-output .verdict-name').first().textContent()).trim();
   assert.equal(
     forwardHead,
-    '3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan',
+    '2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo, Japan',
     'the default Japanese address should already be converted on load',
   );
   const reverseHead = (await page.locator('#reverse-output .verdict-name').first().textContent()).trim();
   assert.equal(
     reverseHead,
-    '東京都新宿区西新宿三丁目5-12',
+    '東京都新宿区西新宿二丁目8-1',
     'the default romaji address should already be converted back on load',
   );
 
@@ -407,7 +407,7 @@ try {
     'the forward direction threw for an unserved municipality — issue #58 has regressed in the pinned version',
   );
   // The page keeps working afterwards: a refusal must not wedge the panel.
-  await page.fill('#forward-input', '東京都新宿区西新宿三丁目5番12号');
+  await page.fill('#forward-input', '東京都新宿区西新宿二丁目8番1号');
   await page.waitForSelector('#forward-output .verdict-ok', { timeout: 30_000 });
 
   /* 13c. Typing costs one request, not one per character.
@@ -432,7 +432,7 @@ try {
     0,
     'typing an unserved address produced an uncaught throw',
   );
-  await page.fill('#forward-input', '東京都新宿区西新宿三丁目5番12号');
+  await page.fill('#forward-input', '東京都新宿区西新宿二丁目8番1号');
   await page.waitForSelector('#forward-output .verdict-ok', { timeout: 30_000 });
 
   /* 14. Every off-site link opens in a new tab with rel=noopener, and every

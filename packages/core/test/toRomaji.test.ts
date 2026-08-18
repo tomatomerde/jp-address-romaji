@@ -25,13 +25,13 @@ describe('toRomaji: normalization handled upstream', () => {
 });
 
 describe('toRomaji: chome folds into the block numbers', () => {
-  it('renders 西新宿三丁目5番12号 as 3-5-12', async () => {
-    const result = await toRomaji('東京都新宿区西新宿三丁目5番12号');
+  it('renders 西新宿二丁目8番1号 as 2-8-1', async () => {
+    const result = await toRomaji('東京都新宿区西新宿二丁目8番1号');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.formatted).toBe('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan');
-    expect(result.value.parsed.chome).toBe(3);
-    expect(result.value.parsed.blockNumbers).toEqual([5, 12]);
+    expect(result.value.formatted).toBe('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo, Japan');
+    expect(result.value.parsed.chome).toBe(2);
+    expect(result.value.parsed.blockNumbers).toEqual([8, 1]);
   });
 });
 

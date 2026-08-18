@@ -93,11 +93,11 @@ describe('browser platform bindings', () => {
 
     expect(isDataConfigured()).toBe(false);
 
-    const forward = await toRomaji('東京都新宿区西新宿三丁目5番12号');
+    const forward = await toRomaji('東京都新宿区西新宿二丁目8番1号');
     expect(forward.ok).toBe(false);
     if (!forward.ok) expect(forward.reason).toBe('DATA_NOT_CONFIGURED');
 
-    const back = await fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo');
+    const back = await fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo');
     expect(back.ok).toBe(false);
     if (!back.ok) expect(back.reason).toBe('DATA_NOT_CONFIGURED');
   });
@@ -108,15 +108,15 @@ describe('browser platform bindings', () => {
     configureDataSource({ endpoint: `${origin}/ja` });
     expect(isDataConfigured()).toBe(true);
 
-    const forward = await toRomaji('東京都新宿区西新宿三丁目5番12号');
+    const forward = await toRomaji('東京都新宿区西新宿二丁目8番1号');
     expect(forward.ok).toBe(true);
     if (!forward.ok) return;
-    expect(forward.value.formatted).toBe('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan');
+    expect(forward.value.formatted).toBe('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo, Japan');
 
-    const back = await fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo');
+    const back = await fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo');
     expect(back.ok).toBe(true);
     if (!back.ok) return;
-    expect(back.value.formatted).toBe('東京都新宿区西新宿三丁目5-12');
+    expect(back.value.formatted).toBe('東京都新宿区西新宿二丁目8-1');
 
     // What the endpoint actually saw: the prefecture and the municipality, and
     // nothing past them. This is the claim the browser documentation makes, so

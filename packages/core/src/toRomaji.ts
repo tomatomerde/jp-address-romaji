@@ -383,14 +383,14 @@ function render(parsed: ParsedAddress, opts: Required<ToRomajiOptions>): string 
   const segments: string[] = [];
 
   if (opts.order === 'western') {
-    // Smallest unit first: "3-5-12 Nishi-Shinjuku, Shibuya-ku, Tokyo".
+    // Smallest unit first: "2-8-1 Nishi-Shinjuku, Shinjuku-ku, Tokyo".
     segments.push([numbers, koaza, town].filter(Boolean).join(' '));
     if (parsed.ward?.romaji) segments.push(parsed.ward.romaji);
     if (parsed.city?.romaji) segments.push(parsed.city.romaji);
     if (parsed.county?.romaji) segments.push(parsed.county.romaji);
     if (parsed.prefecture?.romaji) segments.push(parsed.prefecture.romaji);
   } else {
-    // Japanese order, romanized: "Tokyo, Shibuya-ku, Nishi-Shinjuku 3-5-12".
+    // Japanese order, romanized: "Tokyo, Shinjuku-ku, Nishi-Shinjuku 2-8-1".
     if (parsed.prefecture?.romaji) segments.push(parsed.prefecture.romaji);
     if (parsed.county?.romaji) segments.push(parsed.county.romaji);
     if (parsed.city?.romaji) segments.push(parsed.city.romaji);

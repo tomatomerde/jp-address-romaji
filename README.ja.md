@@ -31,11 +31,11 @@ URL に出て、それより後は出ない——を、文章ではなく実物�
 ```ts
 import { toRomaji, fromRomaji } from 'jp-address-romaji';
 
-await toRomaji('東京都新宿区西新宿三丁目5番12号');
-// → { ok: true, value: { formatted: '3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan', … } }
+await toRomaji('東京都新宿区西新宿二丁目8番1号');
+// → { ok: true, value: { formatted: '2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo, Japan', … } }
 
-await fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo 160-0023');
-// → { ok: true, value: { formatted: '東京都新宿区西新宿三丁目5-12', … } }
+await fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo 160-0023');
+// → { ok: true, value: { formatted: '東京都新宿区西新宿二丁目8-1', … } }
 ```
 
 ## このライブラリの位置づけ
@@ -90,8 +90,8 @@ import { configureDataSource, toRomaji } from 'jp-address-romaji';
 
 configureDataSource({ endpoint: 'https://your-site.example/address-data/ja' });
 
-await toRomaji('東京都新宿区西新宿三丁目5番12号');
-// → { ok: true, value: { formatted: '3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan', … } }
+await toRomaji('東京都新宿区西新宿二丁目8番1号');
+// → { ok: true, value: { formatted: '2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo, Japan', … } }
 ```
 
 エンドポイントはデータセットのディレクトリに `/ja` を付けたものです。ライブラリはまず

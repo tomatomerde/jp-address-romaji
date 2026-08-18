@@ -62,7 +62,7 @@ describe.skipIf(!available)('real dataset', () => {
 
   it('round-trips ordinary urban addresses', async () => {
     const cases = [
-      '東京都新宿区西新宿三丁目5番12号',
+      '東京都新宿区西新宿二丁目8番1号',
       '東京都渋谷区上原1-2-3',
       '北海道札幌市中央区大通西1-1',
       '大阪府大阪市北区梅田1-1-1',
