@@ -394,6 +394,37 @@ the compiler makes you handle the failure case.
 | `DATA_NOT_CONFIGURED` | No dataset installed or configured. |
 | `EMPTY_INPUT` | No recognizable address in the input. |
 
+## Roadmap
+
+### Under consideration
+
+Driven by what real address data actually needs, not by a feature list. Each of these is written up
+with the reasoning for why it was *not* done by default — **if one of them is what you need, say so
+on the issue.** Real use cases are what decide whether they ship and what their defaults are.
+
+- [Reading a named koaza back from romaji](https://github.com/tomatomerde/jp-address-romaji/issues/68)
+  — `toRomaji` writes one out and `fromRomaji` cannot read it back, so the round trip is one-way
+- [A bundled postal-code index](https://github.com/tomatomerde/jp-address-romaji/issues/69)
+  — the `postalCodeIndex` hook exists, the data does not, and the hosted alternatives resolve a
+  postal code by sending it somewhere
+- [A CommonJS build](https://github.com/tomatomerde/jp-address-romaji/issues/70)
+  — `require()` does not resolve these packages at all, on any Node version
+- [Widening the Japanese-script class that detects building names](https://github.com/tomatomerde/jp-address-romaji/issues/71)
+  — `々`, compatibility ideographs and non-BMP kanji sit outside it; no real-data trigger found yet
+- [Fetching browser data without naming the municipality in the URL](https://github.com/tomatomerde/jp-address-romaji/issues/72)
+  — the browser path's guarantee is weaker than Node's, and the demo says so rather than rounding it
+
+None of these touch the two rules the rest of the library is built on: a reading that cannot be
+verified is refused rather than rounded to a plausible spelling, and nothing falls back to a hosted
+service — a guarantee the test suite enforces rather than the documentation asserting it. The ones
+that would add behaviour are **opt-in and off by default**; the ones that would add an artifact sit
+alongside what ships today rather than replacing it.
+
+What is deliberately *not* on this list is under [Not supported](#not-supported).
+
+New request? [Open one](https://github.com/tomatomerde/jp-address-romaji/issues/new?template=feature_request.yml)
+— bring a few of your actual addresses, that is the part that decides things.
+
 ## Data source and licensing
 
 The address data originates from the Japanese Digital Agency's
