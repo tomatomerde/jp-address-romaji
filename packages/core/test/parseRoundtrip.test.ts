@@ -26,7 +26,7 @@ beforeAll(() => useFixtureData());
 
 describe('parse: round-trips a toRomaji output containing a Japanese building name', () => {
   it('reads back what toRomaji produced for an address with a building name', async () => {
-    const forward = await toRomaji('東京都新宿区西新宿三丁目5番12号 サンプルビル301');
+    const forward = await toRomaji('東京都新宿区西新宿二丁目8番1号 サンプルビル301');
     expect(forward.ok).toBe(true);
     if (!forward.ok) return;
     const formatted = forward.value.formatted;
@@ -51,7 +51,7 @@ describe('parse: round-trips a toRomaji output containing a Japanese building na
 
   it('detects such an address as romaji, not Japanese', () => {
     const formatted =
-      'サンプルビル301, 3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan';
+      'サンプルビル301, 2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo, Japan';
     expect(detectScript(formatted)).toBe('romaji');
   });
 

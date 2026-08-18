@@ -137,15 +137,15 @@ jobs:
 
           configureDataSource({ dataDir: new URL('./fixture-data', import.meta.url).pathname });
 
-          const forward = await toRomaji('東京都新宿区西新宿三丁目5番12号');
+          const forward = await toRomaji('東京都新宿区西新宿二丁目8番1号');
           if (!forward.ok) throw new Error(`toRomaji failed: ${JSON.stringify(forward)}`);
-          if (forward.value.formatted !== '3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan') {
+          if (forward.value.formatted !== '2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo, Japan') {
             throw new Error(`toRomaji: ${forward.value.formatted}`);
           }
 
-          const back = await fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo');
+          const back = await fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo');
           if (!back.ok) throw new Error(`fromRomaji failed: ${JSON.stringify(back)}`);
-          if (back.value.formatted !== '東京都新宿区西新宿三丁目5-12') {
+          if (back.value.formatted !== '東京都新宿区西新宿二丁目8-1') {
             throw new Error(`fromRomaji: ${back.value.formatted}`);
           }
 

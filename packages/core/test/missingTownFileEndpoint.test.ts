@@ -38,8 +38,8 @@ const MISSING_TOWN_FILE_DATA_DIR = path.join(
 /** In the fixture index, not on the host. */
 const UNSERVED_JA = '東京都渋谷区神南一丁目1-1';
 /** On the host, so the same endpoint must still convert it. */
-const SERVED_JA = '東京都新宿区西新宿三丁目5番12号';
-const SERVED_ROMAJI = '3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan';
+const SERVED_JA = '東京都新宿区西新宿二丁目8番1号';
+const SERVED_ROMAJI = '2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo, Japan';
 
 describe('a municipality whose town file the endpoint answers 404 for (issue #58 as reported)', () => {
   let server: Server;

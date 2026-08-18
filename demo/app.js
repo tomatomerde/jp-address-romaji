@@ -224,8 +224,8 @@ function renderParsed(parsed, out) {
 
 const PRESET_FORWARD = [
   {
-    label: '東京都新宿区西新宿三丁目5番12号',
-    value: '東京都新宿区西新宿三丁目5番12号',
+    label: '東京都新宿区西新宿二丁目8番1号',
+    value: '東京都新宿区西新宿二丁目8番1号',
     note: '基本形。丁目と番・号が分解され、西洋語順に組み直される',
   },
   {
@@ -235,7 +235,7 @@ const PRESET_FORWARD = [
   },
   {
     label: '建物名と宛名つき',
-    value: '東京都新宿区西新宿3-5-12 ○○ビル7F 山田太郎様',
+    value: '東京都新宿区西新宿2-8-1 ○○ビル7F 山田太郎様',
     note: '建物名も宛名も unparsed として素通し。翻訳しない（できないものは触らない）',
   },
   {
@@ -334,8 +334,8 @@ async function renderForward(lib, input, options, out) {
 
 const PRESET_REVERSE = [
   {
-    label: '3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo',
-    value: '3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo',
+    label: '2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo',
+    value: '2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo',
     note: '往復。上の1つ目の出力を戻すと、丁目つきの日本語に復元される',
   },
   {
@@ -354,13 +354,13 @@ const PRESET_REVERSE = [
     note: '字遠野と遠矢の両方に当たる。勝手に選ばず候補を返す',
   },
   {
-    label: '3-5-12 Nishishinjuku, Shinjuku-ku（断る）',
-    value: '3-5-12 Nishishinjuku, Shinjuku-ku',
+    label: '2-8-1 Nishishinjuku, Shinjuku-ku（断る）',
+    value: '2-8-1 Nishishinjuku, Shinjuku-ku',
     note: '都道府県が無い。外側から内側へしか解決しないので、ここで止まる',
   },
   {
-    label: '東京都新宿区西新宿三丁目5-12（断る）',
-    value: '東京都新宿区西新宿三丁目5-12',
+    label: '東京都新宿区西新宿二丁目8-1（断る）',
+    value: '東京都新宿区西新宿二丁目8-1',
     note: '日本語は受け付けない。逆変換の入力は西洋語順のローマ字だけ',
   },
   {
@@ -613,10 +613,10 @@ const INPUT_CASES = [
     group: '受け付ける形',
     cases: [
       {
-        expr: `toRomaji('東京都新宿区西新宿三丁目5番12号')`,
+        expr: `toRomaji('東京都新宿区西新宿二丁目8番1号')`,
         expect: 'accept',
         note: '丁目・番・号の漢数字と単位',
-        run: (lib) => lib.toRomaji('東京都新宿区西新宿三丁目5番12号'),
+        run: (lib) => lib.toRomaji('東京都新宿区西新宿二丁目8番1号'),
       },
       {
         expr: `toRomaji('東京都新宿区西新宿３ー５ー１２')`,
@@ -625,22 +625,22 @@ const INPUT_CASES = [
         run: (lib) => lib.toRomaji('東京都新宿区西新宿３ー５ー１２'),
       },
       {
-        expr: `toRomaji('新宿区西新宿3-5-12')`,
+        expr: `toRomaji('新宿区西新宿2-8-1')`,
         expect: 'accept',
         note: '都道府県の省略。市区町村名が全国で一意なら補える',
-        run: (lib) => lib.toRomaji('新宿区西新宿3-5-12'),
+        run: (lib) => lib.toRomaji('新宿区西新宿2-8-1'),
       },
       {
-        expr: `toRomaji('〒160-0023 東京都新宿区西新宿3-5-12')`,
+        expr: `toRomaji('〒160-0023 東京都新宿区西新宿2-8-1')`,
         expect: 'accept',
         note: '郵便番号は切り出して postalCode に入れる',
-        run: (lib) => lib.toRomaji('〒160-0023 東京都新宿区西新宿3-5-12'),
+        run: (lib) => lib.toRomaji('〒160-0023 東京都新宿区西新宿2-8-1'),
       },
       {
-        expr: `fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo 160-0023')`,
+        expr: `fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo 160-0023')`,
         expect: 'accept',
         note: '逆方向。郵便番号が付いていても読む',
-        run: (lib) => lib.fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo 160-0023'),
+        run: (lib) => lib.fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo 160-0023'),
       },
     ],
   },
@@ -678,16 +678,16 @@ const INPUT_CASES = [
         run: (lib) => lib.fromRomaji('1-1 Toya, Kushiro-cho, Hokkaido'),
       },
       {
-        expr: `fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku')`,
+        expr: `fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku')`,
         expect: 'refuse',
         note: 'PREFECTURE_NOT_FOUND。外側から内側へしか解決しない',
-        run: (lib) => lib.fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku'),
+        run: (lib) => lib.fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku'),
       },
       {
-        expr: `fromRomaji('東京都新宿区西新宿三丁目5-12')`,
+        expr: `fromRomaji('東京都新宿区西新宿二丁目8-1')`,
         expect: 'refuse',
         note: 'EMPTY_INPUT。逆変換は西洋語順のローマ字しか受けない',
-        run: (lib) => lib.fromRomaji('東京都新宿区西新宿三丁目5-12'),
+        run: (lib) => lib.fromRomaji('東京都新宿区西新宿二丁目8-1'),
       },
     ],
   },

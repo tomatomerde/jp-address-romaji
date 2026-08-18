@@ -37,7 +37,7 @@ body:
       value: |
         import { toRomaji } from 'jp-address-romaji';
 
-        console.log(await toRomaji('東京都新宿区西新宿三丁目5番12号'));
+        console.log(await toRomaji('東京都新宿区西新宿二丁目8番1号'));
       render: javascript
 
   - type: textarea

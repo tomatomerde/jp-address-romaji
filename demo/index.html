@@ -18,7 +18,7 @@
 
 <header class="page-head">
   <h1>jp-address-romaji <span class="version">v__CORE_VERSION__</span></h1>
-  <p class="lead">「東京都新宿区西新宿三丁目5番12号」と「3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan」を<strong>双方向に</strong>変換します。そして<strong>読みを推測しません</strong>——データに裏付けが無ければ、それらしい綴りを返さずに理由つきで断ります。</p>
+  <p class="lead">「東京都新宿区西新宿二丁目8番1号」と「2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo, Japan」を<strong>双方向に</strong>変換します。そして<strong>読みを推測しません</strong>——データに裏付けが無ければ、それらしい綴りを返さずに理由つきで断ります。</p>
   <p class="links">
     <a href="https://www.npmjs.com/package/jp-address-romaji" target="_blank" rel="noopener noreferrer">npm</a>
     <a href="https://github.com/tomatomerde/jp-address-romaji" target="_blank" rel="noopener noreferrer">GitHub</a>
@@ -68,7 +68,7 @@
   <label class="field">
     <span class="field-label">日本語の住所</span>
     <input id="forward-input" type="text" autocomplete="off" spellcheck="false"
-           value="東京都新宿区西新宿三丁目5番12号">
+           value="東京都新宿区西新宿二丁目8番1号">
   </label>
 
   <fieldset class="field options">
@@ -108,7 +108,7 @@
   <label class="field">
     <span class="field-label">ローマ字の住所（都道府県が最後）</span>
     <input id="reverse-input" type="text" autocomplete="off" spellcheck="false"
-           value="3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo">
+           value="2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo">
   </label>
 
   <div id="reverse-output" class="output"></div>
@@ -151,11 +151,11 @@
 <pre class="install"><code>npm install jp-address-romaji@__CORE_VERSION__ jp-address-romaji-data@__DATA_VERSION__</code></pre>
 <pre class="install"><code>import { toRomaji, fromRomaji } from 'jp-address-romaji';
 
-await toRomaji('東京都新宿区西新宿三丁目5番12号');
-// → { ok: true, value: { formatted: '3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo, Japan', … } }
+await toRomaji('東京都新宿区西新宿二丁目8番1号');
+// → { ok: true, value: { formatted: '2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo, Japan', … } }
 
-await fromRomaji('3-5-12 Nishishinjuku, Shinjuku-ku, Tokyo');
-// → { ok: true, value: { formatted: '東京都新宿区西新宿三丁目5-12', … } }</code></pre>
+await fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo');
+// → { ok: true, value: { formatted: '東京都新宿区西新宿二丁目8-1', … } }</code></pre>
   <p class="panel-lead">Node ではこれだけで動きます。データはローカルのファイルから読み、変換時にネットワークへ出ません。<strong>このページと同じことをブラウザでやる</strong>なら、データを自分で配信してその場所を指定します:</p>
 <pre class="install"><code>import { configureDataSource, toRomaji } from 'jp-address-romaji';
 
