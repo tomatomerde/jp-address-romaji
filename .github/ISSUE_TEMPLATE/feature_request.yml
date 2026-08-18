@@ -19,11 +19,13 @@ body:
         field, or a deterministic transliteration of a kana reading — and when
         neither covers the whole name it returns a typed failure instead of a
         plausible spelling. A wrong address label is worse than a refused one.
-        And it will not **send the address anywhere**: there is no hosted API
-        to fall back on, so "fetch it from a service" is not an available
-        answer here. A request framed as "just pick the usual reading" will be
-        declined — but the same need framed as an opt-in option, off by
-        default, is exactly what those issues are.
+        And it will not **fall back to a hosted service**: a conversion reads a
+        dataset you already have — on disk under Node, from an endpoint you
+        host yourself in a browser — so "look it up from an API" is not an
+        answer available here, however convenient it would be. A request framed
+        as "just pick the usual reading" will be declined — but the same need
+        framed as an opt-in option, off by default, is exactly what those
+        issues are.
 
   - type: textarea
     id: problem
