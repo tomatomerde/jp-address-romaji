@@ -1,0 +1,76 @@
+name: Feature request
+description: Something this library should do that it does not
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please write in English or Japanese — either is fine.
+
+        Before filing: several additions are already under consideration with
+        the reasoning written out — see the
+        [open enhancement issues](https://github.com/tomatomerde/jp-address-romaji/labels/enhancement).
+        If one of them is what you need, comment there instead. A comment
+        describing your real addresses is worth more than a new issue, because
+        what decides whether these ship is real use cases, not the idea count.
+
+        Two things this library will not do, whatever the request. It will not
+        **guess a reading**: romanization comes from the dataset — a romaji
+        field, or a deterministic transliteration of a kana reading — and when
+        neither covers the whole name it returns a typed failure instead of a
+        plausible spelling. A wrong address label is worse than a refused one.
+        And it will not **fall back to a hosted service**: a conversion reads a
+        dataset you already have — on disk under Node, from an endpoint you
+        host yourself in a browser — so "look it up from an API" is not an
+        answer available here, however convenient it would be. A request framed
+        as "just pick the usual reading" will be declined — but the same need
+        framed as an opt-in option, off by default, is exactly what those
+        issues are.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: >
+        The task, not the API. "Print romanized shipping labels from a
+        customer table that has building names in it" tells us more than "add
+        an option to toRomaji", because it leaves room for the answer to be
+        something better than what you had in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: data
+    attributes:
+      label: What are the real addresses, and what should come back?
+      description: >
+        A handful of actual (or realistically shaped) inputs and the output you
+        expect from each. This is the part that decides whether a proposal
+        ships and what its default is — a guess at what "people" need is not
+        usable, three real addresses are. If it only breaks on a certain kind
+        of address, say which kind: a koaza, a Kyoto street phrase, a building
+        name, a town whose reading the dataset does not carry. Those are where
+        the answers get decided. Please do not paste a residential address that
+        belongs to someone.
+      render: text
+      placeholder: |
+        東京都新宿区西新宿二丁目8番1号        → '2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo, Japan'
+        三重県伊賀市西明寺字天津川1-1          → want the koaza kept
+        '1-1 Azamatsugawa Saimyoji, Iga-shi, Mie' → want this to read back
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What are you doing instead today?
+      description: >
+        If you already work around this — a lookup table of your own, a regex
+        over the output, a second pass for the addresses that fail — say how.
+        A request that a caller can meet in three lines usually belongs in the
+        README rather than in the API, and knowing your workaround is how we
+        tell those two apart. If the workaround is subtly wrong in a way you
+        found the hard way, that is the strongest possible argument for doing
+        something.
+    validations:
+      required: false

@@ -388,6 +388,37 @@ toFormat(parsed, 'stripe');
 | `DATA_NOT_CONFIGURED` | データセット未導入・未設定。 |
 | `EMPTY_INPUT` | 住所として認識できる内容が無い。 |
 
+## ロードマップ
+
+### 検討中
+
+機能一覧からではなく、実際の住所データが要求するものから拾っています。いずれも
+**既定でやらなかった理由**まで書いてあるので、**必要ならイシューでそう言ってください**。
+実装するかどうかと既定値を決めるのは、実際の利用場面のほうです。
+
+- [ローマ字から小字を読み戻す](https://github.com/tomatomerde/jp-address-romaji/issues/68)
+  — `toRomaji` は書き出すのに `fromRomaji` は読み戻せず、往復が一方通行になっている
+- [郵便番号の索引を同梱する](https://github.com/tomatomerde/jp-address-romaji/issues/69)
+  — `postalCodeIndex` のフックはあるがデータが無い。既存のホスト型の選択肢は、
+  郵便番号をどこかへ送って解決している
+- [CommonJS ビルド](https://github.com/tomatomerde/jp-address-romaji/issues/70)
+  — `require()` はどの Node のバージョンでも解決しない
+- [建物名を判定する日本語文字クラスを広げる](https://github.com/tomatomerde/jp-address-romaji/issues/71)
+  — `々`・互換漢字・BMP 外の漢字が範囲外。実データで踏むトリガーはまだ見つかっていない
+- [ブラウザのデータ取得で市区町村を URL に出さない](https://github.com/tomatomerde/jp-address-romaji/issues/72)
+  — ブラウザ経路の保証は Node より弱く、デモはそれを丸めずにそう書いている
+
+いずれもこのライブラリの土台にある2つの規則には触れません——確認できない読みは、もっともらしい
+綴りに丸めず拒否する。そしてホスト型のサービスにフォールバックしない（これは文章の主張ではなく、
+テストが強制しています）。**挙動を足すものはオプトインで既定はオフ**にし、成果物を足すものは
+いま出しているものを置き換えず、並べて出します。
+
+**意図して**やらないと決めているものは[非対応と明記するもの](#非対応と明記するもの)にあります。
+
+他にあれば
+[イシューを立ててください](https://github.com/tomatomerde/jp-address-romaji/issues/new?template=feature_request.yml)。
+**実際の住所を数件**添えてもらえると、それが判断材料になります。
+
 ## データ出典とライセンス
 
 住所データはデジタル庁
