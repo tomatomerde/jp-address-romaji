@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['packages/*/test/**/*.test.ts'],
+    include: ['packages/*/test/**/*.test.ts', 'scripts/**/*.test.ts'],
     // Installs the Node platform bindings the way the package entry point
     // does — test files import the internal modules directly, which skips it.
     // See the file itself for why it is not a plain `setPlatform` call.

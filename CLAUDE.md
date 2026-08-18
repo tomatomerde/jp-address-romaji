@@ -57,7 +57,7 @@
 - **郵便番号データセットの同梱なし。** `postalCodeIndex` は呼び出し側が自前データを渡す
   フックであり、日本郵便の `KEN_ALL` は同梱しない（別ライセンス・別更新周期の第2データ源を
   抱えるコストが、それで解消する完全形キー曖昧性 0.67% に見合わなかった——
-  `scripts/measure-ambiguity.ts` による実測）。
+  `docs/coverage.md` の実測）。
 - **データを自分でホストしないブラウザ利用。** ブラウザ用エントリポイントはあるが、
   フォールバック先のホスト型 API は用意しない。エンドポイントを指定しなければ
   `DATA_NOT_CONFIGURED` で失敗する（`configureDataSource({ dataDir })` もブラウザでは同じ）。
@@ -131,6 +131,12 @@
 同梱データセットは Geolonia **v2**（町エントリ 638,567 件、市区町村 1,898、zip 済み約 12 MB）。
 カバレッジは全国 99.55%、丁目を持つ都市部住所では 99.99%。
 
+`fromRomaji` の曖昧性は同じ生成物に載っている: 完全形キーで一意なのは、市区町村が判明していれば
+97.95%、全国文脈では 59.92%。ローマ字表記を共有する市区町村の組は 39（86 市区町村、56 綴り）で、
+**そのうち日本語表記まで同じ名前なのは 19 組**（伊達市、池田町など）、残る 20 組は別の名前が
+同じローマ字になるもの（`Mihama-cho` は御浜町と美浜町3件）。**「同名の市区町村が N 件」と
+読み替えないこと**——2つは別の量で、混ぜると数が合わなくなる。
+
 取り違えやすい事実が3つ:
 
 - **ローマ字とかなは一緒には欠けない。** romaji フィールドを持つのは 89.51%、かなは 99.55%——
@@ -174,8 +180,18 @@ pnpm typecheck && pnpm -r build             # -r だけでは test/scripts/vites
 node scripts/browser-smoke.mjs              # 要 pnpm -r build。バンドルして Chromium で実際に変換する
 npx tsx packages/data/src/build-data.ts --out ./address-data
 npx tsx scripts/verify-data-assumptions.ts --data ./address-data   # 出力を読むこと
-npx tsx scripts/measure-coverage.ts --data ./address-data > docs/coverage.md
+npx tsx scripts/measure-coverage.ts --data ./address-data \
+  --figures-out docs/measurements/figures.json > docs/coverage.md   # 公開数値の唯一の出どころ
+npx tsx scripts/measure-ambiguity.ts --data ./address-data          # 同じ数値を対話的に見る
+npx tsx scripts/check-quoted-figures.ts                             # 文書の数値が上とズレていないか
 ```
+
+**公開する数値は `docs/coverage.md` から取ること。** 数値を手で書き写した文書はいずれ嘘になる
+——実際に、記事とREADMEが同じ量について違う値を載せた状態が2リリース続いた。
+`scripts/check-quoted-figures.ts` は README（英日）・この CLAUDE.md・`fromRomaji` の API ドキュメントが
+`docs/measurements/figures.json` と一致するかを CI で見る。**測定そのものは CI では回らない**
+（106MB のデータセットをランナーが取りに行くのは月次の `Refresh address data and coverage` だけ）ので、
+検査しているのは「文のほう」。
 
 `scripts/verify-data-assumptions.ts` は上の地雷2件を捕まえた検査。読みの妥当性の項に並ぶ
 エントリは、いずれもライブラリが拒否する住所——流し読みせず、読むこと。
