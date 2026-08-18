@@ -53,6 +53,15 @@ jobs:
       - name: Test (offline guarantee enforced)
         run: pnpm test
 
+      # The figures themselves are measured against the 106 MB national dataset,
+      # which this runner does not fetch (see the `Refresh address data and
+      # coverage` workflow). This step checks the other half: that the sentences
+      # quoting those figures still say what the last measurement produced. It
+      # is what turns a regenerated docs/coverage.md into a red build instead of
+      # a silently stale README.
+      - name: Check the published figures against the last measurement
+        run: npx tsx scripts/check-quoted-figures.ts
+
   # The browser build cannot be checked by anything that is not a browser: Node
   # resolves a stray `node:` import happily, so every test above would stay
   # green while the bundle that front-end users build was broken. This job

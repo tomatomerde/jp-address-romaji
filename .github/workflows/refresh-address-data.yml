@@ -10,7 +10,12 @@ name: Refresh address data and coverage
 # started from anywhere — including a phone, via "Run workflow".
 #
 # The dataset itself is NOT committed: it is uploaded as an artifact. Only the
-# generated coverage report is committed, and only when asked.
+# generated reports are committed, and only when asked.
+#
+# docs/coverage.md is where every published figure in this project comes from,
+# so this workflow is also the thing that makes those figures go stale visibly:
+# when a regenerated number stops matching what the README says,
+# scripts/check-quoted-figures.ts turns CI red on the commit made below.
 
 on:
   workflow_dispatch:
@@ -67,8 +72,13 @@ jobs:
           set -o pipefail
           npx tsx scripts/verify-data-assumptions.ts --data ./address-data | tee assumptions.txt
 
-      - name: Measure coverage
-        run: npx tsx scripts/measure-coverage.ts --data ./address-data > docs/coverage.md
+      # One run, two outputs: docs/coverage.md for people,
+      # docs/measurements/figures.json for scripts/check-quoted-figures.ts.
+      # Generating them separately would let them disagree.
+      - name: Measure coverage and ambiguity
+        run: |
+          npx tsx scripts/measure-coverage.ts --data ./address-data \
+            --figures-out docs/measurements/figures.json > docs/coverage.md
 
       # JP_ADDRESS_ROMAJI_DATA_DIR switches on realdata.test.ts, which is
       # skipped everywhere else. Without it this step would re-run the same
@@ -92,6 +102,7 @@ jobs:
           name: reports
           path: |
             docs/coverage.md
+            docs/measurements/figures.json
             assumptions.txt
           retention-days: 30
 
@@ -123,8 +134,10 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           cat assumptions.txt >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo '## Coverage' >> "$GITHUB_STEP_SUMMARY"
-          head -40 docs/coverage.md >> "$GITHUB_STEP_SUMMARY"
+          # The whole report, not a head: the ambiguity and municipality-collision
+          # sections are at the bottom, and they are the figures the README quotes.
+          # If the commit below is rejected, this is the only place they survive.
+          cat docs/coverage.md >> "$GITHUB_STEP_SUMMARY"
 
       # Branch protection on main (once enabled — see the maintainer runbook in
       # docs/project-status.md) rejects direct pushes whose commits have not
@@ -138,9 +151,19 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          if git diff --quiet docs/coverage.md; then
+          # --porcelain, not `git diff --quiet`: figures.json can be untracked
+          # (the first run after it was introduced, or after a checkout that
+          # predates it), and git diff does not see an untracked file at all —
+          # the report would be silently dropped as "unchanged".
+          #
+          # In practice the report always differs, because it is stamped with
+          # the date it was measured. That is intended: the monthly commit is
+          # how you can tell a figure was re-measured from one that was merely
+          # never revisited. The branch below stays as the guard for a re-run
+          # that produces byte-identical output.
+          if [ -z "$(git status --porcelain -- docs/coverage.md docs/measurements/figures.json)" ]; then
             echo 'Coverage report unchanged.'
-          elif git add docs/coverage.md \
+          elif git add docs/coverage.md docs/measurements/figures.json \
               && git commit -m 'Regenerate coverage report from the v2 dataset' \
               && git push; then
             echo 'Coverage report committed.'
