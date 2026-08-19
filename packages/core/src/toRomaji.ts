@@ -237,7 +237,11 @@ export async function toRomaji(
   //
   // Refusing is the same call `KOAZA_READING_INCOMPLETE` makes below: never
   // return `ok` after dropping or reclassifying part of the address.
-  if (blockNumbers.length === 0 && unparsed !== undefined && !isSeparatedTrailing(withoutStreet, unparsed)) {
+  if (
+    blockNumbers.length === 0 &&
+    unparsed !== undefined &&
+    !isSeparatedTrailing(withoutStreet, unparsed)
+  ) {
     return fail(
       'TOWN_NOT_FOUND',
       `Resolved the town as "${normalized.town.ja}", but "${unparsed}" was left between it and ` +
