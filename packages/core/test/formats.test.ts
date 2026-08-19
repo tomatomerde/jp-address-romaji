@@ -88,7 +88,7 @@ describe('parse', () => {
   });
 
   it('propagates failures from either direction', async () => {
-    const result = await parse('青森県青森市大字三内字丸山1-1');
+    const result = await parse('青森県青森市大字三内1-1');
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('NO_ROMAJI_DATA');

@@ -218,6 +218,36 @@ export async function toRomaji(
     );
   }
 
+  const { blockNumbers, unparsed } = splitBlockNumbers(normalized.rest);
+
+  // Text sitting between the town and the block numbers means the town match
+  // stopped short of what the caller wrote, and the characters it did not
+  // consume have nowhere to go but `unparsed` — which `render` prints as a
+  // building name. That reclassifies part of the ADDRESS as not being part of
+  // the address, on top of an answer that already names a town nobody asked
+  // for. `東京都新宿区中井1番1号` came back as
+  // "井1-1, Nakacho, Shinjuku-ku, Tokyo, Japan": 中井 is in the dataset, but
+  // the upstream normalizer registers 中 as an alias of 中町 (a trailing 町
+  // may be omitted) and tries it before the pattern that would have matched
+  // 中井1, so the wrong town wins and 井 is left over. The same shape reaches
+  // us without any alias whenever a shorter town is a literal prefix of a
+  // longer one (宮の森 / 宮の森一条), and again when the notation itself is
+  // left behind (`旭ケ丘1番1号` -> chome 1 plus a leftover `番1号`, printed as
+  // "番1号, 1 Asahigaoka" with the 号 silently gone).
+  //
+  // Refusing is the same call `KOAZA_READING_INCOMPLETE` makes below: never
+  // return `ok` after dropping or reclassifying part of the address.
+  if (blockNumbers.length === 0 && unparsed !== undefined && !isSeparatedTrailing(withoutStreet, unparsed)) {
+    return fail(
+      'TOWN_NOT_FOUND',
+      `Resolved the town as "${normalized.town.ja}", but "${unparsed}" was left between it and ` +
+        `the block numbers in "${japaneseAddress}". Text there is part of the address that could ` +
+        `not be matched, so the town is not the one the address names. Refusing rather than ` +
+        `answering with a different address.`,
+      { ...partial, town: { ja: normalized.town.ja }, level: normalized.level },
+    );
+  }
+
   // A reading whose length is implausible for its kanji indicates a shifted
   // dataset row (see isPlausibleReading). Both the kana and the romaji are
   // wrong in that case, so there is nothing trustworthy left to romanize from.
@@ -291,8 +321,6 @@ export async function toRomaji(
     };
   }
 
-  const { blockNumbers, unparsed } = splitBlockNumbers(normalized.rest);
-
   const parsed: ParsedAddress = {
     ...(postalCode ? { postalCode } : {}),
     prefecture,
@@ -363,6 +391,30 @@ function splitPostalCode(input: string): PostalSplit {
   if (!match) return { rest: normalized };
   const rest = normalized.replace(match[0], ' ').replace(/\s+/g, ' ').trim();
   return { postalCode: `${match[1]}-${match[2]}`, rest };
+}
+
+/**
+ * Did the caller separate this leftover from the address with whitespace?
+ *
+ * A building name is written after the address, with a space: `…中町 サンプル
+ * ビル301`. Address text the normalizer failed to consume is not — it abuts
+ * whatever the town match stopped at: `…中井1番1号` leaves `井1-1`, and
+ * `…中井 サンプルビル` leaves `井 サンプルビル`, whose leading `井` still runs
+ * straight on from `中`. That difference is the only thing separating the two
+ * cases at this point, and it is the caller's own punctuation rather than an
+ * inference about the text.
+ *
+ * `input` is the string handed to the normalizer: NFKC-normalized and with the
+ * postal code already removed, which is what makes the comparison with the
+ * upstream leftover meaningful (both have had full-width digits folded). When
+ * upstream rewrote the leftover — `1番1号` becomes `1-1` — it no longer occurs
+ * in the input at all and this answers false, which is the refusing direction.
+ */
+function isSeparatedTrailing(input: string, leftover: string): boolean {
+  const haystack = input.trimEnd();
+  if (!haystack.endsWith(leftover)) return false;
+  const before = haystack.slice(0, haystack.length - leftover.length);
+  return /\s$/.test(before);
 }
 
 /** Pull a `NNN-NNNN` postal code out of the raw input, if present. */

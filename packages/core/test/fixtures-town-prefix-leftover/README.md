@@ -30,10 +30,15 @@ way a prefix match arises:
 | --- | --- | --- | --- |
 | 東京都 | 新宿区 | `中井` chome 1 and 2, plus the unrelated chome-less `中町` | The `町`-omission alias: `中井1番1号` must not resolve to `中町` with `井` pushed into the address line. `中町1番1号` — the same shape, spelled the way the alias's own town is spelled — must still succeed. |
 | 北海道 | 札幌市中央区 | `宮の森` (chome-less), `宮の森一条` chome 1 and 2 | A shorter town that is a literal prefix of a longer one: `宮の森一条1番1号` must not resolve to `宮の森` with `一条` pushed into the address line. |
+| 北海道 | 札幌市中央区 | `旭ケ丘` chome 1 and 2, and no chome-less row | The leftover with the RIGHT town: `旭ケ丘1番1号` reads the leading `1` as the chome and leaves `番1号`, which came back as "番1号, 1 Asahigaoka" — the 号 number dropped and the notation printed as a building name. |
 
 `ja.json` is a trimmed copy of the real `ja.json` (only 北海道 and 東京都, and
 only the one municipality each). The town files are trimmed to the rows named
 above; both real files carry many more.
+
+`中町1番1号` and `中町 サンプルビル301` are here as controls: the same input
+shapes with nothing left over must keep converting, or the fix would be
+refusing the `N番M号` notation and the building-name slot themselves.
 
 Every field in every row here was compared field-by-field against a real built
 dataset before this fixture was committed (0 differences). The rows drop

@@ -24,11 +24,23 @@
  * flagged, which is the one thing this library exists not to do (README's
  * "refuses rather than guesses", CLAUDE.md's 「読みを推測しない」).
  *
+ * A second shape reaches the same slot without any wrong town: when a town
+ * exists only with chome rows, `旭ケ丘1番1号` is read as chome 1 and leaves
+ * `番1号` behind, which came back as "番1号, 1 Asahigaoka" — the 号 number
+ * gone from the address and the notation printed as a building name.
+ *
  * The fix refuses instead: text sitting between the town and the block
  * numbers means the town was not fully resolved, so the conversion fails with
  * `TOWN_NOT_FOUND` rather than answering with a different address. It is the
  * same call `KOAZA_READING_INCOMPLETE` makes — never drop or reclassify part
  * of the address and return `ok`.
+ *
+ * What is NOT refused: a building name the caller separated with whitespace
+ * and no block number at all (`…中町 サンプルビル301`). Measured over the 9
+ * municipalities the demo serves, 8,201 generated addresses: refusing those
+ * too would have cost 928 correct answers to save nothing, because every one
+ * of the 243 answers this guard does refuse was already wrong (95 named a
+ * different town, 148 printed the notation as a building).
  *
  * See fixtures-town-prefix-leftover/README.md for the records and for the
  * evidence that every one of them is real.
@@ -85,6 +97,62 @@ describe('toRomaji: a town that only prefix-matched must not be answered', () =>
     // and the town the normalizer settled on. Without the latter the caller
     // cannot tell a prefix match from an unknown town.
     expect(result.message).toContain('中町');
+  });
+});
+
+describe('toRomaji: leftover notation is refused too, not printed as a building', () => {
+  it('refuses 北海道札幌市中央区旭ケ丘1番1号 rather than dropping the 号 number', async () => {
+    // 旭ケ丘 exists only with chome rows, so the leading 1 is read as the
+    // chome and `番1号` is left over. The old answer was
+    // "番1号, 1 Asahigaoka, …": chome 1, no block number, and the notation
+    // shown as a building name. The right town does not make that an answer.
+    const result = await toRomaji('北海道札幌市中央区旭ケ丘1番1号');
+
+    if (result.ok) {
+      expect(result.value.parsed.unparsed).toBeUndefined();
+    }
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('TOWN_NOT_FOUND');
+    expect(result.message).toContain('番1号');
+  });
+
+  it('北海道札幌市中央区旭ケ丘一丁目1番1号 -> 1-1-1 Asahigaoka', async () => {
+    // Same address with the chome written. Nothing is left over.
+    const result = await toRomaji('北海道札幌市中央区旭ケ丘一丁目1番1号');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.formatted).toBe(
+      '1-1-1 Asahigaoka, Chuo-ku, Sapporo-shi, Hokkaido, Japan',
+    );
+  });
+});
+
+describe('toRomaji: a building name with no block number is still carried through', () => {
+  it('keeps 東京都新宿区中町 サンプルビル301', async () => {
+    // The caller separated it with a space, which is the one signal that
+    // distinguishes a building name from address text the normalizer could
+    // not attribute. Refusing this shape as well would cost far more correct
+    // answers than the guard saves — see this file's header.
+    const result = await toRomaji('東京都新宿区中町 サンプルビル301');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.parsed.town?.ja).toBe('中町');
+    expect(result.value.parsed.blockNumbers).toEqual([]);
+    expect(result.value.parsed.unparsed).toBe('サンプルビル301');
+  });
+
+  it('still refuses 東京都新宿区中井 サンプルビル301, where the leftover abuts the town', async () => {
+    // The same shape with a prefix-matched town: the leftover is
+    // `井 サンプルビル301`, whose leading 井 runs straight on from the 中 the
+    // normalizer consumed. The whitespace inside it is not a separator
+    // between the address and the building — it sits one character too late.
+    const result = await toRomaji('東京都新宿区中井 サンプルビル301');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('TOWN_NOT_FOUND');
+    expect(result.message).toContain('井 サンプルビル301');
   });
 });
 

@@ -108,13 +108,31 @@ describe('toRomaji: building names are never romanized', () => {
 
 describe('toRomaji: refuses rather than fabricates', () => {
   it('fails with NO_ROMAJI_DATA for a rural oaza lacking readings', async () => {
-    const result = await toRomaji('青森県青森市大字三内字丸山1-1');
+    // 大字三内 with nothing after it but the block numbers. The `字丸山` this
+    // used to carry names a koaza the (deliberately sparse, v1-derived)
+    // fixture does not have, and unmatched text between the town and the
+    // block numbers is now refused as TOWN_NOT_FOUND before the reading is
+    // ever looked at — see townPrefixLeftover.test.ts. Kept here without it so
+    // this test still exercises the missing-reading path it is named for.
+    const result = await toRomaji('青森県青森市大字三内1-1');
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('NO_ROMAJI_DATA');
     // The components that WERE resolved are still reported.
     expect(result.partial?.prefecture?.romaji).toBe('Aomori');
     expect(result.partial?.city?.romaji).toBe('Aomori-shi');
+  });
+
+  it('refuses the koaza-bearing spelling of the same address rather than dropping it', async () => {
+    // `字丸山` is real text the caller wrote and the fixture cannot match, so
+    // it is unmatched ADDRESS text, not a building name. Answering would mean
+    // either dropping it or printing it as a building; both name a different
+    // place. This is the input the test above used to use.
+    const result = await toRomaji('青森県青森市大字三内字丸山1-1');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('TOWN_NOT_FOUND');
+    expect(result.message).toContain('字丸山');
   });
 
   it('rejects corrupt dataset romaji instead of emitting a bare number', async () => {
