@@ -163,6 +163,8 @@ a built dataset (`pnpm coverage:measure --data ./address-data`), not an `npm ins
 - **Geocoding accuracy.** Coordinates are deliberately excluded from the bundled town data.
 - **Building-name translation or romanization.** Building names and room numbers are isolated as
   `unparsed` and passed through untouched. The type has no `romaji` field for them, by design.
+  Address text the normalizer could not match does not end up there — it is refused instead, see
+  [Partially matched town names](#partially-matched-town-names).
 - **Romanizing the Kyoto street phrase.** It is preserved, not translated — see below.
 - **`fromRomaji` reads western order only.** It expects the prefecture last. Output produced with
   `order: 'japanese'` is for display, not for feeding back in — `fromRomaji` will reject it with
@@ -240,6 +242,33 @@ refused with `KOAZA_READING_INCOMPLETE` instead.
 one-way enhancement. A koaza-bearing address that has been romanized cannot be read back to the same
 Japanese address; it fails (typically `TOWN_NOT_FOUND`) rather than silently resolving to the
 koaza-less town.
+
+### Partially matched town names
+
+Normalization is delegated, and it can match only the *start* of the town you wrote. `中井` is in
+the dataset, but `@geolonia/normalize-japanese-addresses` also registers `中` as an alias of the
+unrelated `中町` (it allows a trailing `町` to be omitted) and tries that alias first, so
+`東京都新宿区中井1番1号` matched `中町` and left `井` unaccounted for.
+
+Up to `0.1.7` that leftover was carried into the building-name slot, and the conversion succeeded:
+
+```ts
+await toRomaji('東京都新宿区中井1番1号');
+// 0.1.7: { ok: true, formatted: '井1-1, Nakacho, Shinjuku-ku, Tokyo, Japan' }
+// 0.1.8: { ok: false, reason: 'TOWN_NOT_FOUND',
+//          message: 'Resolved the town as "中町", but "井1-1" was left between it and the block numbers …' }
+```
+
+From `0.1.8`, text sitting between the town and the block numbers is refused: it is part of the
+address that could not be matched, so the town is not the one the address names. The same shape
+occurs where a shorter town is a literal prefix of a longer one (`宮の森` / `宮の森一条`), and where
+the notation itself is left behind (`旭ケ丘1番1号`, whose leading `1` is read as the chome).
+
+Writing the address in a form the normalizer matches whole resolves it — `中井1-1` and
+`中井一丁目1番1号` both worked before this change and still do.
+
+A building name written after the block numbers, or after whitespace with no block number at all
+(`…中町 サンプルビル301`), is still carried through as `unparsed` unchanged.
 
 ### Known dataset defects you will hit
 
@@ -389,7 +418,7 @@ the compiler makes you handle the failure case.
 | `KANA_REQUIRED_FOR_LONG_VOWELS` | A macron/circumflex/`oh` style was requested but no kana reading exists. |
 | `KOAZA_READING_INCOMPLETE` | The town has a named koaza, but its reading cannot be verified to cover the whole name (see [Named koaza](#named-koaza-小字)). Refused rather than romanized incomplete. |
 | `AMBIGUOUS` | Several Japanese addresses match. `candidates` holds them. |
-| `TOWN_NOT_FOUND` / `CITY_NOT_FOUND` / `PREFECTURE_NOT_FOUND` | Resolution stopped at that level. `partial` holds what was resolved. |
+| `TOWN_NOT_FOUND` / `CITY_NOT_FOUND` / `PREFECTURE_NOT_FOUND` | Resolution stopped at that level, or the town matched only partially and text was left before the block numbers (see [Partially matched town names](#partially-matched-town-names)). `partial` holds what was resolved. |
 | `KYOTO_STREET_ADDRESS` | The street phrase was understood but the town after it is not in the dataset (see [Kyoto street-name addresses](#kyoto-street-name-addresses)). |
 | `DATA_NOT_CONFIGURED` | No dataset installed or configured. |
 | `EMPTY_INPUT` | No recognizable address in the input. |

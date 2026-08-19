@@ -181,6 +181,24 @@ export function useKoazaFixtureData(): void {
 }
 
 /**
+ * A twelfth, separate fixture dataset holding two real municipalities where
+ * the upstream normalizer matches only a PREFIX of the town the caller wrote
+ * (東京都新宿区's 中井/中町 and 北海道札幌市中央区's 宮の森/宮の森一条). See
+ * fixtures-town-prefix-leftover/README.md.
+ */
+export const TOWN_PREFIX_LEFTOVER_FIXTURE_DATA_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'fixtures-town-prefix-leftover',
+  'data',
+);
+
+/** Point the library at the town-prefix-leftover fixture dataset. */
+export function useTownPrefixLeftoverFixtureData(): void {
+  clearDataCache();
+  configureDataSource({ dataDir: TOWN_PREFIX_LEFTOVER_FIXTURE_DATA_DIR });
+}
+
+/**
  * Run `fn` with `fetch` replaced by a stub that throws.
  *
  * Any network access — by our code or by the upstream normalizer — fails the

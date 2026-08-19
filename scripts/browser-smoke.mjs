@@ -16,7 +16,7 @@
  *      the graph imports a Node builtin;
  *   3. serve the bundle and the repository's fixture dataset over HTTP;
  *   4. drive headless Chromium through the same conversions the README shows,
- *      including one that must be refused;
+ *      including two that must be refused;
  *   5. assert that the page talked to nobody but its own origin.
  *
  * Step 5 is the privacy claim in its browser form. The dataset request carries
@@ -48,6 +48,7 @@ const EXPECTED = {
   forward: '2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo, Japan',
   reverse: '東京都新宿区西新宿二丁目8-1',
   refusalReason: 'NO_ROMAJI_DATA',
+  leftoverRefusalReason: 'TOWN_NOT_FOUND',
   unconfiguredReason: 'DATA_NOT_CONFIGURED',
 };
 
@@ -119,7 +120,13 @@ try {
   out.steps.reverse = await fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo');
 
   // 3. A town whose dataset row carries no usable reading is still refused.
-  out.steps.refused = await toRomaji('青森県青森市大字三内字丸山1-1');
+  out.steps.refused = await toRomaji('青森県青森市大字三内1-1');
+
+  // 4. So is a town that only prefix-matched, with text left before the block
+  //    numbers. Checked here as well as in the Node suite because it is the
+  //    branch that decides whether a wrong address is returned, and the
+  //    browser build reaches the dataset through a different platform binding.
+  out.steps.leftoverRefused = await toRomaji('青森県青森市大字三内字丸山1-1');
 } catch (error) {
   out.error = String(error && error.stack ? error.stack : error);
 }
@@ -245,6 +252,11 @@ try {
   check(
     s.refused?.ok === false && s.refused?.reason === EXPECTED.refusalReason,
     `expected ${EXPECTED.refusalReason}, got ${JSON.stringify(s.refused)}`,
+  );
+  check(
+    s.leftoverRefused?.ok === false &&
+      s.leftoverRefused?.reason === EXPECTED.leftoverRefusalReason,
+    `expected ${EXPECTED.leftoverRefusalReason}, got ${JSON.stringify(s.leftoverRefused)}`,
   );
 
   check(external.length === 0, `the page contacted another origin: ${external.join(', ')}`);

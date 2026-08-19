@@ -130,7 +130,7 @@ describe('browser platform bindings', () => {
     clearDataCache();
     configureDataSource({ endpoint: `${origin}/ja` });
 
-    const result = await toRomaji('青森県青森市大字三内字丸山1-1');
+    const result = await toRomaji('青森県青森市大字三内1-1');
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('NO_ROMAJI_DATA');
