@@ -36,6 +36,62 @@ await fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo 160-0023');
 // → { ok: true, value: { formatted: '東京都新宿区西新宿二丁目8-1', … } }
 ```
 
+## What you would use instead, and what it gets wrong
+
+Search npm for Japanese romanization and you meet `hepburn`, `wanakana` and `kuroshiro` long
+before you meet this package. They are good libraries and they are not substitutes here, for one
+reason: **a Japanese place name's reading is not derivable from its characters.**
+
+| What you would reach for | What it does to an address |
+| --- | --- |
+| [`hepburn`](https://www.npmjs.com/package/hepburn), [`wanakana`](https://www.npmjs.com/package/wanakana) | Kana↔latin transliterators. They pass kanji through untouched: `hepburn.fromKana('中町')` returns `中町`, and so does `wanakana.toRomaji('中町')`. They need the reading as input — and the reading is the part you do not have. |
+| [`kuroshiro`](https://www.npmjs.com/package/kuroshiro) + kuromoji | Reads the kanji with a morphological analyzer, so it does produce an answer. It disagrees with the official romanization for **796 of 1,181 town names (67.4%)** — see below. |
+| [`@geolonia/normalize-japanese-addresses`](https://github.com/geolonia/normalize-japanese-addresses) | Splits and normalizes an address, and does it better than anything in this package — but its output is Japanese. This package depends on it and adds the layer above. |
+
+### The measurement
+
+`kuroshiro` 1.2.0 with the kuromoji analyzer, against the `oaza_cho_r` field of the Digital
+Agency's Address Base Registry, over the nine municipalities
+[the demo](https://tomatomerde.github.io/jp-address-romaji/) serves. Comparison is per distinct town name (the dataset has one row per chome), lower-cased, with
+macrons and spacing folded away so only the reading itself can make a pair differ.
+
+| Municipality | Town names | Analyzer differs |
+| --- | ---: | ---: |
+| 北海道 釧路郡釧路町 | 43 | 25.6% |
+| 三重県 伊賀市 | 200 | 28.0% |
+| 長野県 飯田市 | 119 | 37.8% |
+| 大阪府 大阪市北区 | 49 | 44.9% |
+| 東京都 新宿区 | 91 | 59.3% |
+| 沖縄県 那覇市 | 100 | 66.0% |
+| 北海道 札幌市中央区 | 78 | 85.9% |
+| 北海道 札幌市白石区 | 62 | 90.3% |
+| 京都府 京都市中京区 | 439 | 95.4% |
+| **All nine** | **1,181** | **67.4%** |
+
+Read the spread, not only the total: these nine were picked to exercise *this* library's edge cases
+(Kyoto street names, unreadable koaza, the Sapporo grid), not to make an analyzer look bad, and
+439 of the 1,181 names are Kyoto's. Excluding every mismatch that is only about notation — the
+`字`/`大字` prefix, and the Sapporo grid the official data numbers with digits — leaves
+634 of 1,019 (62.2%). The claim does not rest on the outlier.
+
+### Why more training data would not fix it
+
+In Shinjuku alone, 中町 is `Nakacho` but 細工町 is `Saikumachi`; 四谷坂町 is `Yotsuyasakamachi`
+but 四谷本塩町 is `Yotsuyahonshiocho`. One ward, the same character 町, romanized both ways, with
+nothing in the characters to say which — it is a convention attached to each name, so an analyzer
+that lands on the right one has guessed. Plain misreadings come out beside them
+(official → analyzer): 白銀町 `Shiroganecho` → `shirakanemachi`, 須賀町 `Sugacho` → `sukamachi`,
+横寺町 `Yokoteramachi` → `yokoderamachi`, 原町 `Haramachi` → `harumachi`.
+
+This package does not read anything. Every romanization is looked up in the dataset — the official
+romaji field, or the kana reading transliterated deterministically — and when neither exists the
+API returns an explicit failure instead of a guess. That is the whole difference, and it is why
+[Coverage](#coverage) is a section here at all.
+
+Re-run it yourself: `npm install --no-save kuroshiro kuroshiro-analyzer-kuromoji && node
+scripts/compare-kuroshiro.mjs > docs/measurements/kuroshiro.json`. The committed result is
+[`docs/measurements/kuroshiro.json`](./docs/measurements/kuroshiro.json), measured 2026-08-19.
+
 ## What this is, and what it is not
 
 This library does **not** implement address normalization. That is delegated entirely to

@@ -38,6 +38,61 @@ await fromRomaji('2-8-1 Nishishinjuku, Shinjuku-ku, Tokyo 160-0023');
 // → { ok: true, value: { formatted: '東京都新宿区西新宿二丁目8-1', … } }
 ```
 
+## 代わりに検討されるもの（と、それでは合わない理由）
+
+npm で日本語のローマ字化を探すと、このパッケージより先に `hepburn`・`wanakana`・`kuroshiro`
+に出会う。どれも良いライブラリだが、住所の代替にはならない。理由は1つで、
+**日本の地名の読みは、文字からは決まらない**から。
+
+| 検討されるもの | 住所に対して何が起きるか |
+| --- | --- |
+| [`hepburn`](https://www.npmjs.com/package/hepburn) / [`wanakana`](https://www.npmjs.com/package/wanakana) | かな⇔ラテン文字の変換器。漢字はそのまま素通しする——`hepburn.fromKana('中町')` は `中町` を返し、`wanakana.toRomaji('中町')` も同じ。読みを入力として要求するが、その読みこそ手元に無いもの |
+| [`kuroshiro`](https://www.npmjs.com/package/kuroshiro) + kuromoji | 形態素解析で漢字を読むので、答えは出る。ただし公式のローマ字表記と **1,181 件中 796 件（67.4%）で食い違う**（下記） |
+| [`@geolonia/normalize-japanese-addresses`](https://github.com/geolonia/normalize-japanese-addresses) | 住所の分割・正規化を、ここにある何よりも正確にやる。ただし出力は日本語のまま。本パッケージはこれに依存し、その上の層を足している |
+
+### 実測
+
+`kuroshiro` 1.2.0（kuromoji アナライザ）を、デジタル庁アドレス・ベース・レジストリ由来の
+`oaza_cho_r` フィールドと突き合わせた。対象は[デモ](https://tomatomerde.github.io/jp-address-romaji/)が
+配信している9市区町村。比較の単位は町名（データは丁目ごとに1行なので重複を畳んである）、
+小文字化・長音記号・語間の空白を落として、**読みの違いだけ**が差になるようにしてある。
+
+| 市区町村 | 町名 | 解析器が食い違う割合 |
+| --- | ---: | ---: |
+| 北海道 釧路郡釧路町 | 43 | 25.6% |
+| 三重県 伊賀市 | 200 | 28.0% |
+| 長野県 飯田市 | 119 | 37.8% |
+| 大阪府 大阪市北区 | 49 | 44.9% |
+| 東京都 新宿区 | 91 | 59.3% |
+| 沖縄県 那覇市 | 100 | 66.0% |
+| 北海道 札幌市中央区 | 78 | 85.9% |
+| 北海道 札幌市白石区 | 62 | 90.3% |
+| 京都府 京都市中京区 | 439 | 95.4% |
+| **9市区町村 合計** | **1,181** | **67.4%** |
+
+合計だけでなく散らばりを見てほしい。この9件は**このライブラリ側**の難所（京都の通り名、
+読めない小字、札幌の条丁目）を突くために選んだものであって、解析器を落とすために選んだ
+ものではない。1,181 件のうち 439 件は京都市中京区が占める。表記の流儀だけが理由の食い違い
+——`字`/`大字` の接頭辞と、公式データが数字で書く札幌の条丁目——を全部除いても
+1,019 件中 634 件（62.2%）が残る。主張は外れ値に乗っていない。
+
+### 学習データを増やしても解けない理由
+
+新宿区の中だけで、`中町` は `Nakacho`、`細工町` は `Saikumachi`。`四谷坂町` は
+`Yotsuyasakamachi`、`四谷本塩町` は `Yotsuyahonshiocho`。同じ区の、同じ「町」の字が
+両方の読みに割れていて、**どちらなのかは文字の側に書かれていない**。地名ごとの慣習なので、
+当てられる解析器はたまたま当たっただけになる。単純な誤読も並んで出る（公式 → 解析器）——
+`白銀町` `Shiroganecho` → `shirakanemachi`、`須賀町` `Sugacho` → `sukamachi`、
+`横寺町` `Yokoteramachi` → `yokoderamachi`、`原町` `Haramachi` → `harumachi`。
+
+本パッケージは読みを推定しない。ローマ字は必ずデータセットから引く（公式のローマ字
+フィールドか、かな読みの決定的な翻字）。どちらも無ければ推測せず明示的な失敗を返す。
+違いはそこだけで、[カバレッジ](#カバレッジ)という節がある理由でもある。
+
+自分で測り直せる: `npm install --no-save kuroshiro kuroshiro-analyzer-kuromoji && node
+scripts/compare-kuroshiro.mjs > docs/measurements/kuroshiro.json`。コミット済みの結果は
+[`docs/measurements/kuroshiro.json`](./docs/measurements/kuroshiro.json)（2026-08-19 実測）。
+
 ## このライブラリの位置づけ
 
 住所正規化は**自作していません**。全面的に
