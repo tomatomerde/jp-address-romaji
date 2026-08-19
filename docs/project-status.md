@@ -10,7 +10,16 @@
 ## 現在の状態
 
 **公開済み。** `jp-address-romaji` と `jp-address-romaji-data` は両方とも npm に公開されている。
-最新は `jp-address-romaji` が `0.1.8`（2026-08-19）、`jp-address-romaji-data` が `0.1.5`（2026-08-14）。
+レジストリの `latest` は `jp-address-romaji` が `0.1.7`（2026-08-17）、`jp-address-romaji-data` が
+`0.1.5`（2026-08-14）。
+
+**`0.1.8` は main にマージ済みだが、まだ publish されていない**（PR #74、2026-08-19）。
+`packages/core/package.json` と CHANGELOG は `0.1.8` になっているので、**残っているのは
+`Release` ワークフローを `packages=core-only` `cut_release=true` で dispatch する1手だけ**。
+作業したセッションはそれを実行できなかった——`POST /actions/workflows/release.yml/dispatches` が
+`Resource not accessible by integration` を返す。`releasing.md`「リリースを切る」の 3 を参照。
+デモの pin を上げるブランチ（`demo/pin-core-0.1.8`）も push 済みで、**publish のあとでないと
+PR の CI が落ちる**（`demo/build.sh` は pin されたバージョンをレジストリから install する）。
 
 `0.1.8` は**町名が部分的にしか一致しなかったときに別の住所を返していた不具合の修正**。
 `東京都新宿区中井1番1号` が `"井1-1, Nakacho, Shinjuku-ku, Tokyo, Japan"` を `ok` で返していた
