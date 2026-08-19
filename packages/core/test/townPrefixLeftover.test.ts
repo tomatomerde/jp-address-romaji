@@ -143,6 +143,38 @@ describe('toRomaji: a building name with no block number is still carried throug
     expect(result.value.parsed.unparsed).toBe('サンプルビル301');
   });
 
+  it('keeps a building name attached with no space after the block numbers', async () => {
+    // Found by mutation testing: with this case missing, deleting the
+    // `blockNumbers.length === 0` clause from the guard broke nothing in the
+    // suite. `…中町1番1号サンプルビル301` has no whitespace anywhere, so the
+    // building name is only distinguishable from unmatched address text by
+    // the fact that the block numbers were parsed first — which is precisely
+    // what that clause says.
+    const result = await toRomaji('東京都新宿区中町1番1号サンプルビル301');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.parsed.blockNumbers).toEqual([1, 1]);
+    expect(result.value.parsed.unparsed).toBe('サンプルビル301');
+  });
+
+  it('compares against the text the normalizer saw, not the raw input', async () => {
+    // Also found by mutation testing. The leftover comes back already
+    // NFKC-folded and with the postal code gone, so comparing it against the
+    // caller's raw string refuses two ordinary inputs: an ideographic space
+    // with full-width digits, and a postal code written after the building
+    // name. Both must still convert.
+    const fullWidth = await toRomaji('東京都新宿区中町　サンプルビル３０１');
+    expect(fullWidth.ok).toBe(true);
+    if (!fullWidth.ok) return;
+    expect(fullWidth.value.parsed.unparsed).toBe('サンプルビル301');
+
+    const trailingPostal = await toRomaji('東京都新宿区中町 サンプルビル301 〒162-0851');
+    expect(trailingPostal.ok).toBe(true);
+    if (!trailingPostal.ok) return;
+    expect(trailingPostal.value.parsed.postalCode).toBe('162-0851');
+    expect(trailingPostal.value.parsed.unparsed).toBe('サンプルビル301');
+  });
+
   it('still refuses 東京都新宿区中井 サンプルビル301, where the leftover abuts the town', async () => {
     // The same shape with a prefix-matched town: the leftover is
     // `井 サンプルビル301`, whose leading 井 runs straight on from the 中 the
