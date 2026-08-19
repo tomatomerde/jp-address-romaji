@@ -1,5 +1,62 @@
 # Changelog
 
+## core-0.1.8 — 2026-08-19
+
+`jp-address-romaji` only. The dataset package is unchanged and stays at `0.1.5`.
+
+### Fixed
+
+- **`toRomaji` answered with a different address when the town matched only partially.** Text the
+  normalizer could not attribute to the town was carried into the building-name slot and rendered
+  as if it were one, so the result named a real town nobody had asked for — with `ok: true` and
+  nothing to distinguish it from a correct answer:
+
+  ```ts
+  await toRomaji('東京都新宿区中井1番1号');
+  // before: { ok: true, value: { formatted: '井1-1, Nakacho, Shinjuku-ku, Tokyo, Japan' } }
+  // now:    { ok: false, reason: 'TOWN_NOT_FOUND',
+  //           message: 'Resolved the town as "中町", but "井1-1" was left between it and the block
+  //                     numbers in "東京都新宿区中井1番1号". …' }
+  ```
+
+  `中井` is in the dataset (`Nakai`, chome 1 and 2), and the same address written `中井1-1` or
+  `中井一丁目1番1号` resolved to it correctly before this change and still does. Only the `N番M号`
+  spelling broke, and in it both halves of the answer were wrong at once: the wrong town, and the
+  `井` that should have been part of it printed as a building name.
+
+  The match is upstream's. `@geolonia/normalize-japanese-addresses` registers `中` as an alias of
+  the unrelated `中町` — it allows a trailing `町` to be omitted — and appends its "chome written
+  without 丁目" patterns last, so the alias is tried before the pattern that would have matched
+  `中井1`. This package does not reimplement normalization, so it cannot make that match come out
+  differently. What it owns is the leftover, and there it was quietly reclassifying address text
+  as not-address.
+
+  The guard is therefore stated on the leftover rather than on the town: if the text after the town
+  does not begin with a block number, the address was not fully resolved, and the conversion fails
+  with `TOWN_NOT_FOUND` naming what was left over. It is the same call `KOAZA_READING_INCOMPLETE`
+  makes — never return `ok` after dropping or reclassifying part of the address.
+
+  Two more shapes reach the same slot and are now refused with it:
+
+  - a shorter town that is a literal prefix of a longer one, with no alias involved:
+    `北海道札幌市中央区宮の森一条1番1号` came back as `一条1-1, Miyanomori, …`;
+  - the notation itself left behind, with the *right* town: `北海道札幌市中央区旭ケ丘1番1号` reads
+    the leading `1` as the chome (旭ケ丘 has only chome rows) and came back as
+    `番1号, 1 Asahigaoka, …` — the 号 number gone from the address and `番1号` shown as a building.
+
+  **A building name is still carried through**, when it follows the block numbers or when the
+  caller separated it with whitespace and wrote no block number at all (`…中町 サンプルビル301`).
+  Both counts were measured before the rule was settled, over the 9 municipalities the demo serves
+  and 8,201 generated addresses: without that exception the guard would have refused 928 correct
+  answers to save nothing extra, and with it, all 243 answers it refuses were already wrong — 95
+  named a different town, 148 printed the notation as a building, and none were clean.
+
+  Not fixed here: `fromRomaji` has the mirror-image path — `1-1 Miyanomori 9-Jo, Chuo-ku,
+  Sapporo-shi, Hokkaido` resolves to 宮の森 and carries `9-Jo` as a building name. It is not
+  reachable from this library's own output (the round-trip suite is clean), and separating it from
+  the documented `2-8-1 Nishishinjuku Sunshine Bldg 5F` shape needs a rule this release does not
+  have evidence for.
+
 ## core-0.1.7 — 2026-08-17
 
 `jp-address-romaji` only. The dataset package is unchanged and stays at `0.1.5`.
