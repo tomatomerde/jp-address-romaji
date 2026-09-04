@@ -269,6 +269,11 @@ const PRESET_FORWARD = [
     note: 'ローマ字もかなも無い町。札幌市内でも起きる（エラー文が言う「郊外」に限らない）',
   },
   {
+    label: '東京都新宿区中井1番1号（断る）',
+    value: '東京都新宿区中井1番1号',
+    note: '正規化器が 中 までしか一致させられず 井 が余る形。0.1.7 までは余りを建物名にして「井1-1, Nakacho」——実在する別の町——を返していた',
+  },
+  {
     label: '東京都渋谷区神南一丁目1-1（デモの都合で失敗）',
     value: '東京都渋谷区神南一丁目1-1',
     note: 'このページが配っていない市区町村。ライブラリの答えではなくデモの限界',
@@ -670,6 +675,12 @@ const INPUT_CASES = [
         expect: 'refuse',
         note: 'KOAZA_READING_INCOMPLETE。小字を黙って落として成功させない',
         run: (lib) => lib.toRomaji('長野県飯田市本町三丁目大横1-1'),
+      },
+      {
+        expr: `toRomaji('東京都新宿区中井1番1号')`,
+        expect: 'refuse',
+        note: 'TOWN_NOT_FOUND。町名の先頭だけに一致して余った文字を、建物名に分類し直さない',
+        run: (lib) => lib.toRomaji('東京都新宿区中井1番1号'),
       },
       {
         expr: `fromRomaji('1-1 Toya, Kushiro-cho, Hokkaido')`,
