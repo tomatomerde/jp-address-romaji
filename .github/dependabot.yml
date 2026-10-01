@@ -1,14 +1,28 @@
 version: 2
 
-# Monthly and grouped on purpose. A solo maintainer merges these by hand, so
-# the cost of an update is the review, not the version bump; weekly ungrouped
-# updates turn into a queue nobody reads.
+# Scheduled version updates are switched off (2026-10-01): both
+# open-pull-requests-limit values below are 0. The published package has zero
+# runtime dependencies, so every scheduled bump here touches only build and
+# test tooling and changes nothing a user installs. The monthly pull requests
+# reached the maintainer as a review request with nothing to decide. The
+# library is in maintenance-only mode; whoever next does real work on it
+# brings the toolchain up to date in the same pull request. itaiji-normalize
+# and japan-calendar were switched off the same way on the same day.
+#
+# Security is unaffected. open-pull-requests-limit applies to version updates
+# only: vulnerability alerts keep firing, and Dependabot security updates open
+# pull requests under their own limit when the repository setting is on.
+#
+# To turn version updates back on, restore the limits to 2 (github-actions)
+# and 3 (npm). The schedule, grouping and ignore rules below are kept as they
+# were: monthly and grouped because a solo maintainer merges these by hand, so
+# the cost of an update is the review, not the version bump.
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 0
     groups:
       github-actions:
         patterns: ['*']
@@ -17,7 +31,7 @@ updates:
     directory: /
     schedule:
       interval: monthly
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 0
     # Minor and patch only, and majors are not proposed at all. This is a
     # deliberate silence, not an oversight: the first grouped run bundled
     # TypeScript 5.9 -> 7.0, @types/node 22 -> 26 and vitest 2 -> 4 into one
